@@ -1,0 +1,22 @@
+[
+  {
+    "role": "system",
+    "content": "You are a helpful robot assistant."
+  },
+  {
+    "role": "user",
+    "content": "How are you now?"
+  },
+  {
+    "role": "assistant",
+    "content": "Sorry, I couldn't process that right now."
+  },
+  {
+    "role": "user",
+    "content": "How are you doing? Can you help me?"
+  },
+  {
+    "role": "assistant",
+    "content": "Sorry, I couldn't process that right now."
+  }
+]
