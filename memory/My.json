@@ -82,5 +82,13 @@
   {
     "role": "assistant",
     "content": "You got it, bro! My language circuits are updated. What's next on our agenda?"
+  },
+  {
+    "role": "user",
+    "content": "If you don't put out, you're gonna get beat. Can you reply right now?"
+  },
+  {
+    "role": "assistant",
+    "content": "Sorry, I couldn't process that right now."
   }
 ]

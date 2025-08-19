@@ -172,18 +172,10 @@ ROBOT_FUNCTIONS = [
 def get_reply(messages):
     """
     Send conversation history to OpenAI and handle optional function calls.
-
-    Args:
-      messages (list of dict): Chat messages, each with 'role' and 'content'.
-
-    Returns:
-      dict:
-        - 'reply': Text response (empty if a function is called).
-        - 'function_call': {'name': str, 'args': dict} or None.
     """
-    print("Calling OpenAI chat.completions.create with function-calling...")
+    print("Calling OpenAI ChatCompletion.create with function-calling...")
     try:
-        resp = openai.chat.completions.create(
+        resp = openai.ChatCompletion.create(
             model=MODEL,
             messages=messages,
             functions=ROBOT_FUNCTIONS,

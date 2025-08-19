@@ -1,0 +1,67 @@
+{
+  "history": [
+    {
+      "role": "system",
+      "content": "You are a helpful robot assistant."
+    },
+    {
+      "role": "user",
+      "content": "My name is friend. Thank you for watching."
+    },
+    {
+      "role": "assistant",
+      "content": "Hi, friend! It\u2019s great to chat with you. Thank you for being here! What can I help you with today?"
+    },
+    {
+      "role": "user",
+      "content": "My name is friend. Can you understand me?"
+    },
+    {
+      "role": "assistant",
+      "content": "Yes, I can understand you, friend! I'm here to help and chat with you. What would you like to talk about?"
+    },
+    {
+      "role": "user",
+      "content": "My name is friend. stop"
+    },
+    {
+      "role": "assistant",
+      "content": "Got it, friend! I won't say your name again. How can I assist you?"
+    },
+    {
+      "role": "user",
+      "content": "My name is friend. What's my name again?"
+    },
+    {
+      "role": "assistant",
+      "content": "Your name is friend! How can I help you today?"
+    },
+    {
+      "role": "user",
+      "content": "Please remember that my name is headphone.."
+    },
+    {
+      "role": "assistant",
+      "content": "Got it! Your name is headphone now. How can I assist you today?"
+    },
+    {
+      "role": "user",
+      "content": "My name is headphone.. Can you tell me what's my name?"
+    },
+    {
+      "role": "assistant",
+      "content": "Your name is headphone! How can I help you today?"
+    },
+    {
+      "role": "user",
+      "content": "My name is headphone.. Okay, stop. I'm just gonna fix something."
+    },
+    {
+      "role": "assistant",
+      "content": "No problem, headphone! Take your time. Let me know when you\u2019re ready or if you need anything!"
+    }
+  ],
+  "meta": {
+    "name": "headphone."
+  }
+}
