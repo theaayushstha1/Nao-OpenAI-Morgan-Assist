@@ -1,19 +1,2 @@
-# secrets & local config
-.env
-
-# runtime data
-face_store.json
-memory.json
-tmp_audio/
-data/
-__pycache__/
-*.pyc
-*.log
-
-# OS/IDE
-.DS_Store
-Thumbs.db
-.vscode/
-.idea/
-venv/
-.venv/
+﻿.env
+code.env
