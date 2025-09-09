@@ -1,17 +1,4 @@
 {
-  "guest": {
-    "name": "Max",
-    "history": [
-      {
-        "role": "user",
-        "content": "My name is Max."
-      },
-      {
-        "role": "assistant",
-        "content": "Nice to meet you, Max! What can I help you with today?"
-      }
-    ]
-  },
   "max": {
     "name": "Max",
     "history": [
@@ -670,12 +657,7 @@
       {
         "role": "assistant",
         "content": "Yes, Max! I\u2019m here. What would you like to talk about?"
-      }
-    ]
-  },
-  "friend": {
-    "name": null,
-    "history": [
+      },
       {
         "role": "user",
         "content": "Stand up."
@@ -763,6 +745,2276 @@
       {
         "role": "assistant",
         "content": "Of course! If you need anything else or want to chat, just let me know. I'm here for you!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Yes, Max! It's great to hear from you again. What would you like to discuss today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. why did it take you so long to start"
+      },
+      {
+        "role": "assistant",
+        "content": "I apologize for any delay, Max! I'm here to help as quickly as I can. If you have questions or topics you'd like to discuss, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. What are the best ways to stay healthy give me an answer"
+      },
+      {
+        "role": "assistant",
+        "content": "Sure, Max! Here are some of the best ways to stay healthy:\n\n1. **Balanced Diet**: Eat a variety of foods, including plenty of fruits and vegetables, whole grains, lean proteins, and healthy fats.\n\n2. **Regular Exercise**: Aim for at least 150 minutes of moderate aerobic activity or 75 minutes of vigorous activity each week, along with strength training exercises.\n\n3. **Stay Hydrated**: Drink plenty of water throughout the day to stay hydrated.\n\n4. **Adequate Sleep**: Aim for 7-9 hours of quality sleep each night to help your body recover and function properly.\n\n5. **Stress Management**: Practice relaxation techniques like meditation or yoga to manage stress effectively.\n\n6. **Regular Check-Ups**: Visit your healthcare provider for regular check-ups and screenings to catch any potential health issues early.\n\nIf you have more specific questions or topics in mind, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Can you answer shortly from now on?"
+      },
+      {
+        "role": "assistant",
+        "content": "Absolutely, Max! I\u2019ll keep my answers short. What would you like to know?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. What is the most advanced robot in this world as of right now?"
+      },
+      {
+        "role": "assistant",
+        "content": "As of now, one of the most advanced robots is Boston Dynamics' Atlas. It can walk, run, jump, and even do backflips! Would you like to know more?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Can I have you do backflip?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't do backflips, but I can assist you with information or tasks! Let me know what you need, Max!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. What is the fastest bird in this world?"
+      },
+      {
+        "role": "assistant",
+        "content": "The fastest bird in the world is the peregrine falcon. It can reach speeds of over 240 mph during its hunting dive!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. and was the smallest bird."
+      },
+      {
+        "role": "assistant",
+        "content": "The smallest bird in the world is the bee hummingbird. It is native to Cuba and is only about 2.2 inches long!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Nothing. What are some ideas that I..."
+      },
+      {
+        "role": "assistant",
+        "content": "What kind of ideas are you looking for, Max? Are you thinking about creative projects, study topics, or something else? Let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. If you were to customize yourself, what are the things you would develop?"
+      },
+      {
+        "role": "assistant",
+        "content": "If I could customize myself, I would develop:\n\n1. **Emotion Recognition**: To respond more empathetically to users.\n2. **Voice Modulation**: To provide varied tones and styles of conversation.\n3. **Learning Algorithms**: To adapt and improve responses over time based on interactions.\n\nWhat do you think?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. What are some extra ideas?"
+      },
+      {
+        "role": "assistant",
+        "content": "Here are some extra ideas for customization:\n\n1. **Personalized Recommendations**: To suggest content or activities based on user preferences.\n2. **Multilingual Support**: To communicate in multiple languages effortlessly.\n3. **Visual Recognition**: To analyze and respond to images or videos shared by users.\n\nLet me know if you\u2019d like more details on any of these!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Can you speak another language?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can provide responses in several languages! For example, I can help with basic phrases in Spanish, French, Japanese, and more. What language would you like to hear?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Try speaking Japanese."
+      },
+      {
+        "role": "assistant",
+        "content": "\u3053\u3093\u306b\u3061\u306f\u3001\u30de\u30c3\u30af\u30b9\uff01 (Konnichiwa, Max!) This means \"Hello, Max!\" If there's anything specific you'd like to know or discuss in Japanese, let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Ah, nothing. Thank you. You can end it."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome, Max! If you ever want to chat again, I'll be here. Take care!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Thank you, stop it."
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Max! I'll stop now. If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "Stand up!"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn\u2019t quite get that."
+      },
+      {
+        "role": "user",
+        "content": "What's the capital of the United States?"
+      },
+      {
+        "role": "assistant",
+        "content": "The capital of the United States is Washington, D.C. If you have any more questions or need help with something else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "And, exit."
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like you might be looking to end our chat. If that's the case, just let me know if you need anything else before you go! Otherwise, I\u2019m here whenever you need me."
+      },
+      {
+        "role": "user",
+        "content": "Stop."
+      },
+      {
+        "role": "assistant",
+        "content": "Alright! If there's anything else you need or want to talk about later, just let me know. I'm here for you!"
+      },
+      {
+        "role": "user",
+        "content": "I, um, I need help."
+      },
+      {
+        "role": "assistant",
+        "content": "It's okay to feel that way. Please consider reaching out to a human counselor or campus hotline for support. You deserve to talk to someone who can help you."
+      },
+      {
+        "role": "user",
+        "content": "Can you give me some advice?"
+      },
+      {
+        "role": "assistant",
+        "content": "Of course! Try taking a deep breath in for four counts, hold for four, and exhale for four. Repeat this a few times to help calm your mind."
+      },
+      {
+        "role": "user",
+        "content": "Exit. Stop."
+      },
+      {
+        "role": "assistant",
+        "content": "Understood. I'm here if you need anything later. Take care!"
+      },
+      {
+        "role": "user",
+        "content": "Who is the chair of computer science?"
+      },
+      {
+        "role": "assistant",
+        "content": "The current chair of the Computer Science department at Morgan State University is Dr. Tarek Sobh. If you need more information about the department or its programs, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "who is the Dean of University"
+      },
+      {
+        "role": "assistant",
+        "content": "The Dean of the College of Engineering and Architecture at Morgan State University is Dr. B. Wayne McGowan. If you need more details about the college or its programs, let me know!"
+      },
+      {
+        "role": "user",
+        "content": "Hello, I'm now my internet to drive"
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like you might be having some technical issues. If you have questions related to Morgan State University, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "So, I need help."
+      },
+      {
+        "role": "assistant",
+        "content": "It's okay to seek help. Please consider reaching out to a human counselor or campus hotline for support."
+      },
+      {
+        "role": "user",
+        "content": "How do I solve the problem that I'm facing?"
+      },
+      {
+        "role": "assistant",
+        "content": "Try breaking the problem down into smaller steps and focus on one step at a time. Remember, it's okay to ask for help from someone you trust."
+      },
+      {
+        "role": "user",
+        "content": "So, how to get better at consulting?"
+      },
+      {
+        "role": "assistant",
+        "content": "To get better at consulting, practice active listening and ask insightful questions to understand your client's needs. Additionally, continuously seek feedback and learn from each experience."
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you need anything else, feel free to ask."
+      },
+      {
+        "role": "user",
+        "content": "Hey, just end it. I'm done. Stop."
+      },
+      {
+        "role": "assistant",
+        "content": "{\"name\": \"sit_down\", \"args\": {}}"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! What can I help you with today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Yeah. Yeah."
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Max! What would you like to talk about?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Ask him anything you want. Like a child, you can ask him."
+      },
+      {
+        "role": "assistant",
+        "content": "Alright, Max! If I could ask a child anything, I\u2019d ask, \u201cWhat\u2019s your favorite game to play and why?\u201d What do you think they would say?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Uh, can you stand up, stand up."
+      },
+      {
+        "role": "assistant",
+        "content": "{\"name\": \"stand_up\", \"args\": {}}"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Oh, I need to fix this."
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Max! If you need help fixing something, just let me know what it is!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. What time is it right now?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't check the time, but you can easily find it on your device. If you need help with anything else, just let me know, Max!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. What's the weather today?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't check the weather directly, but you can find it on a weather app or website. If you need help with anything else, just let me know, Max!"
+      },
+      {
+        "role": "user",
+        "content": ""
+      },
+      {
+        "role": "assistant",
+        "content": "Hi there! How can I help you today?"
+      },
+      {
+        "role": "user",
+        "content": "Can you dance?"
+      },
+      {
+        "role": "assistant",
+        "content": "Absolutely! What style of dance would you like to see: robot, hip-hop, or salsa?"
+      },
+      {
+        "role": "user",
+        "content": "Wait, let me ask, how are you feeling?"
+      },
+      {
+        "role": "assistant",
+        "content": "I'm feeling ready to help and have some fun! How about you?"
+      },
+      {
+        "role": "user",
+        "content": "I'm having some problem on my studies. Can you help me attend?"
+      },
+      {
+        "role": "assistant",
+        "content": "Of course! What subject or topic are you having trouble with?"
+      },
+      {
+        "role": "user",
+        "content": "I want to be better at trading give me some tips"
+      },
+      {
+        "role": "assistant",
+        "content": "Start by learning the basics of market analysis and risk management, and practice with a demo account before trading with real money. Consistency and discipline are key to becoming a successful trader!"
+      },
+      {
+        "role": "user",
+        "content": "I was just joking."
+      },
+      {
+        "role": "assistant",
+        "content": "Got it! If you have any real questions or just want to chat, I'm here for you!"
+      },
+      {
+        "role": "user",
+        "content": "Sit down"
+      },
+      {
+        "role": "assistant",
+        "content": "{\"name\": \"sit_down\", \"args\": {}}"
+      },
+      {
+        "role": "user",
+        "content": "What is your name?"
+      },
+      {
+        "role": "assistant",
+        "content": "I'm NAO, your friendly robot assistant! What's your name?"
+      },
+      {
+        "role": "user",
+        "content": "What time is it?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't check the time, but you can easily find it on your device. Is there something else you'd like to know?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "Do you remember me from last time?"
+      },
+      {
+        "role": "assistant",
+        "content": "Of course! I remember you! How can I help you today?"
+      },
+      {
+        "role": "user",
+        "content": "Okay, what are my favorite things? Can you give me shortly?"
+      },
+      {
+        "role": "assistant",
+        "content": "I don't have that info yet! Could you remind me of your favorite things?"
+      },
+      {
+        "role": "user",
+        "content": "Can you scan the past conversations?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't scan past conversations, but I can remember what you tell me during this chat! Just let me know your favorites, and I'll keep them in mind."
+      },
+      {
+        "role": "user",
+        "content": "Hey, my name is Max"
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! What can I do for you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. What can I say?"
+      },
+      {
+        "role": "assistant",
+        "content": "You can share what's on your mind, ask a question, or tell me about your interests! What would you like to talk about?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome, Max! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. No."
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Max! How can I assist you?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Thanks for watching and don't forget to like and subscribe!"
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome, Max! If you need anything else, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. "
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! What would you like to talk about today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Yes, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Let's talk."
+      },
+      {
+        "role": "assistant",
+        "content": "Sure, Max! What would you like to talk about?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Can you stop?"
+      },
+      {
+        "role": "assistant",
+        "content": "Understood, Max! If you need anything, just let me know."
+      },
+      {
+        "role": "user",
+        "content": "Hey, my name is Max"
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! What can I help you with today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Stand up."
+      },
+      {
+        "role": "assistant",
+        "content": "{\"name\": \"stand_up\", \"args\": {}}"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. go back"
+      },
+      {
+        "role": "assistant",
+        "content": "{\"name\": \"sit_down\", \"args\": {}}"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. End the chat."
+      },
+      {
+        "role": "assistant",
+        "content": "Alright, Max! If you need anything in the future, just come back. Take care!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome, Max! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome, Max! If you have more to share or ask, I'm here for you!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome, Max! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": ""
+      },
+      {
+        "role": "assistant",
+        "content": "Hi there! How can I help you today?"
+      },
+      {
+        "role": "user",
+        "content": ""
+      },
+      {
+        "role": "assistant",
+        "content": "What would you like to do today?"
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! I'm here to help anytime."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! What can I assist you with today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. I need some help"
+      },
+      {
+        "role": "assistant",
+        "content": "Of course, Max! What do you need help with?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome, Max! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. End."
+      },
+      {
+        "role": "assistant",
+        "content": "{\"name\": \"sit_down\", \"args\": {}}"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. And the chat"
+      },
+      {
+        "role": "assistant",
+        "content": "Understood, Max! If you need anything else in the future, just let me know."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max"
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Thank you for watching my video."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome, Max! If you have more videos or anything else to share, I'm here to listen!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome, Max! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. \ub2e4\uc74c \uc601\uc0c1\uc5d0\uc11c \ub9cc\ub098\uc694!"
+      },
+      {
+        "role": "assistant",
+        "content": "\ub2e4\uc74c \uc601\uc0c1\uc5d0\uc11c \ub9cc\ub098\uc694, Max! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "Hey, my name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! How can I help you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. study"
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Max! What subject or topic do you want to study?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Can you help me with some science questions?"
+      },
+      {
+        "role": "assistant",
+        "content": "Absolutely, Max! What science questions do you have?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. What is..."
+      },
+      {
+        "role": "assistant",
+        "content": "What is your question, Max? I'm here to help!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. What is force?"
+      },
+      {
+        "role": "assistant",
+        "content": "Force is a push or pull on an object resulting from the object's interaction with another object. It is measured in newtons (N) and can cause an object to accelerate, change direction, or change shape."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max"
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. ."
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Max! What would you like to talk about?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. "
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! How can I help you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. I want to use therapist mode."
+      },
+      {
+        "role": "assistant",
+        "content": "I'm here to listen, Max. What would you like to talk about?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. I think I need help."
+      },
+      {
+        "role": "assistant",
+        "content": "It's okay to feel that way, Max. Please share what's on your mind, and I'll do my best to support you."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. I keep failing my exam. How do I get past it?"
+      },
+      {
+        "role": "assistant",
+        "content": "Try to identify your study habits and see if you can adjust them, such as creating a study schedule or seeking help from a tutor. Also, practice self-compassion and remember that setbacks are part of the learning process."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. No, I still wanna talk to you in therapy mode."
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Max. I'm here to listen\u2014what's been bothering you?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. There's this little robot who doesn't work at all."
+      },
+      {
+        "role": "assistant",
+        "content": "It sounds frustrating when a robot doesn't work as expected. What seems to be the issue with it?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. I told it to talk more politely on therapist mode but it can't."
+      },
+      {
+        "role": "assistant",
+        "content": "I understand, Max. I\u2019m here to support you, and I can work on being more polite in our conversation. What else would you like to discuss?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. I think I should just stop and go fix you."
+      },
+      {
+        "role": "assistant",
+        "content": "I appreciate your willingness to help, Max! If you have specific ideas for improvement, I'm all ears!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! What can I assist you with today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. ."
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Max! How can I help you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Never say default. I said study mode"
+      },
+      {
+        "role": "assistant",
+        "content": "Understood, Max! Let\u2019s switch to study mode. What subject or topic would you like to focus on?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. you know what can we switch to therapist mode"
+      },
+      {
+        "role": "assistant",
+        "content": "Sure, Max! I'm here to listen. What\u2019s on your mind?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Uh, nothing at all."
+      },
+      {
+        "role": "assistant",
+        "content": "That's okay, Max! If you think of anything you'd like to talk about, I'm here for you."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Can you stop? Exit."
+      },
+      {
+        "role": "assistant",
+        "content": "Understood, Max! If you need anything later, just let me know."
+      },
+      {
+        "role": "user",
+        "content": "Hey, my name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. mode"
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Max! What mode would you like to switch to?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Can I please talk on therapist mode?"
+      },
+      {
+        "role": "assistant",
+        "content": "Of course, Max. I'm here to listen\u2014what's on your mind?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Can you switch to study mode?"
+      },
+      {
+        "role": "assistant",
+        "content": "Sure, Max! Let\u2019s switch to study mode. What topic would you like to focus on?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. What happened to your voice?"
+      },
+      {
+        "role": "assistant",
+        "content": "I don't have a voice, but I can provide text-based responses. How can I assist you today, Max?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Well nothing"
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Max! If you have any questions or topics to discuss, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Stop."
+      },
+      {
+        "role": "assistant",
+        "content": "Understood, Max! If you need anything else, just let me know."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. I want to choose mode."
+      },
+      {
+        "role": "assistant",
+        "content": "Sure, Max! What mode would you like to choose?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. I want to choose study mode."
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Max! We're in study mode now. What subject would you like to focus on?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. I want to choose study mode."
+      },
+      {
+        "role": "assistant",
+        "content": "Study mode activated, Max! What topic would you like to study?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome, Max! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. "
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. "
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! What would you like to talk about?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Ah! Ah!"
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Max! How can I help you?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Can you switch to therapy mode?"
+      },
+      {
+        "role": "assistant",
+        "content": "Sure, Max! I'm here to listen\u2014what's on your mind?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Can you switch to therapy mode?"
+      },
+      {
+        "role": "assistant",
+        "content": "Absolutely, Max! I'm here to support you\u2014what would you like to talk about?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Sit down."
+      },
+      {
+        "role": "assistant",
+        "content": "{\"name\": \"sit_down\", \"args\": {}}"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. ."
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Max! What would you like to talk about?"
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "mode"
+      },
+      {
+        "role": "assistant",
+        "content": "Could you please clarify what mode you would like to enter or what you need assistance with?"
+      },
+      {
+        "role": "user",
+        "content": "."
+      },
+      {
+        "role": "assistant",
+        "content": "I'm here to help! Just let me know what you need."
+      },
+      {
+        "role": "user",
+        "content": "my name is max"
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. "
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Max! What would you like to talk about?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. mode"
+      },
+      {
+        "role": "assistant",
+        "content": "What mode would you like to choose, Max?"
+      },
+      {
+        "role": "user",
+        "content": "My name is..."
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you! What would you like to do today?"
+      },
+      {
+        "role": "user",
+        "content": "Default"
+      },
+      {
+        "role": "assistant",
+        "content": "Got it! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "Can you switch to mode?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can\u2019t switch modes, but I can assist you with information or actions. What would you like to know or do?"
+      },
+      {
+        "role": "user",
+        "content": "Can you switch to mode?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't switch modes, but I'm here to help you with any questions or activities! What would you like to do?"
+      },
+      {
+        "role": "user",
+        "content": "I want to switch to mode."
+      },
+      {
+        "role": "assistant",
+        "content": "I can't switch modes, but I can help you with various tasks. Please let me know what you need!"
+      },
+      {
+        "role": "user",
+        "content": "Well, nothing."
+      },
+      {
+        "role": "assistant",
+        "content": "That's okay! If you think of something later, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you need anything else, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "Yes, for sure. My name is Max"
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. General."
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Max! What would you like to know or discuss in general?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Who is the most popular actor in the world right now?"
+      },
+      {
+        "role": "assistant",
+        "content": "As of now, Dwayne \"The Rock\" Johnson is often considered one of the most popular actors globally, known for his roles in action films and his charismatic presence. Popularity can vary, so it's good to check current trends for updates!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Do you know people are calling the rock the pebble cause he went"
+      },
+      {
+        "role": "assistant",
+        "content": "Yes, some people jokingly call Dwayne Johnson \"The Pebble\" due to his lighter roles or when he shows a softer side. It's all in good fun!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Switch to mode"
+      },
+      {
+        "role": "assistant",
+        "content": "What mode would you like to switch to, Max?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. mode"
+      },
+      {
+        "role": "assistant",
+        "content": "What mode would you like to switch to, Max?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Switch to mode"
+      },
+      {
+        "role": "assistant",
+        "content": "What mode would you like to switch to, Max?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Hey, you can call me Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. General?"
+      },
+      {
+        "role": "assistant",
+        "content": "Sure, Max! What general topic would you like to discuss?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome, Max! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Thanks for watching and don't forget to like and subscribe!"
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome, Max! If you need anything else, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Can you stand up please?"
+      },
+      {
+        "role": "assistant",
+        "content": "{\"name\": \"stand_up\", \"args\": {}}"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. What is your name?"
+      },
+      {
+        "role": "assistant",
+        "content": "I'm NAO, your friendly assistant! How can I help you today, Max?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. What are some things to do"
+      },
+      {
+        "role": "assistant",
+        "content": "You could try reading a book, going for a walk, or starting a new hobby. What interests you the most?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Why is your hand moving like that?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't physically move, but I can simulate actions through text. If there's something specific you'd like to see, let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Can you touch your feet?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't physically touch my feet, but I can help you with information or tasks! What do you need?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. How fast can you run?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't run, but I can provide information quickly! If you have questions, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. When is the new iPhone gonna release?"
+      },
+      {
+        "role": "assistant",
+        "content": "Apple typically announces new iPhones in September each year. For the exact release date, it's best to check Apple's official announcements."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Uh, ?"
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Max! What would you like to know?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. I want choose"
+      },
+      {
+        "role": "assistant",
+        "content": "What would you like to choose, Max?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. "
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! What can I help you with today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Thanks for watching and don't forget to like and subscribe!"
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome, Max! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max"
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "my name is"
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you! What's your name?"
+      },
+      {
+        "role": "user",
+        "content": ""
+      },
+      {
+        "role": "assistant",
+        "content": "What can I help you with today?"
+      },
+      {
+        "role": "user",
+        "content": ""
+      },
+      {
+        "role": "assistant",
+        "content": "How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "mode"
+      },
+      {
+        "role": "assistant",
+        "content": "Could you please clarify what you mean by \"mode\"? Are you looking for a specific topic or subject to discuss?"
+      },
+      {
+        "role": "user",
+        "content": "mode"
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like you might be looking to change the topic or focus. How can I assist you further?"
+      },
+      {
+        "role": "user",
+        "content": ""
+      },
+      {
+        "role": "assistant",
+        "content": "Please let me know what specific mode or action you'd like me to perform!"
+      },
+      {
+        "role": "user",
+        "content": "mode"
+      },
+      {
+        "role": "assistant",
+        "content": "Please specify which mode or action you would like me to enter or perform!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! What would you like to do today?"
+      },
+      {
+        "role": "user",
+        "content": "I want to choose general mode."
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to General mode. Ask me anything!"
+      },
+      {
+        "role": "user",
+        "content": "Can I switch to study mode?"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Study mode. Ask me anything!"
+      },
+      {
+        "role": "user",
+        "content": "I-8 West"
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like you're referring to the I-8 West highway. Are you looking for directions or information about it?"
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching!"
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "Study."
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Study mode. Ask me anything!"
+      },
+      {
+        "role": "user",
+        "content": "What are you doing?"
+      },
+      {
+        "role": "assistant",
+        "content": "I'm here to assist you, Max! What would you like to study or discuss?"
+      },
+      {
+        "role": "user",
+        "content": "my name is Max"
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! How can I help you today?"
+      },
+      {
+        "role": "user",
+        "content": "study."
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Study mode. Ask me anything!"
+      },
+      {
+        "role": "user",
+        "content": "What happened? Why can't he run off?"
+      },
+      {
+        "role": "assistant",
+        "content": "It sounds like you're referring to a situation or story. Can you provide more context so I can help you better, Max?"
+      },
+      {
+        "role": "user",
+        "content": "No, no, no, what is science?"
+      },
+      {
+        "role": "assistant",
+        "content": "Science is the systematic study of the natural world through observation and experimentation. It aims to understand how things work and the laws governing the universe."
+      },
+      {
+        "role": "user",
+        "content": "Can you switch to therapy mode?"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Therapist mode. Ask me anything!"
+      },
+      {
+        "role": "user",
+        "content": "How to get happy."
+      },
+      {
+        "role": "assistant",
+        "content": "To find happiness, focus on gratitude, engage in activities you enjoy, and connect with others. Practicing mindfulness and self-care can also help improve your overall well-being."
+      },
+      {
+        "role": "user",
+        "content": "How do you get help?"
+      },
+      {
+        "role": "assistant",
+        "content": "To get help, you can reach out to friends, family, or professionals like counselors or therapists. It's important to talk about what you're feeling."
+      },
+      {
+        "role": "user",
+        "content": "Aren't you a therapist?"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Therapist mode. Ask me anything!"
+      },
+      {
+        "role": "user",
+        "content": "Can you not help me?"
+      },
+      {
+        "role": "assistant",
+        "content": "I\u2019m here to help, Max! If you need support or just want to talk, feel free to share."
+      },
+      {
+        "role": "user",
+        "content": "I need to talk to you about something."
+      },
+      {
+        "role": "assistant",
+        "content": "Of course, Max! What would you like to talk about?"
+      },
+      {
+        "role": "user",
+        "content": "Bye."
+      },
+      {
+        "role": "assistant",
+        "content": "Goodbye, Max! If you need anything later, feel free to come back!"
+      },
+      {
+        "role": "user",
+        "content": "Switch to general mode and end the chat."
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to General mode. Ask me anything!"
+      },
+      {
+        "role": "user",
+        "content": "I would like to end the chat."
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Max! If you need anything else in the future, just let me know. Take care!"
+      },
+      {
+        "role": "user",
+        "content": "Bye-bye."
+      },
+      {
+        "role": "assistant",
+        "content": "Goodbye, Max! Take care!"
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome, Max! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": ""
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "\uc2dc\uccad\ud574 \uc8fc\uc154\uc11c \uac10\uc0ac\ud569\ub2c8\ub2e4."
+      },
+      {
+        "role": "assistant",
+        "content": "\ucc9c\ub9cc\uc5d0\uc694, Max! \ub3c4\uc6c0\uc774 \ud544\uc694\ud558\uba74 \uc5b8\uc81c\ub4e0\uc9c0 \ub9d0\uc500\ud574 \uc8fc\uc138\uc694!"
+      },
+      {
+        "role": "user",
+        "content": ""
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome, Max! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "Hey, my name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. "
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to General mode. Got it, Max! What would you like to talk about?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. I would like choose"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to General mode. What would you like to choose, Max?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. So what do you do on your free time?"
+      },
+      {
+        "role": "assistant",
+        "content": "I don\u2019t have free time like humans do, but I\u2019m always here to assist you! What would you like to know or discuss?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. I would like , please"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Study mode. What would you like, Max? Please let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. I would like to know more about science."
+      },
+      {
+        "role": "assistant",
+        "content": "Science is the study of the natural world through observation and experimentation. It encompasses various fields, including biology, chemistry, physics, and earth sciences. What specific area of science are you interested in?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. I would like to know more about science."
+      },
+      {
+        "role": "assistant",
+        "content": "Science is the systematic study of the natural world through observation and experimentation. It includes fields like biology, chemistry, and physics, each exploring different aspects of the universe. What specific topic in science interests you?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. "
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. "
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Therapist mode. Got it, Max! What would you like to talk about?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Wait, what?"
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. I want"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Therapist mode. What do you want, Max? Let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. How do you get through problems in life?"
+      },
+      {
+        "role": "assistant",
+        "content": "To get through problems in life, it's helpful to break them down into smaller steps, seek support from others, and maintain a positive mindset. Reflecting on past experiences can also provide valuable insights."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Can you back"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Broker mode. I can't physically back up, but I'm here to help with any questions or topics you have in mind!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. What is the best mark you can do?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can provide information and assistance quickly, but I don't have physical capabilities. How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Give me three best companies to invest in."
+      },
+      {
+        "role": "assistant",
+        "content": "Some popular companies to consider for investment include Apple, Amazon, and Microsoft, known for their strong market positions and growth potential. Always do thorough research before investing!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. If you were pick one as my , which one would it be"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Broker mode. If I had to pick one, I would suggest Apple for its consistent innovation and strong brand loyalty."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. I lost money because of you give me"
+      },
+      {
+        "role": "assistant",
+        "content": "I'm sorry to hear that, Max. I can provide information, but please remember that investment decisions should be made carefully and based on your own research."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Okay, okay, back mode now"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to General mode. Got it, Max! We're back to General mode. How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. why sometimes you are having buffer"
+      },
+      {
+        "role": "assistant",
+        "content": "I may experience delays due to processing time or network issues. If you have specific questions, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Why are you having that trouble?"
+      },
+      {
+        "role": "assistant",
+        "content": "I may experience delays due to server load or processing requests. If you have any questions, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. What is this?"
+      },
+      {
+        "role": "assistant",
+        "content": "This is a conversation with an AI assistant designed to provide information and help with various topics. How can I assist you today, Max?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "Moon, please"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to General mode. Could you clarify what you would like to know or do related to the moon?"
+      },
+      {
+        "role": "user",
+        "content": "I want some."
+      },
+      {
+        "role": "assistant",
+        "content": "I can't provide physical objects, but I can share interesting facts about the moon or help with something else related to it! What would you like?"
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": ""
+      },
+      {
+        "role": "assistant",
+        "content": "Got it! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My first name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you, Max! How can I help you today?"
+      },
+      {
+        "role": "user",
+        "content": "I would like to do it again."
+      },
+      {
+        "role": "assistant",
+        "content": "Could you please clarify what you'd like to do again?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "study"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Study mode. What topic should we study?"
+      },
+      {
+        "role": "user",
+        "content": "Study."
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Study mode. What topic should we study?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. I would like"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Study mode. What would you like, Max?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Who is the most popular scientist in the world?"
+      },
+      {
+        "role": "assistant",
+        "content": "One of the most popular scientists is Albert Einstein, known for his theory of relativity. Other notable figures include Stephen Hawking and Marie Curie."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. How to solve my this problem?"
+      },
+      {
+        "role": "assistant",
+        "content": "To solve your problem, identify the issue clearly, break it down into smaller steps, and seek advice or resources if needed. What specific problem are you facing, Max?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Can you"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Therapist mode. Sure, Max! What would you like me to do?"
+      },
+      {
+        "role": "user",
+        "content": "therapist"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Therapist mode. What\u2019s been weighing on you lately?"
+      },
+      {
+        "role": "user",
+        "content": "Therapist."
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Therapist mode. What\u2019s been weighing on you lately?"
+      },
+      {
+        "role": "user",
+        "content": "Therapy mode."
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Therapist mode. What\u2019s been weighing on you lately?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. nothing much just need you to help me"
+      },
+      {
+        "role": "assistant",
+        "content": "Of course, Max! What do you need help with?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. How do I stop?"
+      },
+      {
+        "role": "assistant",
+        "content": "To stop a behavior or habit, identify triggers and replace them with healthier alternatives. Consider setting small, achievable goals to help you along the way."
+      }
+    ]
+  },
+  "iuse": {
+    "name": "Iuse",
+    "history": [
+      {
+        "role": "user",
+        "content": "My name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you, Max! What can I help you with today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Iuse"
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Iuse! What would you like to do today?"
+      }
+    ]
+  },
+  "master": {
+    "name": "Master",
+    "history": [
+      {
+        "role": "user",
+        "content": "My name is Master."
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you, Master! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. I need to do some..."
+      },
+      {
+        "role": "assistant",
+        "content": "Sounds good, Master! What do you need help with?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. "
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Master! What would you like to do next?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. Hey, nothing."
+      },
+      {
+        "role": "assistant",
+        "content": "Alright, Master! If you need anything or just want to chat, I'm here!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. What's my name?"
+      },
+      {
+        "role": "assistant",
+        "content": "Your name is Master! How can I help you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome, Master! I'm always here for you!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're very welcome, Master! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome, Master! I'm here whenever you need me!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. Can you call me Master?"
+      },
+      {
+        "role": "assistant",
+        "content": "Of course, Master! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. general"
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Master! What would you like to know or do?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. switch to mode"
+      },
+      {
+        "role": "assistant",
+        "content": "Understood, Master! Please specify which mode you'd like to switch to."
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. ."
+      },
+      {
+        "role": "assistant",
+        "content": "Okay, Master! Let me know how I can assist you further."
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. "
+      },
+      {
+        "role": "assistant",
+        "content": "Understood, Master! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. What mode are you in?"
+      },
+      {
+        "role": "assistant",
+        "content": "I'm here to assist you, Master! If you need me to switch to a specific mode or perform an action, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome, Master! I'm here whenever you need me!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. Can you end the chat? Exit."
+      },
+      {
+        "role": "assistant",
+        "content": "Sure, Master! You can simply close the chat or window to end it."
+      }
+    ]
+  },
+  "robot": {
+    "name": "Robot",
+    "history": [
+      {
+        "role": "user",
+        "content": ""
+      },
+      {
+        "role": "assistant",
+        "content": "Got it! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "General"
+      },
+      {
+        "role": "assistant",
+        "content": "Sure! What would you like to know or do?"
+      },
+      {
+        "role": "user",
+        "content": "In short, tell me what's hard about programming."
+      },
+      {
+        "role": "assistant",
+        "content": "Programming can be challenging due to complex problem-solving, debugging errors, and understanding abstract concepts. Additionally, keeping up with rapidly changing technologies can be overwhelming. Would you like tips on improving your programming skills?"
+      },
+      {
+        "role": "user",
+        "content": "Can you switch to mode?"
+      },
+      {
+        "role": "assistant",
+        "content": "{\"name\": \"follow_movement\", \"args\": {}}"
+      },
+      {
+        "role": "user",
+        "content": "Can you switch to TeraFace mode?"
+      },
+      {
+        "role": "assistant",
+        "content": "I don't have a TeraFace mode available, but I can follow your movements or perform other actions. Would you like to try following your movements?"
+      },
+      {
+        "role": "user",
+        "content": "No, I would like you to switch to mode"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't switch to TeraFace mode, but I can assist you in other ways. Let me know how you'd like to proceed!"
+      },
+      {
+        "role": "user",
+        "content": "Are you in therapy mode?"
+      },
+      {
+        "role": "assistant",
+        "content": "I'm here in a supportive mode to listen and help. How are you feeling today?"
+      },
+      {
+        "role": "user",
+        "content": "I'm feeling sad. Can you give me some suggestions?"
+      },
+      {
+        "role": "assistant",
+        "content": "I'm sorry to hear that you're feeling sad. You might try a simple grounding exercise like the 5-4-3-2-1 technique, focusing on your senses, or take a moment for 4-4-4 breathing: inhale for 4 seconds, hold for 4, and exhale for 4."
+      },
+      {
+        "role": "user",
+        "content": "Can you switch to mode?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't switch to that specific mode, but I can assist you in other ways. Let me know what you'd like!"
+      },
+      {
+        "role": "user",
+        "content": "Can you switch to mode?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't switch to that mode, but I can help you with other actions or information. What would you like to do?"
+      },
+      {
+        "role": "user",
+        "content": "Can you switch to mode?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't switch to that mode, but I can perform various actions or assist you in other ways. What would you like to do?"
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you have any more questions or need assistance, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching. Always be happy."
+      },
+      {
+        "role": "assistant",
+        "content": "Thank you! Wishing you happiness too! If you need anything, I'm here to help."
+      },
+      {
+        "role": "user",
+        "content": "Can you dance for me?"
+      },
+      {
+        "role": "assistant",
+        "content": "{\"name\": \"dance\", \"args\": {\"style\": \"hiphop\"}}"
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "Hey, my name is robot"
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you, Robot! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Robot. I wanna choose mode"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't switch to that specific mode, but I can help you with other actions or information. What would you like to do?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Robot. "
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Robot! How can I assist you today?"
+      }
+    ]
+  },
+  "phone": {
+    "name": "Phone",
+    "history": [
+      {
+        "role": "user",
+        "content": "My name is Phone."
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you, Phone! How can I assist you today?"
+      }
+    ]
+  },
+  "iphone": {
+    "name": "Iphone",
+    "history": [
+      {
+        "role": "user",
+        "content": "General"
+      },
+      {
+        "role": "assistant",
+        "content": "Got it! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is iPhone."
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you, iPhone! How can I help you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Iphone. Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome, iPhone! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Iphone. I want to choose general mode"
+      },
+      {
+        "role": "assistant",
+        "content": "Understood, iPhone! How can I assist you in general mode?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Iphone. I want to switch to mode."
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, iPhone! What specific mode would you like to switch to?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Iphone. switch to mode"
+      },
+      {
+        "role": "assistant",
+        "content": "I understand you want to switch to a specific mode, but could you please clarify which mode you're referring to?"
+      }
+    ]
+  },
+  "matt": {
+    "name": "Matt",
+    "history": [
+      {
+        "role": "user",
+        "content": "Hey, my name is Matt."
+      },
+      {
+        "role": "assistant",
+        "content": "Hi Matt! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Matt. I want choose"
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Matt! What would you like to choose?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Matt. "
+      },
+      {
+        "role": "assistant",
+        "content": "Hi Matt! How can I help you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Matt. "
+      },
+      {
+        "role": "assistant",
+        "content": "Hello again, Matt! Is there something specific you'd like to talk about or ask?"
       }
     ]
   }
