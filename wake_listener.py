@@ -297,6 +297,133 @@ def _ask_and_listen_yes_no(nao_ip, port, tts, asr, memory, timeout_s=YESNO_TIMEO
     _flush_word(memory)
     return result
 
+# --- TaiChi behavior helper ---
+
+def _start_taichi_dance(nao_ip, port, tts):
+    """
+    Start a preinstalled TaiChi dance behavior via ALBehaviorManager.
+    Tries common IDs and falls back to fuzzy matching on 'taich'.
+    """
+    try:
+        mgr = ALProxy("ALBehaviorManager", nao_ip, port)
+    except:
+        try: tts.say("I can't reach my behavior manager right now.")
+        except: pass
+        return
+
+    candidates = [
+        "taich-dance-free/behavior",
+        "taichi-dance-free/behavior",
+        "taich-dance-free/startTaichiFree",
+        "taichi-dance-free/startTaichiFree",
+        "taich-dance-free",
+        "taichi-dance-free",
+    ]
+
+    try:
+        installed = set(mgr.getInstalledBehaviors() or [])
+        defaults  = set(mgr.getDefaultBehaviors() or [])
+        all_known = installed.union(defaults)
+    except:
+        all_known = set()
+
+    chosen = None
+    for b in candidates:
+        if b in all_known:
+            chosen = b
+            break
+
+    if not chosen:
+        for b in all_known:
+            if "taich" in b.lower():
+                chosen = b
+                break
+
+    if not chosen:
+        try: tts.say("I couldn't find a Tai Chi behavior on this robot.")
+        except: pass
+        return
+
+    try:
+        if mgr.isBehaviorRunning(chosen):
+            mgr.stopBehavior(chosen)
+            time.sleep(0.3)
+    except:
+        pass
+
+    try: tts.say("Okay, starting Tai Chi dance.")
+    except: pass
+    try:
+        mgr.startBehavior(chosen)
+    except:
+        try: tts.say("Sorry, I couldn't start the Tai Chi behavior.")
+        except: pass
+
+# --- Follow-me behavior helper ---
+
+def _start_follow_me(nao_ip, port, tts):
+    """
+    Start a preinstalled Follow/Follow me behavior via ALBehaviorManager.
+    Matches common ids and any behavior containing 'follow'.
+    """
+    try:
+        mgr = ALProxy("ALBehaviorManager", nao_ip, port)
+    except:
+        try: tts.say("I can't reach my behavior manager right now.")
+        except: pass
+        return
+
+    # Likely names seen in packages
+    candidates = [
+        "Follow me/behavior",
+        "follow me/behavior",
+        "follow_me/behavior",
+        "follow-me/behavior",
+        "Follow me",          # if exposed at root
+        "follow_me",
+        "follow-me",
+    ]
+
+    try:
+        installed = set(mgr.getInstalledBehaviors() or [])
+        defaults  = set(mgr.getDefaultBehaviors() or [])
+        all_known = installed.union(defaults)
+    except:
+        all_known = set()
+
+    chosen = None
+    for b in candidates:
+        if b in all_known:
+            chosen = b
+            break
+
+    if not chosen:
+        for b in all_known:
+            if "follow" in b.lower():
+                chosen = b
+                break
+
+    if not chosen:
+        try: tts.say("I couldn't find a Follow behavior on this robot.")
+        except: pass
+        return
+
+    # If already running, restart for a clean start
+    try:
+        if mgr.isBehaviorRunning(chosen):
+            mgr.stopBehavior(chosen)
+            time.sleep(0.3)
+    except:
+        pass
+
+    try: tts.say("Okay, let's go. I will follow you.")
+    except: pass
+    try:
+        mgr.startBehavior(chosen)
+    except:
+        try: tts.say("Sorry, I couldn't start the Follow behavior.")
+        except: pass
+
 # --- main ---
 
 def listen_for_command(nao_ip, port=9559):
@@ -312,7 +439,22 @@ def listen_for_command(nao_ip, port=9559):
         "let's talk",
         "talk mode",
         "start a conversation",
-        "chat mode"
+        "chat mode",
+        "mini nao",
+        "mini-nao",
+        "mininao",
+        "mini nao mode",
+        # dance triggers
+        "dance",
+        "can you dance",
+        "dance for me",
+        "do a dance",
+        # follow-me triggers
+        "follow me",
+        "let's go",
+        "come with me",
+        "give me your hand",
+        "let's go nao"
     ]
 
     _safe_unsub(asr, "NAO_Chat_Listener")
@@ -377,6 +519,14 @@ def listen_for_command(nao_ip, port=9559):
                 _say_paused(tts, asr, "Okay, let's have a chat!")
                 _flush_word(memory)
                 return "chat"
+            
+            elif word in ["mini nao", "mini-nao", "mininao", "mini nao mode"]:
+                _stop_move_now(nao_ip, port)
+                head_flag["stop"] = True
+                _tracker_stop_now(nao_ip, port)
+                _say_paused(tts, asr, "Okay, MiniNao is ready for your service. Let me stand up first.")
+                _flush_word(memory)
+                return "mininao"
 
             elif word == "stand up":
                 _go_to_posture_bg_delayed(nao_ip, port, "StandInit", 0.6, delay=0.05)
@@ -385,6 +535,14 @@ def listen_for_command(nao_ip, port=9559):
             elif word == "sit down":
                 _go_to_posture_bg_delayed(nao_ip, port, "Sit", 0.6, delay=0.05)
                 _say_paused(tts, asr, "Okay, sitting down.")
+
+            elif word in ["dance", "can you dance", "dance for me", "do a dance"]:
+                _stop_move_now(nao_ip, port)
+                _start_taichi_dance(nao_ip, port, tts)
+
+            elif word in ["follow me", "let's go", "come with me", "give me your hand", "let's go nao"]:
+                _stop_move_now(nao_ip, port)
+                _start_follow_me(nao_ip, port, tts)
 
             _flush_word(memory)
             try: asr.subscribe("NAO_Chat_Listener")

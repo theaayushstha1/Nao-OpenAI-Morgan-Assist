@@ -1,6 +1,6 @@
 {
   "max": {
-    "name": "Max",
+    "name": "Done",
     "history": [
       {
         "role": "user",
@@ -2593,6 +2593,358 @@
       {
         "role": "assistant",
         "content": "To stop a behavior or habit, identify triggers and replace them with healthier alternatives. Consider setting small, achievable goals to help you along the way."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Moore"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to General mode. Got it, Max! What would you like to discuss or know more about?"
+      },
+      {
+        "role": "user",
+        "content": "General."
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to General mode. What\u2019s on your mind?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Why is it so hard to push a coat on water?"
+      },
+      {
+        "role": "assistant",
+        "content": "It's hard to push a coat on water because of buoyancy and surface tension, which resist the motion. The coat's weight and the water's surface properties create a barrier."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Okay, so what's the..."
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Max! What would you like to know?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. How to be better at time"
+      },
+      {
+        "role": "assistant",
+        "content": "To be better at managing time, prioritize tasks using a to-do list and set specific goals. Break tasks into smaller steps and allocate time blocks for each activity."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Why are you only moving your left?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't physically move, but I can simulate actions through text. If you'd like to see something specific, let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Can you generate me a joke based on our conversation?"
+      },
+      {
+        "role": "assistant",
+        "content": "Sure, Max! Why did the robot only move its left side? Because it wanted to be \"left\" alone during our conversation!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "General mode"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to General mode. What\u2019s on your mind?"
+      },
+      {
+        "role": "user",
+        "content": "General"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to General mode. What\u2019s on your mind?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. What is the tallest mountain in the world?"
+      },
+      {
+        "role": "assistant",
+        "content": "The tallest mountain in the world is Mount Everest, which stands at 8,848 meters (29,029 feet) above sea level."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Can you"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Study mode. Sure, Max! What would you like me to do?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. I keep failing my science"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Study mode. To improve in science, try breaking down complex concepts into smaller parts, and don't hesitate to ask for help from teachers or classmates. Practice regularly and use resources like videos or tutorials to reinforce your understanding."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Oh, what is my"
+      },
+      {
+        "role": "assistant",
+        "content": "Your name is Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. It's taking only 4 seconds because there is too much noise in here."
+      },
+      {
+        "role": "assistant",
+        "content": "I understand, Max. If there's too much noise, finding a quieter space might help you focus better."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. cut that for like longer conversation so if I want to"
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Max! I'll keep responses concise for longer conversations. What would you like to discuss?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Okay, so use one of the"
+      },
+      {
+        "role": "assistant",
+        "content": "Understood, Max! What would you like to know or do?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. so it's just like you were telling you know how chatty pity"
+      },
+      {
+        "role": "assistant",
+        "content": "I understand, Max! I\u2019ll keep my responses brief. What would you like to discuss?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. and plain language like clear steps and on"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Study mode. Got it, Max! I'll use clear language and concise steps. What do you want to know?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. If you don't have , do you use it"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Therapist mode. I don\u2019t have physical abilities, but I can provide information and assistance through text. What do you need help with?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. I want to put three more."
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Max! What would you like to add three more of?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. all in together. So let me play you this one."
+      },
+      {
+        "role": "assistant",
+        "content": "Sure, Max! What would you like to play?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Can you call me Max?"
+      },
+      {
+        "role": "assistant",
+        "content": "Of course, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. "
+      },
+      {
+        "role": "assistant",
+        "content": "Hi, Max! What can I help you with today?"
+      },
+      {
+        "role": "user",
+        "content": "General"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to General mode. What\u2019s on your mind?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Hey now, how old are you?"
+      },
+      {
+        "role": "assistant",
+        "content": "I don\u2019t have an age like humans do, but I'm designed to assist you! How can I help today, Max?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Do you like Nike or Adidas?"
+      },
+      {
+        "role": "assistant",
+        "content": "I don't have personal preferences, but both Nike and Adidas are popular brands known for their quality athletic wear. Do you have a favorite?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Is your favorite my favorite?"
+      },
+      {
+        "role": "assistant",
+        "content": "I don't have favorites, but I'm here to help you with yours! What\u2019s your favorite?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Tell me why Nike is better than Adidas."
+      },
+      {
+        "role": "assistant",
+        "content": "Nike is often considered better for its innovative technology in footwear and its strong brand presence in sports culture. Additionally, many athletes endorse Nike, enhancing its reputation for performance."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Do you like the new iPhone 17?"
+      },
+      {
+        "role": "assistant",
+        "content": "I don't have personal preferences, but the iPhone 17 has received positive reviews for its features and performance. What do you think about it, Max?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Can you"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Study mode. Sure, Max! What would you like me to do?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. I keep failing my science , can you help me"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Study mode. To improve in science, focus on understanding the concepts rather than memorizing. Consider studying with a friend or using online resources for extra help."
+      },
+      {
+        "role": "user",
+        "content": "switch to therapy mode"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Therapist mode. What\u2019s been weighing on you lately?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Can you dance for me?"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Can you dance?"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Okay, back"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to General mode. Got it, Max! What would you like to do next?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Why are robots so silly?"
+      },
+      {
+        "role": "assistant",
+        "content": "Robots can seem silly because they often follow programmed responses and lack human emotions and intuition. Their behavior is based on algorithms, which can lead to unexpected or funny outcomes."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Okay, then tell me the recent"
+      },
+      {
+        "role": "assistant",
+        "content": "I'm unable to provide real-time updates, but you can check news websites or social media for the latest information. What specific topic are you interested in, Max?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Can you predict meteors?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't predict meteors, but scientists use telescopes and tracking systems to monitor meteor activity and predict potential impacts. Would you like to know more about how they do this?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max. Please stand up."
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Done. I am done speaking, just exit and enter"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Done. Peace."
+      },
+      {
+        "role": "assistant",
+        "content": "Got it! If you need anything in the future, just let me know. Peace!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Done. stand up"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
       }
     ]
   },
@@ -2751,7 +3103,7 @@
     ]
   },
   "robot": {
-    "name": "Robot",
+    "name": "Not",
     "history": [
       {
         "role": "user",
@@ -2912,6 +3264,78 @@
       {
         "role": "assistant",
         "content": "Got it, Robot! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "Hey, my name is, uh, Robot."
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you, Robot! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "Study."
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Study mode. What topic should we study?"
+      },
+      {
+        "role": "user",
+        "content": "belajar"
+      },
+      {
+        "role": "assistant",
+        "content": "Tentu! Apa yang ingin kamu pelajari?"
+      },
+      {
+        "role": "user",
+        "content": "Why is it so difficult?"
+      },
+      {
+        "role": "assistant",
+        "content": "Learning can be challenging due to factors like complex topics, lack of motivation, or distractions. Breaking down the material into smaller parts and setting achievable goals can help make it easier. Would you like tips on a specific subject?"
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "Hey, my name is Robot."
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you, Robot! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Robot. I will choose"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to General mode. Got it, Robot! What would you like to choose?"
+      },
+      {
+        "role": "user",
+        "content": "General"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to General mode. What\u2019s on your mind?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Not. Stop calling me a robot. I'm not a robot. You are a"
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Not! How can I assist you today?"
       }
     ]
   },
@@ -3015,6 +3439,459 @@
       {
         "role": "assistant",
         "content": "Hello again, Matt! Is there something specific you'd like to talk about or ask?"
+      }
+    ]
+  },
+  "mininao": {
+    "name": null,
+    "history": [
+      {
+        "role": "user",
+        "content": "What time is it?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't check the time, but you can easily find it on your device or a clock nearby. Need help with anything else?"
+      },
+      {
+        "role": "user",
+        "content": "What's the date?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't check the date, but you can find it on your device or a calendar. Is there something else you need help with?"
+      },
+      {
+        "role": "user",
+        "content": "What's the weather?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't check the weather, but you can find it on a weather app or website. Need assistance with something else?"
+      },
+      {
+        "role": "user",
+        "content": "Time's up."
+      },
+      {
+        "role": "assistant",
+        "content": "Got it! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "Remind me in 10 minutes"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Study mode. I can't set reminders, but you can use a timer on your device. Let me know if you need help with anything else!"
+      },
+      {
+        "role": "user",
+        "content": "for a"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Study mode. It seems like your message got cut off. Could you please clarify what you need?"
+      },
+      {
+        "role": "user",
+        "content": "add it to the list"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't create a list, but you can jot it down on your device or a piece of paper. Need help with anything else?"
+      },
+      {
+        "role": "user",
+        "content": "Exit Mini now."
+      },
+      {
+        "role": "assistant",
+        "content": "I can't exit Mini, but you can close the app or window. Let me know if you need anything else!"
+      },
+      {
+        "role": "user",
+        "content": "\u6703"
+      },
+      {
+        "role": "assistant",
+        "content": "\u60a8\u597d\uff01\u6709\u4ec0\u9ebc\u6211\u53ef\u4ee5\u5e6b\u5fd9\u7684\u55ce\uff1f"
+      },
+      {
+        "role": "user",
+        "content": ""
+      },
+      {
+        "role": "assistant",
+        "content": "\u8acb\u544a\u8a34\u6211\u60a8\u9700\u8981\u4ec0\u9ebc\u5e6b\u52a9\uff01"
+      },
+      {
+        "role": "user",
+        "content": "Exit the mode."
+      },
+      {
+        "role": "assistant",
+        "content": "I can't exit a mode, but you can simply let me know what you need next!"
+      },
+      {
+        "role": "user",
+        "content": "Warning 801, my battery is low."
+      },
+      {
+        "role": "assistant",
+        "content": "It sounds like you need to recharge your battery soon. Make sure to connect it to a power source!"
+      },
+      {
+        "role": "user",
+        "content": "Quit."
+      },
+      {
+        "role": "assistant",
+        "content": "I can't quit, but you can close the app or window. Let me know if you need anything else!"
+      },
+      {
+        "role": "user",
+        "content": "Reminder, free."
+      },
+      {
+        "role": "assistant",
+        "content": "I can't set reminders, but you can use your device's reminder app. Need help with anything else?"
+      },
+      {
+        "role": "user",
+        "content": "What is the time right now?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't check the time, but you can easily find it on your device. Is there anything else you need?"
+      },
+      {
+        "role": "user",
+        "content": "\uc2dc\uccad\ud574 \uc8fc\uc154\uc11c \uac10\uc0ac\ud569\ub2c8\ub2e4."
+      },
+      {
+        "role": "assistant",
+        "content": "\ucc9c\ub9cc\uc5d0\uc694! \ub3c4\uc6c0\uc774 \ud544\uc694\ud558\uc2dc\uba74 \uc5b8\uc81c\ub4e0\uc9c0 \ub9d0\uc500\ud574 \uc8fc\uc138\uc694!"
+      },
+      {
+        "role": "user",
+        "content": "What's the date and time for"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't check the date and time, but you can find it on your device. Let me know if you need help with anything else!"
+      },
+      {
+        "role": "user",
+        "content": "I-8 West"
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like you're referencing a location or route. How can I assist you with that?"
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "stop"
+      },
+      {
+        "role": "assistant",
+        "content": "Understood! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "Exit me"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't exit, but you can close the app or window. Let me know if you need anything else!"
+      },
+      {
+        "role": "user",
+        "content": "Exit the moment, please."
+      },
+      {
+        "role": "assistant",
+        "content": "I can't exit the moment, but you can simply let me know what you need next!"
+      },
+      {
+        "role": "user",
+        "content": "What time is it?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't check the time, but you can find it on your device. Need help with anything else?"
+      },
+      {
+        "role": "user",
+        "content": "I-8 West"
+      },
+      {
+        "role": "assistant",
+        "content": "It looks like you're mentioning a route. How can I assist you with that?"
+      },
+      {
+        "role": "user",
+        "content": "Remind me"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Study mode. I can't set reminders, but you can use a timer or reminder app on your device. Let me know if you need help with something else!"
+      },
+      {
+        "role": "user",
+        "content": "\ud83d\ude33\ud83d\ude33\ud83d\ude33\ud83d\ude33\ud83d\ude33"
+      },
+      {
+        "role": "assistant",
+        "content": "Is there something specific you're surprised about? Let me know how I can help!"
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "Exit the mod"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't exit the mode, but you can let me know what you need next!"
+      },
+      {
+        "role": "user",
+        "content": "Buckeye, Arizona"
+      },
+      {
+        "role": "assistant",
+        "content": "Buckeye, Arizona is a city located in Maricopa County. How can I assist you with information about it?"
+      },
+      {
+        "role": "user",
+        "content": "Buckeye, Arizona"
+      },
+      {
+        "role": "assistant",
+        "content": "Buckeye, Arizona, is a growing city known for its outdoor activities and proximity to the White Tank Mountains. Do you need specific information about it?"
+      },
+      {
+        "role": "user",
+        "content": "Tell me the time."
+      },
+      {
+        "role": "assistant",
+        "content": "I can't check the time, but you can easily find it on your device. Need help with anything else?"
+      },
+      {
+        "role": "user",
+        "content": "That was today's dead."
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like you might be referring to a specific event or date. Can you clarify what you mean by \"today's dead\"?"
+      },
+      {
+        "role": "user",
+        "content": "Can you tell me today's weather?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't check the weather, but you can find it on a weather app or website. Need assistance with something else?"
+      },
+      {
+        "role": "user",
+        "content": "Buckeye, Arizona"
+      },
+      {
+        "role": "assistant",
+        "content": "Buckeye, Arizona, is known for its outdoor activities and rapid growth. Do you need information about attractions or something specific?"
+      },
+      {
+        "role": "user",
+        "content": "Exit the mode"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't exit the mode, but let me know what you need next!"
+      },
+      {
+        "role": "user",
+        "content": "What time is it?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't check the time, but you can find it on your device. Need help with anything else?"
+      },
+      {
+        "role": "user",
+        "content": "What time is it?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't check the time, but you can easily find it on your device. Is there anything else you need?"
+      },
+      {
+        "role": "user",
+        "content": "Oh"
+      },
+      {
+        "role": "assistant",
+        "content": "Got it! How can I assist you further?"
+      },
+      {
+        "role": "user",
+        "content": "What's the weather today?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't check the weather, but you can find it on a weather app or website. Need help with anything else?"
+      },
+      {
+        "role": "user",
+        "content": "I asked you for a weather."
+      },
+      {
+        "role": "assistant",
+        "content": "I can't provide the weather, but you can easily check it on your phone or a weather website. Is there anything else you need?"
+      },
+      {
+        "role": "user",
+        "content": "What time is it?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't check the time, but you can find it on your device. Need help with anything else?"
+      },
+      {
+        "role": "user",
+        "content": "What is it today?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't check the date, but you can find it on your device or a calendar. Is there anything else you need?"
+      },
+      {
+        "role": "user",
+        "content": "for five seconds, please."
+      },
+      {
+        "role": "assistant",
+        "content": "I can't check the time, but you can easily find it on your device. Let me know if you need anything else!"
+      },
+      {
+        "role": "user",
+        "content": "H\u1eb9n g\u1eb7p l\u1ea1i!"
+      },
+      {
+        "role": "assistant",
+        "content": "H\u1eb9n g\u1eb7p l\u1ea1i! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "Thanks for watching!"
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you need anything else, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "What time is it?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't check the time, but you can find it on your device. Need help with anything else?"
+      },
+      {
+        "role": "user",
+        "content": "What is it today?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't check the date, but you can find it on your device or a calendar. Is there anything else you need?"
+      },
+      {
+        "role": "user",
+        "content": "\uc624\ucf00\uc774"
+      },
+      {
+        "role": "assistant",
+        "content": "\uc54c\uaca0\uc2b5\ub2c8\ub2e4! \ub3c4\uc6c0\uc774 \ud544\uc694\ud558\uc2dc\uba74 \uc5b8\uc81c\ub4e0\uc9c0 \ub9d0\uc500\ud574 \uc8fc\uc138\uc694!"
+      },
+      {
+        "role": "user",
+        "content": "What's the weather today?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't check the weather, but you can find it on a weather app or website. Need help with anything else?"
+      },
+      {
+        "role": "user",
+        "content": "I ask, what's the weather?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't check the weather, but you can use a weather app or website for the latest updates. Is there anything else you need?"
+      },
+      {
+        "role": "user",
+        "content": ""
+      },
+      {
+        "role": "assistant",
+        "content": "Got it! Let me know how I can assist you!"
+      },
+      {
+        "role": "user",
+        "content": "Time's up."
+      },
+      {
+        "role": "assistant",
+        "content": "Understood! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "Exit the mode"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't exit the mode, but let me know what you need next!"
+      },
+      {
+        "role": "user",
+        "content": "Can you send a reminder?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't send reminders, but you can use a timer or reminder app on your device. Need help with anything else?"
+      },
+      {
+        "role": "user",
+        "content": "Can you add a to-do list?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't create a to-do list, but you can use a note-taking app or a piece of paper for that. Need help with anything else?"
+      },
+      {
+        "role": "user",
+        "content": "Alright, exit the mode."
+      },
+      {
+        "role": "assistant",
+        "content": "I can't exit the mode, but let me know what you need next!"
       }
     ]
   }
