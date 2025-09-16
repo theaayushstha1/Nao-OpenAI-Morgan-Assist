@@ -454,7 +454,15 @@ def listen_for_command(nao_ip, port=9559):
         "let's go",
         "come with me",
         "give me your hand",
-        "let's go nao"
+        "let's go nao",
+        # new chatbot triggers
+        "morgan assist",
+        "morgan chatbot",
+        "morgan chat",
+        "chatbot",
+        "chatbot mode",
+        "custom chatbot",
+        "university chatbot"
     ]
 
     _safe_unsub(asr, "NAO_Chat_Listener")
@@ -527,6 +535,18 @@ def listen_for_command(nao_ip, port=9559):
                 _say_paused(tts, asr, "Okay, MiniNao is ready for your service. Let me stand up first.")
                 _flush_word(memory)
                 return "mininao"
+            
+            elif word in [
+                "morgan assist", "morgan chatbot", "morgan chat",
+                "chatbot", "chatbot mode", "custom chatbot", "university chatbot"
+            ]:
+                _stop_move_now(nao_ip, port)
+                head_flag["stop"] = True
+                _tracker_stop_now(nao_ip, port)
+                _say_paused(tts, asr, "Okay, switching to Morgan chatbot mode. Let’s begin.")
+                _flush_word(memory)
+                return "chatbot"
+
 
             elif word == "stand up":
                 _go_to_posture_bg_delayed(nao_ip, port, "StandInit", 0.6, delay=0.05)

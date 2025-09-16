@@ -7,6 +7,23 @@ from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 load_dotenv()
 
+import openai
+from pinecone import Pinecone
+
+# Load environment variables
+PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME")
+PINECONE_NAMESPACE = os.getenv("PINECONE_NAMESPACE")
+PINECONE_ENV = os.getenv("PINECONE_ENV", "us-east-1")
+
+pinecone_enabled = PINECONE_API_KEY and PINECONE_INDEX_NAME
+
+# Initialize Pinecone if enabled
+if pinecone_enabled:
+    pc = Pinecone(api_key=PINECONE_API_KEY)
+    index = pc.Index(PINECONE_INDEX_NAME)
+
+
 BASEDIR = os.path.abspath(os.path.dirname(__file__))
 TEMP_DIR = os.path.join(BASEDIR, "tmp_audio")
 if not os.path.exists(TEMP_DIR):
@@ -183,6 +200,31 @@ def _validate_audio_or_503(path, min_seconds=0.12, min_size_bytes=400):
     except Exception as e:
         # surface a gentle 503 so the robot can re-prompt
         raise RuntimeError(str(e))
+    
+def get_embedding(text):
+    try:
+        response = openai.Embedding.create(
+            input=text,
+            model="text-embedding-3-small"
+        )
+        return response["data"][0]["embedding"]
+    except Exception as e:
+        print("[Embedding Error]", e)
+        return None
+
+def query_pinecone(embedding, top_k=5):
+    try:
+        results = index.query(
+            vector=embedding,
+            top_k=top_k,
+            namespace=PINECONE_NAMESPACE,
+            include_metadata=True
+        )
+        return results["matches"]
+    except Exception as e:
+        print("[Pinecone Error]", e)
+        return []
+
 
 def transcribe_with_retry_path(path, model, max_tries=4, base_delay=0.8):
     last_err = None
@@ -353,6 +395,36 @@ def upload_audio():
 
         cleaned = _strip_mode_words(user_input) if mode_changed else user_input
 
+
+        # ----------------- RAG response using Pinecone -----------------
+        embedding = get_embedding(cleaned)
+        matches = query_pinecone(embedding) if embedding else []
+
+        if matches:
+            context_text = "\n".join([m["metadata"].get("text", "") for m in matches])
+            prompt = (
+                "You are a helpful assistant answering based on Morgan State University Computer Science department info.\n"
+                "Use the below context to answer the user's question:\n\n"
+                f"Context:\n{context_text}\n\n"
+                f"User Question: {cleaned}"
+            )
+            response = openai.ChatCompletion.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "Answer using the context below."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.2,
+                max_tokens=500
+            )
+            raw_reply = response["choices"][0]["message"]["content"]
+            function_call = {}
+        else:
+            result = gpt_handler.get_reply([{"role":"user", "content": cleaned}])
+            raw_reply = (result.get("reply") or "").strip()
+            function_call = result.get("function_call") or {}
+
+
         # If only the mode was spoken, skip GPT and give mode-specific follow-up
         if mode_changed and not cleaned.strip():
             reply = u"✅ Switched to {} mode. {}".format(mode.capitalize(), _followup_for_mode(mode))
@@ -385,13 +457,7 @@ def upload_audio():
         if known and ("my name is" not in cleaned.lower()):
             cleaned = "My name is {}. {}".format(known, cleaned)
 
-        past = memory_manager.get_chat_history(username)
-        system_prompt = _prompt_for_mode(mode)
-        messages = [{"role":"system","content":system_prompt}] + past + [{"role":"user","content":cleaned}]
-        result = gpt_handler.get_reply(messages)
 
-        raw_reply = (result.get("reply") or "").strip()
-        function_call = result.get("function_call") or {}
 
         if mode_changed:
             confirm = u"✅ Switched to {} mode.".format(mode.capitalize())

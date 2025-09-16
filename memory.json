@@ -3406,7 +3406,7 @@
     ]
   },
   "matt": {
-    "name": "Matt",
+    "name": "Building",
     "history": [
       {
         "role": "user",
@@ -3439,6 +3439,94 @@
       {
         "role": "assistant",
         "content": "Hello again, Matt! Is there something specific you'd like to talk about or ask?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Matt"
+      },
+      {
+        "role": "assistant",
+        "content": "Hi Matt! Let me know how I can assist you today!"
+      },
+      {
+        "role": "user",
+        "content": "General."
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to General mode. What\u2019s on your mind?"
+      },
+      {
+        "role": "user",
+        "content": "General."
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to General mode. What\u2019s on your mind?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Matt. Can you see me now alright?"
+      },
+      {
+        "role": "assistant",
+        "content": "Hi Matt! I can't see you, but I'm here to help with any questions or tasks you have. What would you like to do?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Building. So I have this project I'm building"
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Building! What kind of project are you working on?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Building. It's a robot."
+      },
+      {
+        "role": "assistant",
+        "content": "That sounds exciting, Building! What specific features or functions are you planning for your robot?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Building. Can you guess?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can\u2019t guess, but I'd love to hear about it! What are some cool features you have in mind for your robot?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Building. Uh, nothing."
+      },
+      {
+        "role": "assistant",
+        "content": "No problem, Building! If you need help brainstorming ideas or anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Building. Sure, that would be great."
+      },
+      {
+        "role": "assistant",
+        "content": "Awesome! What kind of tasks do you want your robot to perform?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Building. And that's just to"
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, Building! What do you want your robot to do?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Building. Can I please swi-"
+      },
+      {
+        "role": "assistant",
+        "content": "Sure, Building! What would you like to switch to?"
       }
     ]
   },
@@ -3892,6 +3980,320 @@
       {
         "role": "assistant",
         "content": "I can't exit the mode, but let me know what you need next!"
+      },
+      {
+        "role": "user",
+        "content": "What time is it?"
+      },
+      {
+        "role": "assistant",
+        "content": "I'm unable to provide the current time as I don't have access to real-time data. You can check the time on your device or any clock nearby."
+      },
+      {
+        "role": "user",
+        "content": "What is it today?"
+      },
+      {
+        "role": "assistant",
+        "content": "To provide an accurate response, I would need to know today's date. However, based on the context provided, I can help you find out what events might be happening on a specific date at Morgan State University. If you provide today's date, I can look up the relevant event or activity from the academic calendar."
+      },
+      {
+        "role": "user",
+        "content": "Can you tell me today's date and date?"
+      },
+      {
+        "role": "assistant",
+        "content": "I'm sorry, but I can't provide real-time information such as today's date. However, you can easily find the current date by checking your device's calendar or clock."
+      },
+      {
+        "role": "user",
+        "content": "We can also ask whether what's the weather?"
+      },
+      {
+        "role": "assistant",
+        "content": "I'm here to provide information related to Morgan State University, particularly the Computer Science department. For weather-related inquiries, I recommend checking a reliable weather service or app for the most current and accurate information."
+      },
+      {
+        "role": "user",
+        "content": "1, 2, 3, 4, 5."
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like your question is incomplete or unclear. Could you please provide more context or clarify what you are asking about? Are you referring to course numbers, years, or something else related to the Morgan State University Computer Science department?"
+      },
+      {
+        "role": "user",
+        "content": "now."
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like your question was cut off. Could you please provide more details or clarify what information you are seeking about Morgan State University's Computer Science department?"
+      },
+      {
+        "role": "user",
+        "content": "Subs by www.zeoranger.co.uk"
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like you are looking for information related to course substitutions at Morgan State University's Computer Science department. For internal course substitution requests, you should contact your advisor to submit the request. Please note that core courses cannot be substituted. For any updates or further assistance, you can reach out to Ms. Wendy Smith. Here is her contact information:\n\n- Email: Wendy.Smith@morgan.edu\n- Phone: (443) 885-3962\n- Office: McMechen Hall 507A\n\nIf you need more specific information or have additional questions, contacting Ms. Wendy would be the best course of action."
+      },
+      {
+        "role": "user",
+        "content": "Just chat."
+      },
+      {
+        "role": "assistant",
+        "content": "Hello! How can I assist you today? If you have any questions about Morgan State University's Computer Science department or anything else, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "Bye."
+      },
+      {
+        "role": "assistant",
+        "content": "Goodbye! If you have any more questions in the future, feel free to ask. Have a great day!"
+      }
+    ]
+  },
+  "a": {
+    "name": "A",
+    "history": [
+      {
+        "role": "user",
+        "content": "Who is the chairman?"
+      },
+      {
+        "role": "assistant",
+        "content": "Could you please specify which organization or context you're referring to for the chairman?"
+      },
+      {
+        "role": "user",
+        "content": "Who is the chairman?"
+      },
+      {
+        "role": "assistant",
+        "content": "I need more details about the organization or context to provide the name of the chairman. Can you specify?"
+      },
+      {
+        "role": "user",
+        "content": ""
+      },
+      {
+        "role": "assistant",
+        "content": "I still need to know which organization or context you're asking about to help you find the chairman. Can you clarify?"
+      },
+      {
+        "role": "user",
+        "content": "Who is the chairman of computer science?"
+      },
+      {
+        "role": "assistant",
+        "content": "The chairman of computer science can vary by university or organization. Please specify the institution you're asking about for accurate information."
+      },
+      {
+        "role": "user",
+        "content": "Who is the chairman of our"
+      },
+      {
+        "role": "assistant",
+        "content": "Could you please clarify which organization or group you are referring to with \"our\"?"
+      },
+      {
+        "role": "user",
+        "content": "Chairman of computers"
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like you're asking about a specific organization related to computers, but I need more details. Could you specify which group or institution you mean?"
+      },
+      {
+        "role": "user",
+        "content": "Who is the chairman of computer..."
+      },
+      {
+        "role": "assistant",
+        "content": "I'm sorry, but I need more context to identify the chairman you're referring to. Could you specify the organization or institution related to computers?"
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you have any more questions or need assistance, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "\u3054\u89a7\u3044\u305f\u3060\u304d\u3042\u308a\u304c\u3068\u3046\u3054\u3056\u3044\u307e\u3059\u3002\u826f\u30441\u65e5\u3092!"
+      },
+      {
+        "role": "assistant",
+        "content": "\u3054\u89a7\u3044\u305f\u3060\u304d\u3042\u308a\u304c\u3068\u3046\u3054\u3056\u3044\u307e\u3059\uff01\u826f\u30441\u65e5\u3092\u304a\u904e\u3054\u3057\u304f\u3060\u3055\u3044\uff01"
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching the video."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you have any questions or need help, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "Who is the chairman of computer science?"
+      },
+      {
+        "role": "assistant",
+        "content": "The chairman of the Computer Science Department at Morgan State University is Professor Shuangbao \"Paul\" Wang."
+      },
+      {
+        "role": "user",
+        "content": "Who is the chairman of computer science?"
+      },
+      {
+        "role": "assistant",
+        "content": "The chairman of the Computer Science Department at Morgan State University is Professor Shuangbao \"Paul\" Wang."
+      },
+      {
+        "role": "user",
+        "content": "What is the first day of of fall 2020"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Study mode. The first day of the Fall 2025 term at Morgan State University is August 27, 2025."
+      },
+      {
+        "role": "user",
+        "content": "\uace0\ub9d9\uc2b5\ub2c8\ub2e4."
+      },
+      {
+        "role": "assistant",
+        "content": "\ucc9c\ub9cc\uc5d0\uc694! \ub3c4\uc6c0\uc774 \ud544\uc694\ud558\uc2dc\uba74 \uc5b8\uc81c\ub4e0\uc9c0 \ub9d0\uc500\ud574 \uc8fc\uc138\uc694."
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you have any questions or need further assistance regarding Morgan State University's Computer Science department or any other topic, feel free to ask."
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching the video."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you have any questions or need further assistance regarding the video or any other topic related to Morgan State University's Computer Science department, feel free to ask."
+      },
+      {
+        "role": "user",
+        "content": "\uc2dc\uccad\ud574 \uc8fc\uc154\uc11c \uac10\uc0ac\ud569\ub2c8\ub2e4."
+      },
+      {
+        "role": "assistant",
+        "content": "\uc8c4\uc1a1\ud569\ub2c8\ub2e4. Morgan State University\uc758 \ucef4\ud4e8\ud130 \uacfc\ud559 \ubd80\uc11c\uc5d0 \ub300\ud55c \uc815\ubcf4\ub85c\ub294 \uadc0\ud558\uc758 \uc9c8\ubb38\uc5d0 \ub300\ud55c \ub2f5\ubcc0\uc744 \uc81c\uacf5\ud560 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4. \ub2e4\ub978 \uc9c8\ubb38\uc774 \uc788\uc73c\uba74 \uc5b8\uc81c\ub4e0\uc9c0 \ub9d0\uc500\ud574 \uc8fc\uc138\uc694."
+      },
+      {
+        "role": "user",
+        "content": "Who is the chair?"
+      },
+      {
+        "role": "assistant",
+        "content": "The chair of the Computer Science Department at Morgan State University is Professor Shuangbao \"Paul\" Wang."
+      },
+      {
+        "role": "user",
+        "content": "What is the start date of Fall 2025"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Study mode. The start date for the Fall 2025 term at Morgan State University is August 27, 2025."
+      },
+      {
+        "role": "user",
+        "content": "What is the contact information of Dr. Sachs?"
+      },
+      {
+        "role": "assistant",
+        "content": "Based on the provided context, there is no mention of a Dr. Sachs in the Morgan State University Computer Science department. If you meant Dr. Eric Sakk, who is an advisor for students with last names starting with \"C,\" there is no specific contact information provided for him in the context. You may want to check Degree Works or Navigate (EAB) for advisor contact information, or you can contact the department's general email at compsci@morgan.edu for further assistance."
+      },
+      {
+        "role": "user",
+        "content": "What are the recent programs or conference that's happening on the campus?"
+      },
+      {
+        "role": "assistant",
+        "content": "The context provided does not include specific details about recent programs or conferences happening on the Morgan State University campus. However, you can stay up to date with all campus events by visiting the events page at [Morgan State University Events](https://events.morgan.edu/?_gl=1*wvobn2*_ga*Mzk). This page will have the latest information on upcoming programs and conferences."
+      },
+      {
+        "role": "user",
+        "content": "What is the prerequisite for computer 220?"
+      },
+      {
+        "role": "assistant",
+        "content": "The prerequisite for COSC 220, \"Data Structures and Algorithms Analysis,\" is COSC 112 with a grade of \u201cC\u201d or higher."
+      },
+      {
+        "role": "user",
+        "content": "My name is A. I AM A JUNIOR"
+      },
+      {
+        "role": "assistant",
+        "content": "As a junior in the Computer Science department at Morgan State University, you should be aware of the following requirements and opportunities:\n\n1. **Junior and Senior Level Requirements**: You are required to take all your junior and senior level courses in your major at Morgan State University unless you have prior written permission from the Dean to take courses elsewhere.\n\n2. **Cumulative and Major GPA**: You must maintain a cumulative average of 2.0 or better and a major average of 2.0 or better, with no outstanding grades below 'C' in your major courses.\n\n3. **Senior Departmental Comprehensive Examination**: You will need to pass this examination as part of your graduation requirements.\n\n4. **Continuing Professional Development**: Recognize the importance of engaging in continuing professional development, which is part of the learning outcomes for your program.\n\n5. **Honors Program**: If you are academically distinguished, consider participating in the SCMNS Honors Program, which offers enhanced academic challenges and enrichment opportunities.\n\n6. **Peer B.E.A.R.S. Mentoring Program**: You might have the opportunity to become a mentor for first-year students, helping them navigate their first year and enhancing your leadership skills.\n\n7. **Tutoring and Academic Support**: Utilize resources like the Center for Academic Success and Achievement (CASA) for additional academic support.\n\n8. **Senior Project**: As you approach your senior year, you will need to complete a Senior Project, which is a significant component of your degree program.\n\nFor more detailed information, you can refer to the Morgan State University Undergraduate Catalog or contact your academic advisor."
+      }
+    ]
+  },
+  "friend": {
+    "name": null,
+    "history": [
+      {
+        "role": "user",
+        "content": "Who is the chairman of computer science?"
+      },
+      {
+        "role": "assistant",
+        "content": "The chairman of the Computer Science Department at Morgan State University is Shuangbao \"Paul\" Wang."
+      },
+      {
+        "role": "user",
+        "content": "When does the fall 2025 start"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Study mode. The Fall 2025 term at Morgan State University starts on August 27, 2025."
+      },
+      {
+        "role": "user",
+        "content": "What are the events of Fall 2025?"
+      },
+      {
+        "role": "assistant",
+        "content": "The events for Fall 2025 at Morgan State University are as follows:\n\n- First Day of Class: August 27, 2025\n- Labor Day: September 1, 2025\n- Wellness Day: October 7, 2025\n- Midterm Examination Week: October 13, 2025, to October 18, 2025\n- Wellness Day: November 26, 2025\n- Thanksgiving Break: November 27, 2025, to November 30, 2025\n- Last Day of Class: December 10, 2025\n- Final Exams: December 11, 2025, to December 18, 2025\n- Commencement: December 19, 2025\n- Winter Recess: December 24, 2025, to January 4, 2026\n\nFor more detailed information, you can refer to the Dates and Deadlines for Fall 2025 [here](https://docs.google.com/spreadsheets/d/1m-oL6NwTnoGcP4L1wmbeL0OtJC2b8HjuW3jSipWC4nM/edit?gid=378227356#gid=378227356)."
+      },
+      {
+        "role": "user",
+        "content": "Peace out."
+      },
+      {
+        "role": "assistant",
+        "content": "Goodbye! If you have any more questions in the future, feel free to reach out. Have a great day!"
+      },
+      {
+        "role": "user",
+        "content": "Let's chat"
+      },
+      {
+        "role": "assistant",
+        "content": "Of course! How can I assist you today? If you have any questions about Morgan State University's Computer Science department or related services, feel free to ask."
+      },
+      {
+        "role": "user",
+        "content": "Hehe, how was it?"
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like your question might be missing some context or details. If you're referring to an event or specific information related to Morgan State University's Computer Science department, please provide more details so I can assist you better. If you have a specific question about courses, events, or advising, feel free to ask!"
       }
     ]
   }
