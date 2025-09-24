@@ -25,7 +25,7 @@ def chatbot_mode(record_audio_func, tts_proxy):
                 res = requests.post(
                     SERVER_URL,
                     files={'file': f},
-                    data={'username': 'friend', 'mode': 'chatbot'},  # 👈 force chatbot mode
+                    data={'username': 'friend', 'mode': 'chatbot'},  
                     timeout=TIMEOUT
                 )
 
@@ -48,7 +48,7 @@ def chatbot_mode(record_audio_func, tts_proxy):
                 continue
 
             if reply:
-                tts_proxy.say(reply.encode('utf-8'))  # 🔥 Encode to UTF-8 for Python 2
+                tts_proxy.say(reply.encode('utf-8'))  
             else:
                 tts_proxy.say("I couldn't find anything useful.")
 
