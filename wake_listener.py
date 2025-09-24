@@ -24,8 +24,13 @@ YES_WORDS = ["yes","yeah","yep","sure","ok","okay","please"]
 NO_WORDS  = ["no","nope","nah","not now","later","maybe later","no thanks"]
 
 ASSIST_LINE = (
-    "To start a conversation, please say 'let's talk' or 'let's chat'."
+    "How can I assist you today?"
+    "You can say 'let's chat' to talk with me, "
+    "'mini nao' for tools like time and weather, "
+    "'chatbot mode' for university help, "
+    "or SIMPLY ask me to 'dance' or 'follow you'."
 )
+
 
 # --- small utils ---
 
@@ -477,7 +482,7 @@ def listen_for_command(nao_ip, port=9559):
     _run_bg(_head_track_guard, nao_ip, port, head_flag)
 
     _say_paused(tts, asr,
-        "System Initializing. I am your robot assistant. Say 'Nao' to ACTIVATE me.")
+        "System Initializing. Say 'Nao' to ACTIVATE me.")
 
     last_trigger = 0.0
     last_word    = ""
@@ -517,7 +522,8 @@ def listen_for_command(nao_ip, port=9559):
                 else:
                     _wave_any_posture_bg(nao_ip, port)
                     _say_nowait(tts, asr, "Hello, I am Nao. It is very nice to meet you. " + ASSIST_LINE)
-
+                    
+                    
                 _flush_word(memory)
 
             elif word in ["let's chat", "let's talk", "talk mode", "start a conversation", "chat mode"]:
@@ -531,7 +537,7 @@ def listen_for_command(nao_ip, port=9559):
             elif word in ["mini nao", "mini-nao", "mininao", "mini nao mode"]:
                 _stop_move_now(nao_ip, port)
                 head_flag["stop"] = True
-                _tracker_stop_now(nao_ip, port)
+                _tracker_stop_now(nao_ip, port) 
                 _say_paused(tts, asr, "Okay, MiniNao is ready for your service. Let me stand up first.")
                 _flush_word(memory)
                 return "mininao"

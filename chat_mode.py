@@ -5,11 +5,14 @@ from naoqi import ALProxy
 from utils.camera_capture import capture_photo
 import memory_manager
 
-SERVER_IP       = "172.20.95.120"
+
+SERVER_IP = os.environ.get("SERVER_IP", "172.20.95.109")
+
 SERVER_URL      = "http://{}:5000/upload".format(SERVER_IP)
 CHAT_TEXT_URL   = "http://{}:5000/chat_text".format(SERVER_IP)
 FACE_RECO_URL   = "http://{}:5000/face/recognize".format(SERVER_IP)
 FACE_ENROLL_URL = "http://{}:5000/face/enroll".format(SERVER_IP)
+
 
 SESSION = requests.Session()
 DEFAULT_TIMEOUT = 30
@@ -249,26 +252,42 @@ def recognize_or_enroll(robot, nao_ip, port):
     return user_name, False
 
 def _pick_mode(robot, nao_ip, user_name, default_mode="general"):
-    _say(robot, "Choose a chat mode: General, Study, Therapist, or Broker.")
+    _say(robot, "Choose a chat mode")
     from audio_handler import record_audio
+
     def _hear_once():
         wav = record_audio(nao_ip)
         try:
             with open(wav, "rb") as f:
-                res = SESSION.post(SERVER_URL, files={"file": f}, data={"username": user_name}, timeout=DEFAULT_TIMEOUT)
+                res = SESSION.post(
+                    SERVER_URL,
+                    files={"file": f},
+                    data={"username": user_name},
+                    timeout=DEFAULT_TIMEOUT
+                )
             res.raise_for_status()
-            return (res.json() or {}).get("user_input", "") or ""
-        except Exception: return ""
-    user_text = _hear_once()
-    chosen = _extract_mode_from_text(user_text)
+            data = res.json() or {}
+            # Prefer the server’s detected mode if available
+            server_mode = (data.get("active_mode") or "").lower()
+            if server_mode in VALID_FOR_SERVER:
+                return server_mode
+            # Fallback to local keyword extraction
+            return _extract_mode_from_text(data.get("user_input", "") or "")
+        except Exception:
+            return None
+
+    chosen = _hear_once()
     if not chosen:
         _say(robot, "Sorry—say: General, Study, Therapist, or Broker.")
-        user_text = _hear_once()
-        chosen = _extract_mode_from_text(user_text)
+        chosen = _hear_once()
+
     if not chosen:
-        _say(robot, "Using {} mode.".format(default_mode)); return default_mode
+        _say(robot, "Using {} mode.".format(default_mode))
+        return default_mode
+
     _say(robot, "{} mode selected.".format(chosen.capitalize()))
     return chosen
+
 
 def _requery_immediate(username, text, new_mode):
     try:
@@ -281,11 +300,11 @@ def _requery_immediate(username, text, new_mode):
 
 def _mode_enter_actions(robot, posture, tts, motion, mode):
     if mode == "therapist":
-        _say(robot, "Please sit with me. I’ll listen carefully.")
+        _say(robot, "Please sit with me. I’ll listen to your problems carefully.")
         try: posture.goToPosture("Sit", 0.6)
         except: pass
     elif mode == "study":
-        _say(robot, "Stand with me. Let’s learn together.")
+        _say(robot, "First of all, Stand up with me and lets do sonmem exer. Let’s learn together.")
         try: posture.goToPosture("StandInit", 0.6)
         except: pass
 
@@ -410,7 +429,7 @@ def enter_chat_mode(robot, nao_ip="127.0.0.1", port=9559):
             if reply_text:
                 _speak_with_gestures(robot, tts, motion, reply_text, mode)
             elif immediate_switch:
-                _speak_with_gestures(robot, tts, motion, "✅ Switched to {} mode.".format(mode.capitalize()), mode)
+                _speak_with_gestures(robot, tts, motion, "✅ Switched to {} mode.".format(mode.capitalize()), mode)    
 
             if "stop" in (user_text or "").lower():
                 _say(robot, "Catch you later!")
@@ -424,7 +443,7 @@ def enter_chat_mode(robot, nao_ip="127.0.0.1", port=9559):
                 try: posture.goToPosture("Sit", 0.6)
                 except: pass
             elif name == "down":
-                try:
+                try:   
                     motion.setStiffnesses("Body", 1.0)
                     joints = ["RHipPitch","LHipPitch","RKneePitch","LKneePitch","RAnklePitch","LAnklePitch"]
                     angles = [0.3, 0.3, 0.5, 0.5, -0.2, -0.2]

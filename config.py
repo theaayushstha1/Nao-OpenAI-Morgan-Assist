@@ -7,7 +7,7 @@ Reads everything from environment variables.
 import os
 
 # NAO connection settings
-NAO_IP   = os.environ.get("NAO_IP", "172.20.95.123")
+NAO_IP   = os.environ.get("NAO_IP", "172.20.95.105")
 NAO_PORT = int(os.environ.get("NAO_PORT", "9559"))
 
 # OpenAI settings

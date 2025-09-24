@@ -1,6 +1,6 @@
 {
   "max": {
-    "name": "Done",
+    "name": "So",
     "history": [
       {
         "role": "user",
@@ -2945,6 +2945,278 @@
       {
         "role": "assistant",
         "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "Who is the chairman of computer science?"
+      },
+      {
+        "role": "assistant",
+        "content": "The chairman of the Computer Science Department at Morgan State University is Shuangbao \"Paul\" Wang."
+      },
+      {
+        "role": "user",
+        "content": "When does the fall 2025 start"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Study mode. The Fall 2025 term at Morgan State University starts on August 27, 2025."
+      },
+      {
+        "role": "user",
+        "content": "What are the events of Fall 2025?"
+      },
+      {
+        "role": "assistant",
+        "content": "The events for Fall 2025 at Morgan State University are as follows:\n\n- First Day of Class: August 27, 2025\n- Labor Day: September 1, 2025\n- Wellness Day: October 7, 2025\n- Midterm Examination Week: October 13, 2025, to October 18, 2025\n- Wellness Day: November 26, 2025\n- Thanksgiving Break: November 27, 2025, to November 30, 2025\n- Last Day of Class: December 10, 2025\n- Final Exams: December 11, 2025, to December 18, 2025\n- Commencement: December 19, 2025\n- Winter Recess: December 24, 2025, to January 4, 2026\n\nFor more detailed information, you can refer to the Dates and Deadlines for Fall 2025 [here](https://docs.google.com/spreadsheets/d/1m-oL6NwTnoGcP4L1wmbeL0OtJC2b8HjuW3jSipWC4nM/edit?gid=378227356#gid=378227356)."
+      },
+      {
+        "role": "user",
+        "content": "Peace out."
+      },
+      {
+        "role": "assistant",
+        "content": "Goodbye! If you have any more questions in the future, feel free to reach out. Have a great day!"
+      },
+      {
+        "role": "user",
+        "content": "Let's chat"
+      },
+      {
+        "role": "assistant",
+        "content": "Of course! How can I assist you today? If you have any questions about Morgan State University's Computer Science department or related services, feel free to ask."
+      },
+      {
+        "role": "user",
+        "content": "Hehe, how was it?"
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like your question might be missing some context or details. If you're referring to an event or specific information related to Morgan State University's Computer Science department, please provide more details so I can assist you better. If you have a specific question about courses, events, or advising, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "When is the start day of"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Study mode. The start day of the Fall 2025 term at Morgan State University's Computer Science department is August 27, 2025."
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching the video."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you have any questions or need further assistance regarding the content of the video or any other information related to Morgan State University's Computer Science department, feel free to ask."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Hello Max! How can I assist you today with information related to the Morgan State University Computer Science Department?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Done. \u0645\u06cc\u06ba \u06af\u06cc\u0691 \u06a9\u06cc \u0679\u06be\u06cc\u0631\u06cc\u043f\u06cc\u0634\u0646 \u0628\u06be\u06af\u0627\u0646\u06cc \u06a9\u06d2 \u0633\u0627\u062a\u06be \u06a9\u0648 \u0633\u0646\u06cc Container"
+      },
+      {
+        "role": "assistant",
+        "content": "\u0645\u062c\u06be\u06d2 \u0645\u0639\u0627\u0641 \u06a9\u0631\u06cc\u06ba\u060c \u0644\u06cc\u06a9\u0646 \u0622\u067e \u06a9\u0627 \u0633\u0648\u0627\u0644 \u0648\u0627\u0636\u062d \u0646\u06c1\u06cc\u06ba \u06c1\u06d2\u06d4 \u0627\u06af\u0631 \u0622\u067e Morgan State University \u06a9\u06d2 \u06a9\u0645\u067e\u06cc\u0648\u0679\u0631 \u0633\u0627\u0626\u0646\u0633 \u0688\u06cc\u067e\u0627\u0631\u0679\u0645\u0646\u0679 \u06a9\u06d2 \u06a9\u0633\u06cc \u062e\u0627\u0635 \u06a9\u0648\u0631\u0633 \u06cc\u0627 \u067e\u0631\u0648\u06af\u0631\u0627\u0645 \u06a9\u06d2 \u0628\u0627\u0631\u06d2 \u0645\u06cc\u06ba \u0645\u0639\u0644\u0648\u0645\u0627\u062a \u0686\u0627\u06c1\u062a\u06d2 \u06c1\u06cc\u06ba\u060c \u062a\u0648 \u0628\u0631\u0627\u06c1 \u06a9\u0631\u0645 \u0645\u0632\u06cc\u062f \u0648\u0636\u0627\u062d\u062a \u0641\u0631\u0627\u06c1\u0645 \u06a9\u0631\u06cc\u06ba \u062a\u0627\u06a9\u06c1 \u0645\u06cc\u06ba \u0622\u067e \u06a9\u06cc \u0628\u06c1\u062a\u0631 \u0645\u062f\u062f \u06a9\u0631 \u0633\u06a9\u0648\u06ba\u06d4 \u0627\u06af\u0631 \u0622\u067e \u06a9\u0633\u06cc \u062e\u0627\u0635 \u06a9\u0648\u0631\u0633 \u06cc\u0627 \u067e\u0631\u0648\u06af\u0631\u0627\u0645 \u06a9\u06d2 \u0628\u0627\u0631\u06d2 \u0645\u06cc\u06ba \u062c\u0627\u0646\u0646\u0627 \u0686\u0627\u06c1\u062a\u06d2 \u06c1\u06cc\u06ba\u060c \u062a\u0648 \u0628\u0631\u0627\u06c1 \u06a9\u0631\u0645 \u0627\u0633 \u06a9\u0627 \u0646\u0627\u0645 \u06cc\u0627 \u06a9\u0648\u0688 \u0641\u0631\u0627\u06c1\u0645 \u06a9\u0631\u06cc\u06ba\u06d4"
+      },
+      {
+        "role": "user",
+        "content": "General."
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to General mode. What\u2019s on your mind?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Done. What is better Bitcoin or Solana?"
+      },
+      {
+        "role": "assistant",
+        "content": "The context provided does not contain specific information about Bitcoin or Solana, as it focuses on resources and opportunities related to Morgan State University's Computer Science department. However, I can offer a general comparison based on common knowledge up to October 2023:\n\n1. **Bitcoin**:\n   - **Purpose**: Bitcoin is primarily a digital currency designed to function as a decentralized alternative to traditional fiat currencies. It is often referred to as \"digital gold\" due to its limited supply and use as a store of value.\n   - **Technology**: Bitcoin operates on a proof-of-work blockchain, which is known for its security and decentralization but can be slower and more energy-intensive.\n   - **Adoption**: Bitcoin has the largest market capitalization among cryptocurrencies and is widely accepted and recognized.\n\n2. **Solana**:\n   - **Purpose**: Solana is a blockchain platform designed to support decentralized applications (dApps) and crypto projects. It aims to provide high-speed transactions and low fees.\n   - **Technology**: Solana uses a unique proof-of-history consensus mechanism combined with proof-of-stake, which allows it to process transactions much faster and more efficiently than many other blockchains.\n   - **Adoption**: Solana has gained popularity for its scalability and has attracted a growing ecosystem of dApps and projects.\n\n**Conclusion**: The choice between Bitcoin and Solana depends on your specific needs and goals. If you're looking for a well-established store of value, Bitcoin might be preferable. If you're interested in building or interacting with decentralized applications with fast transaction speeds, Solana could be more suitable. Always consider your investment strategy and risk tolerance when evaluating cryptocurrencies."
+      },
+      {
+        "role": "user",
+        "content": "My name is Done. Who is the president of United States?"
+      },
+      {
+        "role": "assistant",
+        "content": "As of my last update in October 2023, the President of the United States is Joe Biden."
+      },
+      {
+        "role": "user",
+        "content": "My name is Done. No, can you look for the current president of the United States?"
+      },
+      {
+        "role": "assistant",
+        "content": "I am unable to provide real-time information or updates beyond October 2023. To find the current president of the United States, I recommend checking a reliable news source or the official White House website for the most up-to-date information."
+      },
+      {
+        "role": "user",
+        "content": "My name is Done. Give me one motivational quote."
+      },
+      {
+        "role": "assistant",
+        "content": "\"Success is not the key to happiness. Happiness is the key to success. If you love what you are doing, you will be successful.\" - Albert Schweitzer"
+      },
+      {
+        "role": "user",
+        "content": "My name is Done. What is force?"
+      },
+      {
+        "role": "assistant",
+        "content": "The context provided does not contain information about the concept of \"force.\" However, in general terms, force is a physical quantity that describes the interaction between objects that can cause a change in motion. It is typically measured in newtons (N) and can cause an object to accelerate, slow down, remain in place, or change shape. If you have a specific context or need related to Morgan State University's Computer Science department, please let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Done. Who is the chairman of computer science department?"
+      },
+      {
+        "role": "assistant",
+        "content": "The chairman of the Computer Science Department at Morgan State University is Professor Shuangbao \"Paul\" Wang."
+      },
+      {
+        "role": "user",
+        "content": "My name is Done. When is the start date of..."
+      },
+      {
+        "role": "assistant",
+        "content": "Could you please specify which term or event you are inquiring about for the start date?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Done. 2025."
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like your question might be incomplete. However, if you're looking for information related to the academic calendar for Fall 2025 at Morgan State University's Computer Science department, here are some key dates:\n\n- **First Day of Class**: August 27, 2025\n- **Labor Day**: September 1, 2025\n- **Wellness Day**: October 7, 2025\n- **Midterm Examination Week**: October 13-18, 2025\n- **Wellness Day**: November 26, 2025\n- **Thanksgiving Break**: November 27-30, 2025\n- **Last Day of Class**: December 10, 2025\n- **Final Exams**: December 11-18, 2025\n- **Commencement**: December 19, 2025\n- **Winter Recess**: December 24, 2025 - January 4, 2026\n\nIf you need more specific information or have another question, please let me know!"
+      },
+      {
+        "role": "user",
+        "content": "Hey, my name is Max. You can call me Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Done. general"
+      },
+      {
+        "role": "assistant",
+        "content": "Understood! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Keep. Hey, this is just a test to see how long you can record my voice as I'm keep talking I just want to ask you what's your favorite anime and which show do you recommend on? Watching anime with and why are you still listening to me? Are you not supposed to cut me off from sentences? Okay, now reply me shortly"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Study mode. I don't have personal preferences, but I recommend \"Attack on Titan\" for its intense storyline and character development. It's a great show to watch with friends for its thrilling plot twists!"
+      },
+      {
+        "role": "user",
+        "content": "My name is So. Why are you standing up? I didn't tell you to stand up. You are being rude by standing up. Do you know that? Okay, do what you are supposed to do now. This is so rude. You cannot stand up."
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is So. Exit the chat mode."
+      },
+      {
+        "role": "assistant",
+        "content": "I can't exit the chat mode, but I'm here to assist you with any questions or actions you need!"
+      },
+      {
+        "role": "user",
+        "content": "My name is So. Exit"
+      },
+      {
+        "role": "assistant",
+        "content": "If you need assistance or want to continue, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is So. general"
+      },
+      {
+        "role": "assistant",
+        "content": "Understood! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is So. What is the world's tallest building in the world?"
+      },
+      {
+        "role": "assistant",
+        "content": "The world's tallest building is the Burj Khalifa in Dubai, United Arab Emirates, standing at a height of 828 meters (2,717 feet). It has held this title since its completion in 2010."
+      },
+      {
+        "role": "user",
+        "content": "My name is So. Thanks for watching and don't forget to like and subscribe!"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is So. C\u1ea3m \u01a1n c\u00e1c b\u1ea1n \u0111\u00e3 xem video n\u00e0y. Xin ch\u00e0o t\u1ea5t c\u1ea3 c\u00e1c b\u1ea1n!"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "Study mode"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Study mode. What topic should we study?"
+      },
+      {
+        "role": "user",
+        "content": "My name is So. What is the tallest building in the United States and what's its height and what can you say about it? Give me a paragraph about it."
+      },
+      {
+        "role": "assistant",
+        "content": "The tallest building in the United States is One World Trade Center in New York City, standing at a height of 1,776 feet (541 meters). Completed in 2013, it symbolizes resilience and renewal, serving as a poignant reminder of the events of September 11, 2001."
+      },
+      {
+        "role": "user",
+        "content": "My name is So. Stop."
+      },
+      {
+        "role": "assistant",
+        "content": "Understood! How can I assist you further?"
       }
     ]
   },
@@ -4244,56 +4516,205 @@
       }
     ]
   },
-  "friend": {
-    "name": null,
+  "in": {
+    "name": "In",
     "history": [
+      {
+        "role": "user",
+        "content": "The tallest building in the United States is one World Trade Center in New York City."
+      },
+      {
+        "role": "assistant",
+        "content": "Yes, One World Trade Center is the tallest building in the United States, standing at 1,776 feet. It symbolizes resilience and is located in Lower Manhattan, New York City."
+      },
+      {
+        "role": "user",
+        "content": "serving as a point in reminder of the events of September 11th, 2011."
+      },
+      {
+        "role": "assistant",
+        "content": "September 11, 2001, marked a series of coordinated terrorist attacks in the United States, leading to the destruction of the World Trade Center and significant loss of life. This event profoundly impacted global politics, security measures, and international relations."
+      },
+      {
+        "role": "user",
+        "content": "Understood. How can I assist you further? Catch you later."
+      },
+      {
+        "role": "assistant",
+        "content": "You can assist by asking questions or requesting specific actions. Catch you later!"
+      },
       {
         "role": "user",
         "content": "Who is the chairman of computer science?"
       },
       {
         "role": "assistant",
-        "content": "The chairman of the Computer Science Department at Morgan State University is Shuangbao \"Paul\" Wang."
+        "content": "The chairman of computer science varies by institution. Please specify the university or organization for accurate information."
       },
       {
         "role": "user",
-        "content": "When does the fall 2025 start"
+        "content": "Thanks for watching and don't forget to like and subscribe!"
       },
       {
         "role": "assistant",
-        "content": "\u2705 Switched to Study mode. The Fall 2025 term at Morgan State University starts on August 27, 2025."
+        "content": "Sorry, I didn't quite get that."
       },
       {
         "role": "user",
-        "content": "What are the events of Fall 2025?"
+        "content": "Thanks for watching!"
       },
       {
         "role": "assistant",
-        "content": "The events for Fall 2025 at Morgan State University are as follows:\n\n- First Day of Class: August 27, 2025\n- Labor Day: September 1, 2025\n- Wellness Day: October 7, 2025\n- Midterm Examination Week: October 13, 2025, to October 18, 2025\n- Wellness Day: November 26, 2025\n- Thanksgiving Break: November 27, 2025, to November 30, 2025\n- Last Day of Class: December 10, 2025\n- Final Exams: December 11, 2025, to December 18, 2025\n- Commencement: December 19, 2025\n- Winter Recess: December 24, 2025, to January 4, 2026\n\nFor more detailed information, you can refer to the Dates and Deadlines for Fall 2025 [here](https://docs.google.com/spreadsheets/d/1m-oL6NwTnoGcP4L1wmbeL0OtJC2b8HjuW3jSipWC4nM/edit?gid=378227356#gid=378227356)."
+        "content": "You're welcome! If you have any other questions or requests, feel free to ask!"
       },
       {
         "role": "user",
-        "content": "Peace out."
+        "content": "Thanks for watching!"
       },
       {
         "role": "assistant",
-        "content": "Goodbye! If you have any more questions in the future, feel free to reach out. Have a great day!"
+        "content": "You're welcome! If you need anything else, just let me know!"
       },
       {
         "role": "user",
-        "content": "Let's chat"
+        "content": "Thank you for watching"
       },
       {
         "role": "assistant",
-        "content": "Of course! How can I assist you today? If you have any questions about Morgan State University's Computer Science department or related services, feel free to ask."
+        "content": "You're welcome! If you have any questions or need assistance, feel free to ask."
       },
       {
         "role": "user",
-        "content": "Hehe, how was it?"
+        "content": "Thanks for watching!"
       },
       {
         "role": "assistant",
-        "content": "It seems like your question might be missing some context or details. If you're referring to an event or specific information related to Morgan State University's Computer Science department, please provide more details so I can assist you better. If you have a specific question about courses, events, or advising, feel free to ask!"
+        "content": "You're welcome! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "You"
+      },
+      {
+        "role": "assistant",
+        "content": "Got it! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching the video."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you have any questions or need assistance, feel free to ask."
+      },
+      {
+        "role": "user",
+        "content": "Bye!"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "C\u1ea3m \u01a1n c\u00e1c b\u1ea1n \u0111\u00e3 xem video n\u00e0y. Xin ch\u00e0o t\u1ea5t c\u1ea3 c\u00e1c b\u1ea1n!"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "Who is the chairman of computer science and when is the start day of the class fall 2026?"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Study mode. I don't have real-time information on specific individuals or academic schedules. Please check the official website of the computer science department for the most accurate details."
+      },
+      {
+        "role": "user",
+        "content": "Thanks for watching!"
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you have any questions or need further assistance, feel free to ask."
+      },
+      {
+        "role": "user",
+        "content": "\u3054\u8996\u8074\u3042\u308a\u304c\u3068\u3046\u3054\u3056\u3044\u307e\u3057\u305f"
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like you've expressed gratitude in Japanese, saying \"Thank you for watching.\" If you have any questions or need information about Morgan State University's Computer Science department or related services, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "Who is the chairman of the computer science department and when is the start day of class fall 2025 and what are the prerequisites to take the 2020 class?"
+      },
+      {
+        "role": "assistant",
+        "content": "The chairman of the Computer Science Department at Morgan State University is Professor Shuangbao \"Paul\" Wang. His office is located in McMechen Hall 507, and he can be contacted at (443) 885-4503 or via email at shuangbao.wang@morgan.edu.\n\nRegarding the start date for classes in Fall 2025, that specific information is not provided in the context. Typically, universities release their academic calendars well in advance, so it would be best to check Morgan State University's official website or contact the registrar's office closer to that time for the exact start date.\n\nAs for the prerequisites to take the \"2020 class,\" it seems there might be a misunderstanding, as there is no course specifically labeled \"2020\" in the provided context. If you meant a specific course code or name, please provide that, and I can help identify the prerequisites for that course."
+      },
+      {
+        "role": "user",
+        "content": "My name is In. I'm in computer 220 data."
+      },
+      {
+        "role": "assistant",
+        "content": "If you are currently enrolled in COSC 220, \"Data Structures and Algorithms Analysis,\" you have met the prerequisite of COSC 112 with a grade of \u201cC\u201d or higher. With this course, you are eligible to enroll in several other courses, provided you meet any additional prerequisites they may have. Here are some courses you can consider:\n\n1. **COSC 352 - Organization of Programming Languages**: Requires COSC 220 with a grade of \u201cC\u201d or higher.\n2. **COSC 354 - Operating Systems**: Requires COSC 220 and COSC 241 with a grade of \u201cC\u201d or higher.\n3. **COSC 458 - Parallel Algorithms or Software Engineering**: Requires COSC 220 with a grade of \u201cC\u201d or higher.\n4. **COSC 459 - Database Design**: Requires COSC 220 with a grade of \u201cC\u201d or higher.\n5. **COSC 385 - Theory of Language and Automata**: Requires COSC 220 and COSC 281 with a grade of \u201cC\u201d or higher.\n6. **COSC 320 - Algorithm Design and Analysis**: Requires COSC 220 and COSC 281 with a grade of \u201cC\u201d or higher.\n7. **COSC 386 - Intro to Quantum Computing**: Requires COSC 220 and MATH 312 with a grade of \u201cC\u201d or higher.\n8. **COSC 470 - Artificial Intelligence**: Requires COSC 220 with a grade of \u201cC\u201d or higher.\n9. **COSC 480 - Intro to Image Processing and Analysis**: Requires COSC 220 with a grade of \u201cC\u201d or higher.\n10. **COSC 460 - Computer Graphics**: Requires COSC 220 and MATH 241 with a grade of \u201cC\u201d or higher.\n\nMake sure to check if you meet any additional prerequisites for these courses before enrolling."
+      }
+    ]
+  },
+  "friend": {
+    "name": null,
+    "history": [
+      {
+        "role": "user",
+        "content": "Wala na. How are you today now?"
+      },
+      {
+        "role": "assistant",
+        "content": "I'm just a program, but I'm here and ready to assist you! How can I help you today?"
+      },
+      {
+        "role": "user",
+        "content": "Bagaimana keadaan kamu sekarang? Adakah kamu baik?"
+      },
+      {
+        "role": "assistant",
+        "content": "Saya baik-baik saja, terima kasih! Bagaimana dengan kamu?"
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching"
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you need anything else, just let me know."
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "oh my god you're pissing me off why are you even standing I don't like the way you stand"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "I don't need to listen anymore."
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
       }
     ]
   }

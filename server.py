@@ -71,6 +71,9 @@ MODE_PROMPTS = {
         "Give examples of diversification, time horizon, and risk management. "
         "No personalized financial advice; stay educational and time-agnostic."
     ),
+     "chatbot": (
+        "You are the Morgan State University Computer Science Department Chatbot. "
+        "Answer only using MSU CS info. If unsure, say you don’t know.")
 }
 VALID_MODES = set(MODE_PROMPTS.keys())
 
@@ -94,6 +97,7 @@ KEYWORDS = {
     "study":     ["study","study mode","school","homework","learn","exam","class","test","assignment"],
     "therapist": ["therapist","therapy","therapist mode","therapy mode","mental","feelings","stress","anxious","depressed","mood","relax","calm"],
     "broker":    ["broker","broker mode","stock","stocks","market","markets","trading","finance"],
+    "chatbot":   ["chatbot","morgan","morgan state","msu","computer science","cs department","morgan assist"]
 }
 SWITCH_WORDS = ["switch mode","change mode","mode menu","set mode","choose mode","pick a mode",
                 "switch to","change to","set to","go to","turn to","switch","change","set","go","turn"]
@@ -120,26 +124,46 @@ def _is_switch_request(text):
     if not text: return False
     t = text.lower()
     return any(kw in t for kw in SWITCH_WORDS)
-
+    
 def _resolve_mode(user_input, provided_mode):
+    """
+    provided_mode (from NAO) always overrides keyword detection.
+    """
+    base_mode = provided_mode or "general"
+    if provided_mode:
+        return base_mode, False, False  # 👈 force the mode if NAO sent it
+
     detected = _extract_mode_from_text(user_input)
     asked = _is_switch_request(user_input)
+
     if detected:
-        return detected, True, False  # mode, changed, prompt?
+        return detected, (detected != base_mode), False
     if asked:
-        return (provided_mode or "general"), False, True
-    return (provided_mode or "general"), False, False
+        return base_mode, False, True
+    return base_mode, False, False
+
 
 def _strip_mode_words(text):
-    if not text: return text
-    t = text
-    all_words = []
-    for lst in KEYWORDS.values(): all_words += lst
-    all_words += SWITCH_WORDS + ["to"]
-    for w in sorted(all_words, key=len, reverse=True):
-        t = re.sub(r"\b" + re.escape(w) + r"\b", "", t, flags=re.IGNORECASE)
-    t = re.sub(r"\s{2,}", " ", t).strip(" ,.;!?").strip()
+    """Remove mode-switch words only if clearly used as a command."""
+    if not text:
+        return text
+    t = text.strip()
+
+    # If the whole text is just a mode keyword → clear it
+    for m, words in KEYWORDS.items():
+        if t.lower() in words or t.lower() == m:
+            return ""
+
+    
+    for w in SWITCH_WORDS:
+        if t.lower().startswith(w):
+            # remove the switch phrase only
+            t = re.sub(r"^" + re.escape(w) + r"\b", "", t, flags=re.IGNORECASE).strip()
+            # also remove trailing "to" if left over
+            t = re.sub(r"^\s*to\s*", "", t, flags=re.IGNORECASE).strip()
+            return t
     return t
+
 
 # ----------------- helpers -----------------
 def _extract_name(text):
@@ -306,14 +330,42 @@ def chat_text():
         if known and ("my name is" not in cleaned.lower()):
             cleaned = "My name is {}. {}".format(known, cleaned)
 
-        past = memory_manager.get_chat_history(username)
-        system_prompt = _prompt_for_mode(mode)
-        messages = [{"role":"system","content":system_prompt}] + past + [{"role":"user","content":cleaned}]
+        # ----------------- Routing by mode -----------------
+        if mode == "chatbot":
+            embedding = get_embedding(cleaned)
+            matches = query_pinecone(embedding) if embedding else []
+            if matches:
+                context_text = "\n".join([m["metadata"].get("text", "") for m in matches])
+                prompt = (
+                    "You are a helpful assistant answering based on Morgan State University Computer Science department info.\n"
+                    "Use the below context to answer the user's question:\n\n"
+                    f"Context:\n{context_text}\n\n"
+                    f"User Question: {cleaned}"
+                )
+                response = openai.ChatCompletion.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": "Answer using the context below."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.2,
+                    max_tokens=500
+                )
+                raw_reply = response["choices"][0]["message"]["content"]
+                function_call = {}
+            else:
+                result = gpt_handler.get_reply([{"role": "user", "content": cleaned}])
+                raw_reply = (result.get("reply") or "").strip()
+                function_call = result.get("function_call") or {}
+        else:
+            past = memory_manager.get_chat_history(username)
+            system_prompt = _prompt_for_mode(mode)
+            messages = [{"role": "system", "content": system_prompt}] + past + [{"role": "user", "content": cleaned}]
+            result = gpt_handler.get_reply(messages)
+            raw_reply = (result.get("reply") or "").strip()
+            function_call = result.get("function_call") or {}
 
-        result = gpt_handler.get_reply(messages)
-        raw_reply = (result.get("reply") or "").strip()
-        function_call = result.get("function_call") or {}
-
+        # Handle mode-changed confirmation
         if mode_changed:
             confirm = u"✅ Switched to {} mode.".format(mode.capitalize())
             reply = (confirm + " " + raw_reply) if raw_reply else confirm
@@ -338,6 +390,7 @@ def chat_text():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
 
 # ----------------- /upload (audio) -----------------
 @app.route("/upload", methods=["POST"])
@@ -396,33 +449,39 @@ def upload_audio():
         cleaned = _strip_mode_words(user_input) if mode_changed else user_input
 
 
-        # ----------------- RAG response using Pinecone -----------------
-        embedding = get_embedding(cleaned)
-        matches = query_pinecone(embedding) if embedding else []
-
-        if matches:
-            context_text = "\n".join([m["metadata"].get("text", "") for m in matches])
-            prompt = (
-                "You are a helpful assistant answering based on Morgan State University Computer Science department info.\n"
-                "Use the below context to answer the user's question:\n\n"
-                f"Context:\n{context_text}\n\n"
-                f"User Question: {cleaned}"
-            )
-            response = openai.ChatCompletion.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "Answer using the context below."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.2,
-                max_tokens=500
-            )
-            raw_reply = response["choices"][0]["message"]["content"]
-            function_call = {}
+        # ----------------- Routing by mode -----------------
+        if mode == "chatbot":
+            embedding = get_embedding(cleaned)
+            matches = query_pinecone(embedding) if embedding else []
+            if matches:
+                context_text = "\n".join([m["metadata"].get("text", "") for m in matches])
+                prompt = (
+                    "You are a helpful assistant answering based on Morgan State University Computer Science department info.\n"
+                    "Use the below context to answer the user's question:\n\n"
+                    f"Context:\n{context_text}\n\n"
+                    f"User Question: {cleaned}"
+                )
+                response = openai.ChatCompletion.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": "Answer using the context below."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.2,
+                    max_tokens=500
+                )
+                raw_reply = response["choices"][0]["message"]["content"]
+                function_call = {}
+            else:
+                result = gpt_handler.get_reply([{"role": "user", "content": cleaned}])
+                raw_reply = (result.get("reply") or "").strip()
+                function_call = result.get("function_call") or {}
         else:
-            result = gpt_handler.get_reply([{"role":"user", "content": cleaned}])
+            # 🔹 For general/study/therapist/broker → skip Pinecone, use GPT directly
+            result = gpt_handler.get_reply([{"role": "user", "content": cleaned}])
             raw_reply = (result.get("reply") or "").strip()
             function_call = result.get("function_call") or {}
+
 
 
         # If only the mode was spoken, skip GPT and give mode-specific follow-up

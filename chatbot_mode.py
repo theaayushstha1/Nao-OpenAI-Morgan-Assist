@@ -7,7 +7,7 @@ import json
 import time
 
 # === Configuration ===
-SERVER_URL = "http://172.20.95.120:5000/upload"  # Update this as needed
+SERVER_URL = "http://172.20.95.109:5000/upload"
 TIMEOUT = 20
 
 def chatbot_mode(record_audio_func, tts_proxy):
@@ -22,7 +22,13 @@ def chatbot_mode(record_audio_func, tts_proxy):
 
             # 2. Send audio to the server
             with open(audio_path, 'rb') as f:
-                res = requests.post(SERVER_URL, files={'file': f}, timeout=TIMEOUT)
+                res = requests.post(
+                    SERVER_URL,
+                    files={'file': f},
+                    data={'username': 'friend', 'mode': 'chatbot'},  # 👈 force chatbot mode
+                    timeout=TIMEOUT
+                )
+
 
             if res.status_code != 200:
                 print("[Server Error]", res.status_code, res.text)
