@@ -75,12 +75,12 @@ cd Nao-OpenAI-Morgan-Assist
 
 Create a .env file (in the server directory or repo root where server.py runs):
 
-OPENAI_API_KEY=sk-your-key
-PINECONE_API_KEY=pcsk-your-key
-PINECONE_INDEX_NAME=vectorized-datasource
-PINECONE_NAMESPACE=docs
-PINECONE_ENV=us-east-1
-WHISPER_MODEL=whisper-1
+•	OPENAI_API_KEY = sk-your-key
+•	PINECONE_API_KEY = pcsk-your-key
+•	PINECONE_INDEX_NAME = vectorized-datasource
+•	PINECONE_NAMESPACE = docs
+•	PINECONE_ENV = us-east-1
+•	WHISPER_MODEL = whisper-1
 
 # NAO defaults
 NAO_IP=171.20.95.xxx
