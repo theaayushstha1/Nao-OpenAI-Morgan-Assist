@@ -1,7 +1,7 @@
 # 🤖 Nao-OpenAI-Morgan-Assist
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](#-license)
-[![Python](https://img.shields.io/badge/Python-2.7_|_3.9+-blue.svg)](#-requirements)
+[![Python](https://img.shields.io/badge/Python-2.7_|_3.2+-blue.svg)](#-requirements)
 [![Platform](https://img.shields.io/badge/Robot-NAO-orange.svg)]()
 [![OpenAI](https://img.shields.io/badge/API-OpenAI-black.svg)]()
 [![Pinecone](https://img.shields.io/badge/VectorDB-Pinecone-5B9BD5.svg)]()
