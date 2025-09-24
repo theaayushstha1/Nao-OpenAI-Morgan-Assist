@@ -83,17 +83,17 @@ PINECONE_ENV=us-east-1
 WHISPER_MODEL=whisper-1
 
 # NAO defaults
-NAO_IP=192.168.xx.xx
+NAO_IP=171.20.95.xxx
 NAO_PORT=9559
 
 
 3) Run the Flask backend (Python 3)
-python server.py
-# ⇒ serves on http://0.0.0.0:5000
+py server.py
+
 
 4) Run on NAO (Python 2.7)
 python main.py
-# Wake phrases: "let's chat", "mini nao", "morgan assist"
+# Wake phrases: "nao", "let's chat", "mini nao", "morgan assist"
 
 🔌 API Endpoints (server)
 
@@ -107,7 +107,7 @@ POST /face/enroll – multipart image + name → { ok, enrolled }
 
 GET /face/list – summary of stored encodings
 
-🧭 Modes
+# 🧭 Modes
 
 General – default concise helper
 
@@ -121,7 +121,7 @@ Chatbot – Morgan CS knowledge via Pinecone context + GPT
 
 The server auto-detects “switch to … mode” phrases and keeps your normal sentences intact (e.g., it won’t strip the word study from “I study algorithms”).
 
-🛠 Configuration Tips
+## 🛠 Configuration Tips
 
 Latency tuning (speech end detection): tweak in audio_handler.py
 
@@ -131,18 +131,18 @@ Interrupt while speaking (chat mode): user can say “stop / skip / next”; the
 
 Prevent self-hearing: during TTS, temporarily lower input sensitivity or gate by energy threshold; client already filters short clips and uses brief listen windows for interrupts.
 
-❓ FAQ
+# ❓ FAQ
 
-Why did it not use Pinecone?
+**Why did it not use Pinecone?**
 Make sure mode is chatbot in the request (client sets this when entering “Morgan Assist”). The server path if mode == "chatbot": performs embed → Pinecone → GPT with context.
 
-Where do I add MSU CS docs?
+**Where do I add MSU CS docs?**
 Ingest your content into the Pinecone index named by PINECONE_INDEX_NAME/PINECONE_NAMESPACE using the same embedding model (text-embedding-3-small).
 
-It stops recording too fast/too slow.
+**It stops recording too fast/too slow.**
 Adjust TRAIL_MS, NO_SPEECH_TIMEOUT_S, and thresholds in audio_handler.py.
 
-🖼 System Diagram
+# 🖼 System Diagram
 
 c:\Users\Aayush\Pictures\Screenshots\Screenshot 2025-09-24 144932.png
 
