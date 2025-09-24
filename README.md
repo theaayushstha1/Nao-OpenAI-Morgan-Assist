@@ -144,10 +144,15 @@ Adjust TRAIL_MS, NO_SPEECH_TIMEOUT_S, and thresholds in audio_handler.py.
 
 # 🖼 System Diagram
 
-c:\Users\Aayush\Pictures\Screenshots\Screenshot 2025-09-24 144932.png
+<img width="673" height="416" alt="Screenshot 2025-09-24 at 6 46 12 PM" src="https://github.com/user-attachments/assets/cd670690-4899-46f9-a2f5-666549661cb3" />
 
 
-🧪 Minimal Test
+# Technology Stack
+
+<img width="642" height="422" alt="Screenshot 2025-09-24 at 6 46 37 PM" src="https://github.com/user-attachments/assets/465c83b4-ebcc-461c-bea0-0fe9b5ad7b14" />
+
+
+
 # Server health
 curl http://localhost:5000/test
 # => {"message":"Test route working!"}
