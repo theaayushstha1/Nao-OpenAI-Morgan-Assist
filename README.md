@@ -159,9 +159,15 @@ curl http://localhost:5000/test
 
 # 📜 License
 
-**Released under the MIT License. See LICENS**
+**Released under the MIT License. See LICENSE**
 .
 
-## 👨‍💻 Author
+## 👨‍💻 Authors
 
-**Aayush Shrestha — Lead Developer**
+- **Dr. Shuangbao "Paul" Wang – Faculty Advisor / Principal Investigator**  
+  Chairperson, Department of Computer Science, Morgan State University
+
+- **Aayush Shrestha – Lead Developer/ Research Assistant**  
+  Morgan State University, Department of Computer Science  
+
+
