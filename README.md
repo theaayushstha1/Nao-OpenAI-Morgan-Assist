@@ -1,23 +1,23 @@
 Nao-OpenAI-Morgan-Assist 🤖
-Overview
+📌 Overview
 
 Nao-OpenAI-Morgan-Assist is a project that integrates the NAO humanoid robot with OpenAI GPT and Pinecone to create an intelligent assistant for the Morgan State University Computer Science Department.
 
 The system allows the NAO robot to:
 
-Listen to speech input 🎤
+🎤 Listen to speech input
 
-Transcribe audio using OpenAI Whisper
+📝 Transcribe audio using OpenAI Whisper
 
-Retrieve relevant knowledge from Pinecone (MSU CS knowledge base)
+📂 Retrieve knowledge from Pinecone (MSU CS knowledge base)
 
-Generate accurate replies with GPT
+💡 Generate replies with GPT
 
-Speak responses back through NAO’s text-to-speech
+🔊 Speak responses back through NAO’s text-to-speech
 
 This project was developed by Aayush Shrestha.
 
-Features
+✨ Features
 
 🗣 Voice Interaction – Record and transcribe audio with Whisper
 
@@ -31,7 +31,7 @@ Features
 
 🔐 Memory Manager – Saves and recalls chat history and user data
 
-Project Structure
+🗂 Project Structure
 main.py             # Entry point – listens for wake commands (chat, mininao, chatbot)
 chatbot_mode.py     # Handles chatbot mode: NAO → Whisper → Server → GPT/Pinecone → NAO
 server.py           # Flask backend: Whisper, GPT, Pinecone, and Face APIs
@@ -40,13 +40,13 @@ audio_handler.py    # Handles recording and audio saving
 memory_manager.py   # Stores chat history and user profiles
 face_store.py       # Manages face encodings and enrolled users
 
-Requirements
+⚙️ Requirements
 
 Python 2.7 (for NAO robot scripts)
 
 Python 3.9+ (for the Flask backend server)
 
-naoqi SDK
+NAOqi SDK
 
 Flask
 
@@ -56,19 +56,19 @@ Pinecone client
 
 face_recognition
 
-Install all dependencies:
+📦 Install all dependencies:
 
 pip install -r requirements.txt
 
-Setup Instructions
+🚀 Setup Instructions
 
-Clone the repository:
+Clone the repository
 
 git clone https://github.com/theaayushstha1/Nao-OpenAI-Morgan-Assist.git
 cd Nao-OpenAI-Morgan-Assist
 
 
-Create a .env file and add the following configuration:
+Create a .env file and add the following:
 
 OPENAI_API_KEY=sk-your-key
 PINECONE_API_KEY=pcsk-your-key
@@ -78,24 +78,23 @@ NAO_IP=192.168.xx.xx
 NAO_PORT=9559
 
 
-Start the Flask backend server:
+Start the Flask backend server
 
 python server.py
 
 
-Run the NAO client:
+Run the NAO client
 
 python main.py
 
-Demo
+🎥 Demo
+<img width="629" height="390" alt="Screenshot 2025-09-24 144932" src="https://github.com/user-attachments/assets/d00f80b9-477a-45ef-ad1d-456f5b161d04" />
 
-<img width="629" height="390" alt="image" src="https://github.com/user-attachments/assets/b36a20da-e75d-4461-9773-b56e82e51adf" />
 
-
-License
+📜 License
 
 This project is licensed under the MIT License.
 
-Developer
+👨‍💻 Developer
 
 Aayush Shrestha – Lead Developer
