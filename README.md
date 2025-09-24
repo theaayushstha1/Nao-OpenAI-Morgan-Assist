@@ -154,9 +154,9 @@ curl http://localhost:5000/test
 
 # 📜 License
 
-** Released under the MIT License. See LICENSE **
+**Released under the MIT License. See LICENS**
 .
 
 ## 👨‍💻 Author
 
-** Aayush Shrestha — Lead Developer **
+**Aayush Shrestha — Lead Developer**
