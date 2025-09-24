@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # 🤖 Nao-OpenAI-Morgan-Assist
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](#-license)
@@ -63,7 +62,6 @@ Nao-OpenAI-Morgan-Assist/
 - **face_recognition** (+ dlib dependencies)
 
 Install server deps:
-```bash
 pip install -r requirements.txt
 
 🚀 Quick Start
