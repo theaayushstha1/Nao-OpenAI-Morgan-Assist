@@ -20,7 +20,7 @@ A voice-driven assistant that connects the **NAO humanoid robot** to **OpenAI (W
 - 💡 **Generate** answers with **GPT**
 - 🔊 **Speak** replies via NAO TTS
 
-> Developed by **Aayush Shrestha**.
+> Developed by **Aayush Shrestha** under the supervision of **Dr. Shuangbao "Paul" Wang**.
 
 ---
 
