@@ -8,6 +8,8 @@
 
 A voice-driven assistant that connects the **NAO humanoid robot** to **OpenAI (Whisper + GPT)** and a **Pinecone** knowledge base for the **Morgan State University (MSU) Computer Science Department**.
 
+![nao](https://github.com/user-attachments/assets/826d4b7b-7c11-4712-8d5c-7a1b1829ccff)
+
 ---
 
 ## 📌 Overview
@@ -150,11 +152,11 @@ c:\Users\Aayush\Pictures\Screenshots\Screenshot 2025-09-24 144932.png
 curl http://localhost:5000/test
 # => {"message":"Test route working!"}
 
-📜 License
+# 📜 License
 
-Released under the MIT License. See LICENSE
+** Released under the MIT License. See LICENSE **
 .
 
-👨‍💻 Author
+## 👨‍💻 Author
 
-Aayush Shrestha — Lead Developer
+** Aayush Shrestha — Lead Developer **
