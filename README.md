@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 🤖 Nao-OpenAI-Morgan-Assist
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](#-license)
@@ -34,45 +35,6 @@ A voice-driven assistant that connects the **NAO humanoid robot** to **OpenAI (W
 ---
 
 ## 🗂 Project Structure
-Awesome — here’s a ready-to-paste README.md in proper Markdown (titles, bold, lists, code blocks, badges, the works). Drop this straight into your repo and commit.
-
-# 🤖 Nao-OpenAI-Morgan-Assist
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](#-license)
-[![Python](https://img.shields.io/badge/Python-2.7_|_3.9+-blue.svg)](#-requirements)
-[![Platform](https://img.shields.io/badge/Robot-NAO-orange.svg)]()
-[![OpenAI](https://img.shields.io/badge/API-OpenAI-black.svg)]()
-[![Pinecone](https://img.shields.io/badge/VectorDB-Pinecone-5B9BD5.svg)]()
-
-A voice-driven assistant that connects the **NAO humanoid robot** to **OpenAI (Whisper + GPT)** and a **Pinecone** knowledge base for the **Morgan State University (MSU) Computer Science Department**.
-
----
-
-## 📌 Overview
-**Nao-OpenAI-Morgan-Assist** lets NAO:
-- 🎤 **Listen** to users
-- 📝 **Transcribe** speech with OpenAI **Whisper**
-- 📂 **Retrieve** Morgan CS knowledge from **Pinecone**
-- 💡 **Generate** answers with **GPT**
-- 🔊 **Speak** replies via NAO TTS
-
-> Developed by **Aayush Shrestha**.
-
----
-
-## ✨ Features
-- 🗣 **Voice Interaction** – Robust on-device capture with silence/VAD handling  
-- 🧠 **Morgan Chatbot Mode** – Answers from MSU CS knowledge base (Pinecone)  
-- 📚 **Study Mode** – Teaches step-by-step with examples + quick practice  
-- 💬 **General Mode** – Friendly Q&A assistant  
-- 👤 **Face Recognition** – Enroll/recognize users (face encodings)  
-- 💾 **Memory Manager** – Per-user chat history and name recall  
-- 🧩 **Function Hooks** – Simple server “function_call” support for actions  
-
----
-
-## 🗂 Project Structure
-
 
 Nao-OpenAI-Morgan-Assist/
 ├─ main.py # Entry point – wake flow (chat, mininao, chatbot)
@@ -87,8 +49,7 @@ Nao-OpenAI-Morgan-Assist/
 │ └─ face_utils.py # Face detection/mood helpers
 ├─ requirements.txt # Python deps for the server (Py3)
 ├─ LICENSE # MIT
-└─ README.md # You are here
-
+└─ README.md
 
 ---
 
@@ -107,7 +68,7 @@ pip install -r requirements.txt
 
 🚀 Quick Start
 1) Clone
-git clone https://github.com/theaayushstha1/Nao-OpenAI-Morgan-Assist.git
+git clone ("My Repo Link"))
 cd Nao-OpenAI-Morgan-Assist
 
 2) Configure environment
@@ -118,13 +79,13 @@ OPENAI_API_KEY=sk-your-key
 PINECONE_API_KEY=pcsk-your-key
 PINECONE_INDEX_NAME=vectorized-datasource
 PINECONE_NAMESPACE=docs
-# Optional:
 PINECONE_ENV=us-east-1
 WHISPER_MODEL=whisper-1
 
-# NAO defaults (client scripts may also read these):
+# NAO defaults
 NAO_IP=192.168.xx.xx
 NAO_PORT=9559
+
 
 3) Run the Flask backend (Python 3)
 python server.py
