@@ -118,7 +118,7 @@ def _post_image(url, img_path, extra=None, timeout=6.0):
         r.raise_for_status()
         return r.json()
 
-# ---------- gestures (same as your file; omitted comments) ----------
+# ---------- gestures ----------
 def _stiffen(motion, eff, on=True):
     try: motion.setStiffnesses(eff, 1.0 if on else 0.0)
     except: pass
