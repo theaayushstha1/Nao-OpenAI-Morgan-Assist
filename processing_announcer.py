@@ -4,26 +4,35 @@ import time
 import random
 
 class ProcessingAnnouncer(object):
-    def __init__(self, tts_say, stop_all=None, first_delay=0.8, interval=3.0):
+    """
+    Speaks after a delay ONLY if work is still ongoing.
+    Will speak up to `max_utterances` times, spaced by `interval`.
+    Call stop(interrupt=True) to cut any queued/ongoing TTS.
+    """
+    def __init__(
+        self,
+        tts_say,
+        stop_all=None,
+        first_delay=2.5,       # wait this long before saying anything
+        interval=3.5,          # gap between messages if still working
+        max_utterances=2,      # say at most twice
+        phrases=None
+    ):
         self.tts_say = tts_say
         self.stop_all = stop_all
-        self.first_delay = first_delay
-        self.interval = interval
+        self.first_delay = float(first_delay)
+        self.interval = float(interval)
+        self.max_utterances = int(max_utterances)
         self._stop = threading.Event()
         self._thread = None
-        self._phrases = [
-                "Give me a moment to think.",
-                "I’m working on that answer for you.",
-                "Just a sec, still processing.",
-                "Hang tight, I’m almost ready.",
-                "Let me check that for you.",
-                "One moment please.",
-                "Thinking it through.",
-                "I’m on it, hold on.",
-                "Almost there, just a second.",
-                "Processing, please wait."
-            ]
-
+        self._phrases = phrases or [
+            "One moment…",
+            "analyzing your command",
+            "I'm processing your request",
+            "Processing at the moment…",
+            "Just a sec please…",
+            "please hold on…","please bare with me…",
+        ]
 
     def start(self):
         if self._thread and self._thread.is_alive():
@@ -42,14 +51,26 @@ class ProcessingAnnouncer(object):
             except:
                 pass
 
+    def _sleep_with_checks(self, seconds):
+        step = 0.05
+        waited = 0.0
+        while waited < seconds and not self._stop.is_set():
+            time.sleep(step)
+            waited += step
+
     def _run(self):
-        time.sleep(self.first_delay)
-        while not self._stop.is_set():
+        # Say nothing unless work lasts longer than first_delay
+        self._sleep_with_checks(self.first_delay)
+        if self._stop.is_set():
+            return
+
+        said = 0
+        while not self._stop.is_set() and said < self.max_utterances:
             try:
                 self.tts_say(random.choice(self._phrases))
             except:
                 pass
-            for _ in range(int(self.interval * 10)):
-                if self._stop.is_set():
-                    break
-                time.sleep(0.1)
+            said += 1
+            if said >= self.max_utterances:
+                break
+            self._sleep_with_checks(self.interval)

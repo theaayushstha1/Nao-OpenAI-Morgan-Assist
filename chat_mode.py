@@ -5,10 +5,6 @@ from naoqi import ALProxy
 from utils.camera_capture import capture_photo
 from processing_announcer import ProcessingAnnouncer
 import memory_manager
-from contextlib import contextmanager
-
-
-
 
 SERVER_IP = os.environ.get("SERVER_IP", "172.20.95.105")
 
@@ -16,7 +12,6 @@ SERVER_URL      = "http://{}:5000/upload".format(SERVER_IP)
 CHAT_TEXT_URL   = "http://{}:5000/chat_text".format(SERVER_IP)
 FACE_RECO_URL   = "http://{}:5000/face/recognize".format(SERVER_IP)
 FACE_ENROLL_URL = "http://{}:5000/face/enroll".format(SERVER_IP)
-
 
 SESSION = requests.Session()
 DEFAULT_TIMEOUT = 30
@@ -36,23 +31,41 @@ def _apply_mode_voice(tts, mode):
         tts.setParameter("speed", float(prof["speed"]))
         tts.setParameter("pitchShift", float(prof["pitch"]))
         tts.setVolume(1.0)
-    except: pass
+    except:
+        pass
 
-@contextmanager
-def with_processing_announcer(tts, func):
+# ---------- NEW: voice/tts helpers ----------
+def _reset_voice(tts):
+    """Return TTS to the default voice profile."""
+    _apply_mode_voice(tts, "general")
+
+def _stop_tts(tts):
+    """Hard-stop any queued/ongoing NAO TTS, if supported."""
+    try:
+        stop_all = getattr(tts, "stopAll", None)
+        if callable(stop_all):
+            stop_all()
+    except:
+        pass
+
+# ---------- Announcer wrapper ----------
+def call_with_processing_announcer(tts, server_call, first_delay=2.5, interval=3.5, max_utterances=2):
     ann = ProcessingAnnouncer(
         tts_say=lambda s: _say(tts, s),
         stop_all=getattr(tts, "stopAll", None),
-        first_delay=0.7,
-        interval=3.0
+        first_delay=first_delay,
+        interval=interval,
+        max_utterances=max_utterances,
     )
     ann.start()
     try:
-        yield func()
+        return server_call()
     finally:
-        ann.stop(interrupt=True)
+        try:
+            ann.stop(interrupt=True)
+        finally:
+            _stop_tts(tts)  
 
-def _reset_voice(tts): _apply_mode_voice(tts, "general")
 
 # ---------- TTS safety ----------
 try:
@@ -68,16 +81,20 @@ def _to_sayable(text):
             try:
                 s = text.decode('utf-8', 'ignore')
             except Exception:
-                try: s = text.decode('latin-1','ignore')
-                except Exception: s = unicode_type(text)
+                try:
+                    s = text.decode('latin-1','ignore')
+                except Exception:
+                    s = unicode_type(text)
         elif isinstance(text, unicode_type):
             s = text
         else:
             s = unicode_type(text)
         s = u''.join(c if 32 <= ord(c) <= 126 else u' ' for c in s).strip()
         if not s: s = u"Okay."
-        try: return s.encode('utf-8')
-        except Exception: return str(s)
+        try:
+            return s.encode('utf-8')
+        except Exception:
+            return str(s)
     except Exception:
         return "Okay."
 
@@ -142,12 +159,14 @@ def _stiffen(motion, eff, on=True):
     except: pass
     try: motion.setBreathEnabled(eff, False if on else True)
     except: pass
+
 def _arm_neutral(motion):
     names = ["RShoulderPitch","RShoulderRoll","RElbowYaw","RElbowRoll","RWristYaw",
              "LShoulderPitch","LShoulderRoll","LElbowYaw","LElbowRoll","LWristYaw"]
     angles = [1.25, 0.05, 1.20, 0.50, 0.00, 1.25,-0.05,-1.20,-0.50, 0.00]
     try: motion.angleInterpolationWithSpeed(names, angles, 0.5)
     except: pass
+
 def _g_open_arms_in_front(motion, speed=0.55):
     names = ["RShoulderPitch","RShoulderRoll","RElbowYaw","RElbowRoll","RHand",
              "LShoulderPitch","LShoulderRoll","LElbowYaw","LElbowRoll","LHand"]
@@ -157,12 +176,14 @@ def _g_open_arms_in_front(motion, speed=0.55):
         motion.angleInterpolationWithSpeed(names, openA,  speed)
         motion.angleInterpolationWithSpeed(names, closeA, speed)
     except: pass
+
 def _g_wide_point_at_user(motion, speed=0.55):
     try:
         motion.angleInterpolationWithSpeed(
             ["RShoulderPitch","RShoulderRoll","RElbowYaw","RElbowRoll","RWristYaw","RHand"],
             [0.55, 0.35, 1.15, 0.85, 0.00, 0.8], speed)
     except: pass
+
 def _g_point_forward(motion, right=True, speed=0.55):
     if right:
         names = ["RShoulderPitch","RShoulderRoll","RElbowYaw","RElbowRoll","RWristYaw","RHand"]; angles= [0.60, 0.15, 1.20, 0.85, 0.00, 0.8]
@@ -170,6 +191,7 @@ def _g_point_forward(motion, right=True, speed=0.55):
         names = ["LShoulderPitch","LShoulderRoll","LElbowYaw","LElbowRoll","LWristYaw","LHand"]; angles= [0.60,-0.15,-1.20,-0.85, 0.00, 0.8]
     try: motion.angleInterpolationWithSpeed(names, angles, speed)
     except: pass
+
 def _g_finger_roll(motion, right=True, cycles=3, speed=0.5):
     hand  = "RHand" if right else "LHand"; wrist = "RWristYaw" if right else "LWristYaw"
     try:
@@ -179,6 +201,7 @@ def _g_finger_roll(motion, right=True, cycles=3, speed=0.5):
             motion.angleInterpolationWithSpeed(hand, 0.4, speed)
             motion.angleInterpolationWithSpeed(wrist, -0.3, speed)
     except: pass
+
 def _g_enumerate(motion, right=True, speed=0.60):
     jr = ("RElbowRoll","RWristYaw") if right else ("LElbowRoll","LWristYaw")
     try:
@@ -187,6 +210,7 @@ def _g_enumerate(motion, right=True, speed=0.60):
             motion.angleInterpolationWithSpeed(jr[1], 0.35, speed)
             motion.angleInterpolationWithSpeed(jr[1],-0.35, speed)
     except: pass
+
 def _g_arc_explain(motion, right=True, speed=0.60):
     j = ("RShoulderPitch","RShoulderRoll") if right else ("LShoulderPitch","LShoulderRoll")
     seq = [(0.78,  0.30 if right else -0.30),(1.12,  0.08 if right else -0.08),(0.92,  0.22 if right else -0.22)]
@@ -240,7 +264,8 @@ def recognize_or_enroll(robot, nao_ip, port):
             info = _post_image(FACE_RECO_URL, photo_path, {"tolerance": "0.60"})
             if info.get("ok") and info.get("match"):
                 return info.get("name") or "friend", True
-        except Exception: pass
+        except Exception:
+            pass
 
     _say(robot, "I don't know you yet. Tell me your first name, please.")
     from audio_handler import record_audio
@@ -253,7 +278,8 @@ def recognize_or_enroll(robot, nao_ip, port):
         spoken = (res.json() or {}).get("user_input", "")
         extracted = extract_name(spoken)
         if extracted and extracted.lower() != "friend": user_name = extracted
-    except Exception: pass
+    except Exception:
+        pass
 
     if user_name == "friend":
         _say(robot, "I didn't catch it—I'll call you friend for now.")
@@ -265,8 +291,9 @@ def recognize_or_enroll(robot, nao_ip, port):
         p = capture_photo(nao_ip, port, "/home/nao/face.jpg")
         if not (p and os.path.exists(p)): continue
         try: _post_image(FACE_ENROLL_URL, p, {"name": user_name})
-        except Exception: pass
-    _say(robot, "All set, {}. I'll remember you.".format(user_name))
+        except Exception:
+            pass
+    _say(robot, "All set, {}. I'll remember you.")
     return user_name, False
 
 def _pick_mode(robot, nao_ip, user_name, default_mode="general"):
@@ -285,11 +312,9 @@ def _pick_mode(robot, nao_ip, user_name, default_mode="general"):
                 )
             res.raise_for_status()
             data = res.json() or {}
-            # Prefer the server’s detected mode if available
             server_mode = (data.get("active_mode") or "").lower()
             if server_mode in VALID_FOR_SERVER:
                 return server_mode
-            # Fallback to local keyword extraction
             return _extract_mode_from_text(data.get("user_input", "") or "")
         except Exception:
             return None
@@ -306,7 +331,6 @@ def _pick_mode(robot, nao_ip, user_name, default_mode="general"):
     _say(robot, "{} mode selected.".format(chosen.capitalize()))
     return chosen
 
-
 def _requery_immediate(username, text, new_mode):
     try:
         payload = {"username": username, "text": text, "mode": _canon_for_server(new_mode)}
@@ -322,10 +346,9 @@ def _mode_enter_actions(robot, posture, tts, motion, mode):
         try: posture.goToPosture("Sit", 0.6)
         except: pass
     elif mode == "study":
-        _say(robot, "First of all, Stand up with me and lets do sonmem exer. Let’s learn together.")
+        _say(robot, "First of all, Stand up with me and lets do some exercise. Let’s learn together.")
         try: posture.goToPosture("StandInit", 0.6)
         except: pass
-
 
 # ---------- main ----------
 def enter_chat_mode(robot, nao_ip="127.0.0.1", port=9559):
@@ -383,24 +406,25 @@ def enter_chat_mode(robot, nao_ip="127.0.0.1", port=9559):
                     )
 
             try:
-                with with_processing_announcer(tts, server_call) as res:
-                    # Handle Whisper 503 gracefully
-                    if res.status_code == 503:
-                        try:
-                            err = res.json().get("detail", "") or ""
-                        except Exception:
-                            err = ""
-                        if "audio_too_short" in err:
-                            _say(robot, "I didn’t catch that — could you say it again a little longer?")
-                        elif "bad_wav_header" in err:
-                            _say(robot, "Hmm, I couldn’t read that clip. Let’s try again.")
-                        else:
-                            _say(robot, "The server is busy — let’s try once more.")
-                        time.sleep(0.6)
-                        continue
+                res = call_with_processing_announcer(tts, server_call)
 
-                    res.raise_for_status()
-                    data = res.json()
+                # Handle Whisper 503 gracefully
+                if res.status_code == 503:
+                    try:
+                        err = res.json().get("detail", "") or ""
+                    except Exception:
+                        err = ""
+                    if "audio_too_short" in err:
+                        _say(robot, "I didn’t catch that — could you say it again a little longer?")
+                    elif "bad_wav_header" in err:
+                        _say(robot, "Hmm, I couldn’t read that clip. Let’s try again.")
+                    else:
+                        _say(robot, "The server is busy — let’s try once more.")
+                    time.sleep(0.6)
+                    continue
+
+                res.raise_for_status()
+                data = res.json()
 
             except Exception:
                 _say(robot, "The connection hiccupped — please try again.")
