@@ -5,19 +5,19 @@ import datetime as _dt
 from naoqi import ALProxy
 
 # ──────────────────────────────────────────────────────────────────────────────
-# CONFIG (tuned for snappier response)
+# CONFIG 
 # ──────────────────────────────────────────────────────────────────────────────
 
 CHECK_INTERVALS = 0.25  # seconds (faster timer/reminder firing)
 
 # "Fast mode" = fewer follow-up prompts; assume defaults when missing
 FAST_MODE = True
-FAST_REMINDER_DEFAULT_MIN = 10  # default when user doesn't specify a time
+FAST_REMINDER_DEFAULT_MIN = 10  
 
 # Fixed city: Baltimore, MD (USA)
 BALT_LAT, BALT_LON = 39.2904, -76.6122
 
-# Your speech server (Whisper → text)
+#speech server (Whisper → text)
 SERVER_IP   = "172.20.95.120"
 SERVER_URL  = "http://{}:5000/upload".format(SERVER_IP)
 
@@ -26,7 +26,7 @@ STATE_FILE = "/data/home/nao/Sound/state.json"
 TIMER_MP3  = "/data/home/nao/Sound/timer.mp3"
 
 SESSION = requests.Session()
-DEFAULT_TIMEOUT = 8  # was 30; lower makes round-trips quicker
+DEFAULT_TIMEOUT = 8  #lower makes round-trips quicker
 
 # ──────────────────────────────────────────────────────────────────────────────
 # STORAGE
@@ -61,7 +61,7 @@ def _save_state(state):
     except: pass
 
 # ──────────────────────────────────────────────────────────────────────────────
-# UTC → NEW YORK (EST/EDT) without pytz
+# UTC → NEW YORK (EST/EDT) 
 # ──────────────────────────────────────────────────────────────────────────────
 def _second_sunday_of_march(year):
     d = _dt.date(year, 3, 1)
@@ -131,20 +131,19 @@ def _is_exit_intent(text):
     for k in (
         "exit","exit mode","exit the mode","exit mini","exit mininao","exit mini nao",
         "quit","close","cancel","end session","end the session",
-        "leave","leave mode","go back","back","goodbye","bye",
-        "退出","結束","结束"
+        "leave","leave mode","go back","back","goodbye","bye"
     ):
         if k in t: return True
     return False
 
 # ──────────────────────────────────────────────────────────────────────────────
-# PARSING (now supports 10m, 1h30m, 90s, etc.)
+# PARSING 
 # ──────────────────────────────────────────────────────────────────────────────
 def _parse_duration_seconds(text):
     t = (text or "").lower()
     total = 0
 
-    # allow compact blocks like "1h30m", "90s"
+    # allow compact blocks 
     for num, unit in re.findall(r"(\d+(?:\.\d+)?)\s*(h|hr|hrs|hour|hours|m|min|mins|minute|minutes|s|sec|secs|second|seconds)", t, re.I):
         n = float(num); u = unit.lower()
         if u in ("h","hr","hrs","hour","hours"): total += n * 3600
@@ -193,7 +192,7 @@ def _parse_when_epoch(text):
             target_local = _dt.datetime(local_now.year, local_now.month, local_now.day, h, mm, 0)
             if target_local <= local_now: target_local += _dt.timedelta(days=1)
         else:
-            # no am/pm -> pick nearest-future 12-hour window
+            # no am/pm, pick nearest-future 12-hour window
             target_local = _nearest_future_at_hour_min(local_now, h % 24, mm)
 
         offset = _utc_to_newyork(_utc_now()) - _utc_now()   # −4h or −5h

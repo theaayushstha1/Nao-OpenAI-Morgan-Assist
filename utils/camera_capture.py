@@ -6,7 +6,7 @@ from naoqi import ALProxy
 import os
 
 def _to_str_path(p):
-    # Normalize NAO return types: string, unicode, list/tuple -> single string
+    # Normalize NAO return types
     if isinstance(p, (list, tuple)) and p:
         p = p[0]
     try:
@@ -35,7 +35,7 @@ def capture_photo(nao_ip="127.0.0.1", port=9559, out_path="/home/nao/face.jpg"):
 
     base = os.path.splitext(os.path.basename(out_path))[0]
 
-    # ✅ Correct order: (count, folderPath, fileName)
+    
     saved_path = None
     try:
         ret = cam.takePictures(1, directory, base)   # often returns ["/home/nao/base_0.jpg"]

@@ -42,7 +42,7 @@ import numpy as np
 
 # --- Local modules ---
 import memory_manager
-import gpt_handler     # must have get_reply(messages) -> {"reply": "...", "function_call": {...}}
+import gpt_handler     
 import face_store
 
 app = Flask(__name__)
@@ -555,7 +555,7 @@ def upload_audio():
         except Exception as e:
             print("Temp cleanup failed: {}".format(e), flush=True)
 
-# ----------------- face APIs (unchanged) -----------------
+# ----------------- face APIs -----------------
 @app.route("/face/recognize", methods=["POST"])
 def face_recognize():
     if "file" not in request.files:

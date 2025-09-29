@@ -69,7 +69,7 @@ def add_bot_reply(username, text):
     _save(data)
 
 def save_chat_history(username):
-    # already persisted in add_*; keep for API compatibility
+    
     pass
 
 def migrate_username(old_u, new_u):

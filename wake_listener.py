@@ -90,7 +90,7 @@ def _set_vocab(asr, vocab, spotting=False):
     except:
         pass
 
-# --- head tracking (no base motion) ---
+# --- head tracking  ---
 
 def _head_track_guard(nao_ip, port, flag):
     tr = None
@@ -378,7 +378,7 @@ def _start_follow_me(nao_ip, port, tts):
         except: pass
         return
 
-    # Likely names seen in packages
+    # names seen in packages
     candidates = [
         "Follow me/behavior",
         "follow me/behavior",
