@@ -42,7 +42,7 @@ def chatbot_mode(record_audio_func, tts_proxy):
             audio_path = record_audio_func()
             print("[User spoke] Audio saved to:", audio_path)
 
-<<<<<<< HEAD
+
             # 2. Define server call function
             def server_call():
                 with open(audio_path, 'rb') as f:
@@ -52,7 +52,7 @@ def chatbot_mode(record_audio_func, tts_proxy):
                         data={'username': 'friend', 'mode': 'chatbot'},  # 👈 force chatbot mode
                         timeout=TIMEOUT
                     )
-=======
+
             # 2. Send audio to the server
             with open(audio_path, 'rb') as f:
                 res = requests.post(
@@ -61,7 +61,7 @@ def chatbot_mode(record_audio_func, tts_proxy):
                     data={'username': 'friend', 'mode': 'chatbot'},  
                     timeout=TIMEOUT
                 )
->>>>>>> origin/main
+
 
             # 3. Call server with announcer wrapper
             res = with_processing_announcer(tts_proxy, server_call)
@@ -84,12 +84,10 @@ def chatbot_mode(record_audio_func, tts_proxy):
                 continue
 
             if reply:
-<<<<<<< HEAD
+
                 # Python 2.7 safe UTF-8
                 tts_proxy.say(reply.encode('utf-8'))
-=======
-                tts_proxy.say(reply.encode('utf-8'))  
->>>>>>> origin/main
+
             else:
                 tts_proxy.say("I couldn't find anything useful.")
 
