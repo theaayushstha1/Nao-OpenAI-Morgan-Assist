@@ -3,10 +3,14 @@ from __future__ import print_function
 import os, json, random, requests, time, re, threading
 from naoqi import ALProxy
 from utils.camera_capture import capture_photo
+from processing_announcer import ProcessingAnnouncer
 import memory_manager
+from contextlib import contextmanager
 
 
-SERVER_IP = os.environ.get("SERVER_IP", "172.20.95.109")
+
+
+SERVER_IP = os.environ.get("SERVER_IP", "172.20.95.105")
 
 SERVER_URL      = "http://{}:5000/upload".format(SERVER_IP)
 CHAT_TEXT_URL   = "http://{}:5000/chat_text".format(SERVER_IP)
@@ -33,6 +37,20 @@ def _apply_mode_voice(tts, mode):
         tts.setParameter("pitchShift", float(prof["pitch"]))
         tts.setVolume(1.0)
     except: pass
+
+@contextmanager
+def with_processing_announcer(tts, func):
+    ann = ProcessingAnnouncer(
+        tts_say=lambda s: _say(tts, s),
+        stop_all=getattr(tts, "stopAll", None),
+        first_delay=0.7,
+        interval=3.0
+    )
+    ann.start()
+    try:
+        yield func()
+    finally:
+        ann.stop(interrupt=True)
 
 def _reset_voice(tts): _apply_mode_voice(tts, "general")
 
@@ -308,6 +326,7 @@ def _mode_enter_actions(robot, posture, tts, motion, mode):
         try: posture.goToPosture("StandInit", 0.6)
         except: pass
 
+
 # ---------- main ----------
 def enter_chat_mode(robot, nao_ip="127.0.0.1", port=9559):
     motion  = ALProxy("ALMotion",       nao_ip, port)
@@ -332,14 +351,18 @@ def enter_chat_mode(robot, nao_ip="127.0.0.1", port=9559):
     except: pass
 
     user_name, recognized = recognize_or_enroll(robot, nao_ip, port)
-    if recognized: _say(robot, "Welcome back, {}!".format(user_name))
+    if recognized:
+        _say(robot, "Welcome back, {}!".format(user_name))
 
     mode = _pick_mode(robot, nao_ip, user_name, default_mode="general")
-    _apply_mode_voice(tts, mode); _mode_enter_actions(robot, posture, tts, motion, mode)
+    _apply_mode_voice(tts, mode)
+    _mode_enter_actions(robot, posture, tts, motion, mode)
     _say(robot, "Hey {}! {} mode is on. Ask me anything!".format(user_name, mode.capitalize()))
 
-    try: memory_manager.initialize_user(user_name)
-    except Exception: pass
+    try:
+        memory_manager.initialize_user(user_name)
+    except Exception:
+        pass
 
     try:
         from audio_handler import record_audio
@@ -347,32 +370,38 @@ def enter_chat_mode(robot, nao_ip="127.0.0.1", port=9559):
             _say(robot, "I’m listening.")
             audio_path = record_audio(nao_ip)
             if not os.path.exists(audio_path):
-                _say(robot, "I didn’t catch that—please repeat."); continue
+                _say(robot, "I didn’t catch that—please repeat.")
+                continue
 
-            try:
+            def server_call():
                 with open(audio_path, "rb") as f:
-                    res = SESSION.post(
+                    return SESSION.post(
                         SERVER_URL,
                         files={"file": f},
                         data={"username": user_name, "mode": _canon_for_server(mode)},
                         timeout=DEFAULT_TIMEOUT
                     )
-                # Handle Whisper 503 gracefully
-                if res.status_code == 503:
-                    try:
-                        err = res.json().get("detail", "") or ""
-                    except Exception:
-                        err = ""
-                    if "audio_too_short" in err:
-                        _say(robot, "I didn’t catch that — could you say it again a little longer?")
-                    elif "bad_wav_header" in err:
-                        _say(robot, "Hmm, I couldn’t read that clip. Let’s try again.")
-                    else:
-                        _say(robot, "The server is busy — let’s try once more.")
-                    time.sleep(0.6)
-                    continue
-                res.raise_for_status()
-                data = res.json()
+
+            try:
+                with with_processing_announcer(tts, server_call) as res:
+                    # Handle Whisper 503 gracefully
+                    if res.status_code == 503:
+                        try:
+                            err = res.json().get("detail", "") or ""
+                        except Exception:
+                            err = ""
+                        if "audio_too_short" in err:
+                            _say(robot, "I didn’t catch that — could you say it again a little longer?")
+                        elif "bad_wav_header" in err:
+                            _say(robot, "Hmm, I couldn’t read that clip. Let’s try again.")
+                        else:
+                            _say(robot, "The server is busy — let’s try once more.")
+                        time.sleep(0.6)
+                        continue
+
+                    res.raise_for_status()
+                    data = res.json()
+
             except Exception:
                 _say(robot, "The connection hiccupped — please try again.")
                 continue
@@ -392,15 +421,18 @@ def enter_chat_mode(robot, nao_ip="127.0.0.1", port=9559):
                 picked = _pick_mode(robot, nao_ip, user_name, default_mode=(server_mode or mode or "general"))
                 if picked and picked != mode:
                     mode = picked
-                    _apply_mode_voice(tts, mode); _mode_enter_actions(robot, posture, tts, motion, mode)
+                    _apply_mode_voice(tts, mode)
+                    _mode_enter_actions(robot, posture, tts, motion, mode)
                     print(">> MODE (client): switched to {}".format(mode))
                     again = _requery_immediate(user_name, user_text, mode)
-                    reply_text = (again or {}).get("reply", "") or "✅ Switched to {} mode. Ask me anything!".format(mode.capitalize())
+                    reply_text = (again or {}).get("reply", "") or \
+                                 "✅ Switched to {} mode. Ask me anything!".format(mode.capitalize())
                     immediate_switch = True
             else:
                 if server_mode and (server_mode != mode or server_mode_changed):
                     mode = server_mode
-                    _apply_mode_voice(tts, mode); _mode_enter_actions(robot, posture, tts, motion, mode)
+                    _apply_mode_voice(tts, mode)
+                    _mode_enter_actions(robot, posture, tts, motion, mode)
                     print(">> MODE (client): adopted server mode {}".format(mode))
                     if not reply_text:
                         reply_text = "✅ Switched to {} mode. Ask me anything!".format(mode.capitalize())
@@ -412,29 +444,35 @@ def enter_chat_mode(robot, nao_ip="127.0.0.1", port=9559):
                         new_mode = chosen_direct or mode
                         if new_mode != mode:
                             mode = new_mode
-                            _apply_mode_voice(tts, mode); _mode_enter_actions(robot, posture, tts, motion, mode)
+                            _apply_mode_voice(tts, mode)
+                            _mode_enter_actions(robot, posture, tts, motion, mode)
                             print(">> MODE (client-fallback): switched to {}".format(mode))
                             again = _requery_immediate(user_name, user_text, mode)
-                            reply_text = (again or {}).get("reply", "") or "✅ Switched to {} mode. Ask me anything!".format(mode.capitalize())
+                            reply_text = (again or {}).get("reply", "") or \
+                                         "✅ Switched to {} mode. Ask me anything!".format(mode.capitalize())
                             immediate_switch = True
 
             # persist
             try:
-                if user_text: memory_manager.add_user_message(user_name, user_text)
+                if user_text:
+                    memory_manager.add_user_message(user_name, user_text)
                 memory_manager.add_bot_reply(user_name, reply_text if reply_text else json.dumps(func_call))
                 memory_manager.save_chat_history(user_name)
-            except Exception: pass
+            except Exception:
+                pass
 
             # speak
             if reply_text:
                 _speak_with_gestures(robot, tts, motion, reply_text, mode)
             elif immediate_switch:
-                _speak_with_gestures(robot, tts, motion, "✅ Switched to {} mode.".format(mode.capitalize()), mode)    
+                _speak_with_gestures(robot, tts, motion,
+                                     "✅ Switched to {} mode.".format(mode.capitalize()), mode)
 
             if "stop" in (user_text or "").lower():
                 _say(robot, "Catch you later!")
                 break
 
+            # function calls
             name = (func_call or {}).get("name")
             if name == "stand_up":
                 try: posture.goToPosture("StandInit", 0.6)
@@ -443,7 +481,7 @@ def enter_chat_mode(robot, nao_ip="127.0.0.1", port=9559):
                 try: posture.goToPosture("Sit", 0.6)
                 except: pass
             elif name == "down":
-                try:   
+                try:
                     motion.setStiffnesses("Body", 1.0)
                     joints = ["RHipPitch","LHipPitch","RKneePitch","LKneePitch","RAnklePitch","LAnklePitch"]
                     angles = [0.3, 0.3, 0.5, 0.5, -0.2, -0.2]

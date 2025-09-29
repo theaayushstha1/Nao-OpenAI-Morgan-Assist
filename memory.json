@@ -4665,8 +4665,8 @@
       }
     ]
   },
-  "friend": {
-    "name": null,
+  "failing": {
+    "name": "Failing",
     "history": [
       {
         "role": "user",
@@ -4715,6 +4715,147 @@
       {
         "role": "assistant",
         "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "Who is the chairman of computer science department at Morgan State University?"
+      },
+      {
+        "role": "assistant",
+        "content": "The chairman of the Computer Science Department at Morgan State University is Professor Shuangbao \"Paul\" Wang."
+      },
+      {
+        "role": "user",
+        "content": "When is the start date of class fall 2025?"
+      },
+      {
+        "role": "assistant",
+        "content": "The start date for classes in the Fall 2025 term at Morgan State University is August 27, 2025."
+      },
+      {
+        "role": "user",
+        "content": "So what is the prerequisite course for COSC 220?"
+      },
+      {
+        "role": "assistant",
+        "content": "The prerequisite course for COSC 220, \"Data Structures and Algorithms Analysis,\" is COSC 112 with a grade of \u201cC\u201d or higher."
+      },
+      {
+        "role": "user",
+        "content": "Do you have contact information for Dr. Paul Wang?"
+      },
+      {
+        "role": "assistant",
+        "content": "Yes, Dr. Shuangbao \"Paul\" Wang is the Professor and Chair of the Computer Science Department at Morgan State University. Here is his contact information:\n\n- Office: McMechen Hall 507\n- Phone: (443) 885-4503\n- Email: shuangbao.wang@morgan.edu"
+      },
+      {
+        "role": "user",
+        "content": "My name is Failing. So I can ask, I'm failing my class, who should I go consult with?"
+      },
+      {
+        "role": "assistant",
+        "content": "If you are failing your class, you should reach out to your academic advisor for guidance and support. Your advisor can help you explore options such as tutoring, study strategies, or possibly withdrawing from the course if necessary. You can find your advisor's contact information in Degree Works or Navigate (EAB). Additionally, you can contact Wendy Smith, the Administrative Assistant for the Computer Science department, for further assistance. Her contact details are:\n\n- Office: McMechen Hall 507A\n- Phone: (443) 885-3962\n- Email: Wendy.Smith@morgan.edu"
+      }
+    ]
+  },
+  "friend": {
+    "name": null,
+    "history": [
+      {
+        "role": "user",
+        "content": "You know now I don't like the way you are standing up in front of me. Why are you even standing up?"
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like there might be a misunderstanding. As a virtual assistant, I don't have a physical presence, so I can't stand up or sit down. I'm here to provide information and assistance based on the context provided. If you have any questions or need help with something specific, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "I think for emotions, my best and easiest way to do it is this."
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like you might be looking for a way to express or manage emotions, possibly in the context of a project or course. If you are referring to a project related to a course at Morgan State University, such as a senior project or a course involving emotional intelligence or similar topics, you might want to consider the following steps:\n\n1. **Identify the Course**: Determine if your project or topic is related to a specific course. For example, if it's related to a senior project, you might be looking at courses like COSC 490 (Senior Project).\n\n2. **Consult Your Advisor**: If this is part of a course requirement or project, it might be beneficial to discuss your approach with your academic advisor or course instructor to ensure it aligns with the course objectives.\n\n3. **Research and Resources**: Utilize available resources such as academic journals, books, or online resources to gather information on how emotions can be effectively managed or expressed in your context.\n\n4. **Practical Application**: Consider practical ways to apply your understanding of emotions, whether through a project, presentation, or research paper.\n\n5. **Feedback**: Seek feedback from peers or instructors to refine your approach.\n\nIf you need further assistance or specific guidance related to your course or project, you might want to contact Ms. Wendy Smith, the Administrative Assistant for the Computer Science department, at Wendy.Smith@morgan.edu. She can provide more specific guidance or direct you to the appropriate resources or personnel."
+      },
+      {
+        "role": "user",
+        "content": "Who is the chairman of computer science department at Morgan State University?"
+      },
+      {
+        "role": "assistant",
+        "content": "The chairman of the Computer Science Department at Morgan State University is Professor Shuangbao \"Paul\" Wang."
+      },
+      {
+        "role": "user",
+        "content": "When is the start date of Fall 2025?"
+      },
+      {
+        "role": "assistant",
+        "content": "The start date for the Fall 2025 term at Morgan State University is August 27, 2025."
+      },
+      {
+        "role": "user",
+        "content": "I keep failing my exam. Who should I go consult with?"
+      },
+      {
+        "role": "assistant",
+        "content": "If you are a student in the Computer Science department at Morgan State University and are facing difficulties with your exams, you should consult with your assigned academic advisor. Your advisor can provide guidance and support to help you improve your academic performance. The advisor assignment is based on the first letter of your last name. Here is the list of advisors:\n\n- Last Name A: Dr. Md Rahman\n- Last Name B: Dr. Monireh Dabaghchian\n- Last Name C: Dr. Eric Sakk\n- Last Names D, E, F: Dr. Vahid Heydari\n- Last Name G: Dr. Guobin Xu\n- Last Name H: Dr. Jamell Dacon\n- Last Names I-L: Dr. Naja Mack\n- Last Name M: Dr. Timothy Oladunni or Adetifa Oluwole\n- Last Name N: Dr. Sam Tannouri\n- Last Name O: Dr. Jin Guo\n- Last Names PQR: Ms. Grace Steele\n- Last Name S: Dr. Vojislav Stojkovic\n- Last Name T: Dr. Amjad Ali\n- Last Names U-Z: Dr. Roshan Paudel\n\nYou can find your advisor's contact information in Degree Works or Navigate (EAB). Additionally, you may also consider reaching out to your course instructor for specific guidance related to the course material. If you need further assistance, you can email the academic advising office at compsci@morgan.edu."
+      },
+      {
+        "role": "user",
+        "content": "Can I have the contact information of Dr. Paul Wang?"
+      },
+      {
+        "role": "assistant",
+        "content": "Certainly! Here is the contact information for Dr. Shuangbao \"Paul\" Wang:\n\n- Title: Professor and Chair\n- Office: McMechen Hall 507\n- Phone: (443) 885-4503\n- Email: shuangbao.wang@morgan.edu"
+      },
+      {
+        "role": "user",
+        "content": "\uace0\ub9d9\uc2b5\ub2c8\ub2e4."
+      },
+      {
+        "role": "assistant",
+        "content": "\ucc9c\ub9cc\uc5d0\uc694! \ub3c4\uc6c0\uc774 \ud544\uc694\ud558\uc2dc\uba74 \uc5b8\uc81c\ub4e0\uc9c0 \ub9d0\uc500\ud574 \uc8fc\uc138\uc694."
+      },
+      {
+        "role": "user",
+        "content": "So let me ask, who is the chairman of computer science department?"
+      },
+      {
+        "role": "assistant",
+        "content": "The chairman of the Computer Science Department at Morgan State University is Professor Shuangbao \"Paul\" Wang."
+      },
+      {
+        "role": "user",
+        "content": "You can ask anything you want."
+      },
+      {
+        "role": "assistant",
+        "content": "How can I assist you with information regarding Morgan State University's Computer Science department? Feel free to ask about course details, credit policies, contact information, or any other specific inquiries you might have."
+      },
+      {
+        "role": "user",
+        "content": "Who is the..."
+      },
+      {
+        "role": "assistant",
+        "content": "It seems your question was cut off. Could you please provide more details or complete your question so I can assist you better?"
+      },
+      {
+        "role": "user",
+        "content": "What is internships and how can I get one?"
+      },
+      {
+        "role": "assistant",
+        "content": "Internships are structured work experiences that allow students to gain practical experience in their field of study, explore career options, and network with professionals in the industry. They are an excellent way to apply what you've learned in the classroom to real-world situations, develop new skills, and enhance your resume.\n\nTo get an internship, you can follow these steps:\n\n1. **Complete the Internship Form**: At Morgan State University, you can start by completing the Internship and Work Experience Form. This form helps the university share internship opportunities with you and understand the opportunities you have already engaged in. You can find the form [here](https://www.morgan.edu/school-of-computer-mathematical-and-natural-sciences/students/scmns-advising/internship-form).\n\n2. **Meet with Your Academic Advisor**: Your academic advisor is a valuable resource for exploring and discussing various internship options. They can provide guidance on class selection, internships, research, and other key resources. It's important to meet with your advisor each semester for advisement. You can find more information about academic advising [here](https://www.morgan.edu/school-of-computer-mathematical-and-natural-sciences/students/scmns-advising).\n\n3. **Explore Internship Programs**: Morgan State University provides information on various internship and fellowship programs, such as the Google STEP Program, Microsoft Explore Program, Meta University Internship, Code2040 Fellows Program, and HackDiversity. These programs offer structured internship experiences, often with mentorship and leadership training. You can find more details about these programs in the context provided.\n\n4. **Utilize Online Resources**: There are many online platforms and communities that offer internship opportunities, such as the National Society of Black Engineers (NSBE), ColorStack, and Rewriting the Code (RTC). These organizations often provide access to job boards, mentorship, and networking opportunities.\n\n5. **Prepare for Interviews**: Use resources like the Tech Interview Handbook, Interviewing.io, and Pathrise to prepare for technical and behavioral interviews. These resources offer comprehensive guides, mock interviews, and coaching to help you succeed in securing an internship.\n\nBy following these steps and utilizing the resources available at Morgan State University and beyond, you can increase your chances of securing a valuable internship experience."
+      },
+      {
+        "role": "user",
+        "content": "When is the start date of Fall 2025 and what are you doing?"
+      },
+      {
+        "role": "assistant",
+        "content": "The start date for the Fall 2025 term at Morgan State University is August 27, 2025. As an AI, I am here to assist you by providing information and answering questions based on the data I have been trained on."
       }
     ]
   }
