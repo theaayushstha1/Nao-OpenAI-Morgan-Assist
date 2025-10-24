@@ -4,29 +4,25 @@ import os, time, json, re, threading, requests, calendar
 import datetime as _dt
 from naoqi import ALProxy
 
+
 # ──────────────────────────────────────────────────────────────────────────────
 # CONFIG 
 # ──────────────────────────────────────────────────────────────────────────────
+CHECK_INTERVALS = 0.25  # timer/reminder check frequency
+FAST_MODE = True  # fewer follow-up prompts
+FAST_REMINDER_DEFAULT_MIN = 10
 
-CHECK_INTERVALS = 0.25  # seconds (faster timer/reminder firing)
+BALT_LAT, BALT_LON = 39.2904, -76.6122  # Baltimore, MD
 
-# "Fast mode" = fewer follow-up prompts; assume defaults when missing
-FAST_MODE = True
-FAST_REMINDER_DEFAULT_MIN = 10  
-
-# Fixed city: Baltimore, MD (USA)
-BALT_LAT, BALT_LON = 39.2904, -76.6122
-
-#speech server (Whisper → text)
-SERVER_IP   = "172.20.95.120"
+SERVER_IP   = "172.20.95.123"
 SERVER_URL  = "http://{}:5000/upload".format(SERVER_IP)
 
-# Paths
 STATE_FILE = "/data/home/nao/Sound/state.json"
 TIMER_MP3  = "/data/home/nao/Sound/timer.mp3"
 
 SESSION = requests.Session()
-DEFAULT_TIMEOUT = 8  #lower makes round-trips quicker
+DEFAULT_TIMEOUT = 8
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # STORAGE
@@ -59,6 +55,7 @@ def _save_state(state):
         with open(STATE_FILE, "w") as f:
             json.dump(state, f, indent=2)
     except: pass
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # UTC → NEW YORK (EST/EDT) 
@@ -99,6 +96,55 @@ def _fmt_hhmm_ampm(local_dt):
     ap = "A M" if local_dt.hour < 12 else "P M"
     return "{}:{:02d} {}".format(h, local_dt.minute, ap)
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+# EXIT DETECTION
+# ──────────────────────────────────────────────────────────────────────────────
+EXIT_PATTERNS = [
+    r"\b(exit|quit|stop|end|goodbye|bye|close)\b.*\b(chat|mode|conversation|talking|session)\b",
+    r"\b(chat|mode|conversation|talking|session)\b.*\b(exit|quit|stop|end|goodbye|bye|close)\b",
+    r"^(exit|quit|stop now|end chat|goodbye|bye bye|that's all|that is all)$",
+    r"^(i'm done|i am done|we're done|we are done)$",
+    r"^(stop talking|stop listening|no more)$",
+    r"\b(i (want|need) to (go|leave|stop)|let me (go|leave)|gotta go)\b",
+    r"\b(talk to you later|catch you later|see you later)\b",
+    r"\b(thanks.*bye|thank you.*bye|thanks.*good(bye)?)\b",
+    r"\b(stop.*mode|exit.*mode|leave.*mode|quit.*mode)\b",
+    r"\b(go back|return|switch back)\b.*\b(wake|main|menu)\b",
+]
+
+EXIT_KEYWORDS = [
+    "exit", "quit", "stop", "end", "goodbye", "bye", "close",
+    "done", "finished", "that's all", "no more", "leave", "go back"
+]
+
+def _is_exit_intent(text):
+    """Check transcribed text for exit intent"""
+    t = (text or "").strip().lower()
+    if not t: return False
+    
+    # Don't exit for "stop the timer/music..."
+    for tw in ("timer","alarm","music","sound","ringtone","countdown"):
+        if ("stop " + tw) in t or ("stop the " + tw) in t:
+            return False
+    
+    # Check regex patterns
+    for pattern in EXIT_PATTERNS:
+        if re.search(pattern, t, re.IGNORECASE):
+            print("[EXIT DETECTED] Pattern: {}".format(pattern))
+            return True
+    
+    # Check keywords in short utterances
+    words = t.split()
+    if len(words) <= 3:
+        for keyword in EXIT_KEYWORDS:
+            if keyword in words:
+                print("[EXIT DETECTED] Keyword: {}".format(keyword))
+                return True
+    
+    return False
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # BASIC HELPERS
 # ──────────────────────────────────────────────────────────────────────────────
@@ -107,7 +153,6 @@ def _say(tts, text):
     except: pass
 
 def _hear_text(nao_ip, prompt=None):
-    # Keep prompts minimal for speed
     if prompt and not FAST_MODE:
         try: ALProxy("ALTextToSpeech", nao_ip, 9559).say(prompt)
         except: pass
@@ -121,20 +166,6 @@ def _hear_text(nao_ip, prompt=None):
     except Exception:
         return ""
 
-def _is_exit_intent(text):
-    t = (text or "").strip().lower()
-    if not t: return False
-    # don't exit for "stop the timer/music..." etc.
-    for tw in ("timer","alarm","music","sound","ringtone","countdown"):
-        if ("stop " + tw) in t or ("stop the " + tw) in t:
-            return False
-    for k in (
-        "exit","exit mode","exit the mode","exit mini","exit mininao","exit mini nao",
-        "quit","close","cancel","end session","end the session",
-        "leave","leave mode","go back","back","goodbye","bye"
-    ):
-        if k in t: return True
-    return False
 
 # ──────────────────────────────────────────────────────────────────────────────
 # PARSING 
@@ -143,14 +174,12 @@ def _parse_duration_seconds(text):
     t = (text or "").lower()
     total = 0
 
-    # allow compact blocks 
     for num, unit in re.findall(r"(\d+(?:\.\d+)?)\s*(h|hr|hrs|hour|hours|m|min|mins|minute|minutes|s|sec|secs|second|seconds)", t, re.I):
         n = float(num); u = unit.lower()
         if u in ("h","hr","hrs","hour","hours"): total += n * 3600
         elif u in ("m","min","mins","minute","minutes"): total += n * 60
         elif u in ("s","sec","secs","second","seconds"): total += n
 
-    # plain "10 minutes" etc.
     if total == 0:
         m = re.search(r"(\d+)\s*(hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)", t, re.I)
         if m:
@@ -159,11 +188,9 @@ def _parse_duration_seconds(text):
     return int(total)
 
 def _nearest_future_at_hour_min(local_now, h, mm):
-    # choose the earliest future occurrence of (h:mm) in the next 12 hours
     candidates = []
     today = _dt.datetime(local_now.year, local_now.month, local_now.day, h, mm, 0)
     if today > local_now: candidates.append(today)
-    # also consider the same clock time 12 hours apart to resolve am/pm ambiguity
     alt = today + _dt.timedelta(hours=12)
     if alt > local_now: candidates.append(alt)
     if not candidates:
@@ -174,7 +201,7 @@ def _parse_when_epoch(text):
     now = time.time()
     t = (text or "").strip().lower()
 
-    # "in 10m / in 2 hours / in 90s"
+    # "in 10m / in 2 hours"
     m = re.search(r"\bin\s+(.+)$", t, re.I)
     if m:
         dur = _parse_duration_seconds(m.group(1))
@@ -192,14 +219,14 @@ def _parse_when_epoch(text):
             target_local = _dt.datetime(local_now.year, local_now.month, local_now.day, h, mm, 0)
             if target_local <= local_now: target_local += _dt.timedelta(days=1)
         else:
-            # no am/pm, pick nearest-future 12-hour window
             target_local = _nearest_future_at_hour_min(local_now, h % 24, mm)
 
-        offset = _utc_to_newyork(_utc_now()) - _utc_now()   # −4h or −5h
+        offset = _utc_to_newyork(_utc_now()) - _utc_now()
         back_utc_guess = target_local - offset
         return calendar.timegm(back_utc_guess.timetuple())
 
     return None
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # SKILLS
@@ -218,9 +245,9 @@ def _wmocode_to_text(code):
     if code in (45,48): return "fog"
     if code in (51,53,55,56,57): return "drizzle"
     if code in (61,63,65,66,67): return "rain"
-    if code in (71,73,75,77):    return "snow"
-    if code in (80,81,82):       return "showers"
-    if code in (95,96,99):       return "thunderstorms"
+    if code in (71,73,75,77): return "snow"
+    if code in (80,81,82): return "showers"
+    if code in (95,96,99): return "thunderstorms"
     return "unknown conditions"
 
 def skill_weather_baltimore(tts):
@@ -295,7 +322,7 @@ def skill_set_reminder(tts, state, text, nao_ip):
     when = _parse_when_epoch(text)
 
     if not when and FAST_MODE:
-        when = time.time() + FAST_REMINDER_DEFAULT_MIN * 60  # default in 10 minutes
+        when = time.time() + FAST_REMINDER_DEFAULT_MIN * 60
 
     if not when and not FAST_MODE:
         _say(tts, "When should I remind you?")
@@ -322,6 +349,7 @@ def skill_list_reminders(tts, state):
     for r in future[:5]:
         ny = _utc_to_newyork(_dt.datetime.utcfromtimestamp(r["epoch"]))
         _say(tts, "{} — {}".format(_fmt_hhmm_ampm(ny), r["text"]))
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # NOTIFIER (timers/reminders) + MP3 alarm
@@ -358,6 +386,7 @@ def _notifier_loop(nao_ip, stop_flag):
         if changed: _save_state(state)
         time.sleep(CHECK_INTERVALS)
 
+
 # ──────────────────────────────────────────────────────────────────────────────
 # ROUTER
 # ──────────────────────────────────────────────────────────────────────────────
@@ -390,6 +419,7 @@ def handle_command(nao_ip, text):
 
     _say(tts, "MiniNao can tell time, weather for Baltimore, set timers with a ringtone, reminders, and to do lists.")
 
+
 # ──────────────────────────────────────────────────────────────────────────────
 # ENTRY POINT
 # ──────────────────────────────────────────────────────────────────────────────
@@ -409,7 +439,6 @@ def enter_mini_nao_mode(nao_ip="127.0.0.1", port=9559):
     from audio_handler import record_audio
     try:
         while True:
-            # keep loop lean; no extra "I'm listening." each turn
             wav = record_audio(nao_ip)
             try:
                 with open(wav, "rb") as f:
@@ -417,14 +446,17 @@ def enter_mini_nao_mode(nao_ip="127.0.0.1", port=9559):
                 r.raise_for_status()
                 user_text = (r.json() or {}).get("user_input","")
             except Exception:
-                # silent retry for speed
                 continue
 
             if not user_text:
                 continue
 
+            print("[USER INPUT] {}".format(user_text))
+
+            # Check server's transcription for exit intent
             if _is_exit_intent(user_text):
                 _say(tts, "Exiting MiniNao.")
+                print("👋 Exit detected")
                 break
 
             handle_command(nao_ip, user_text)

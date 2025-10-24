@@ -1,6 +1,6 @@
 {
   "max": {
-    "name": "So",
+    "name": "Trying",
     "history": [
       {
         "role": "user",
@@ -3217,6 +3217,1166 @@
       {
         "role": "assistant",
         "content": "Understood! How can I assist you further?"
+      },
+      {
+        "role": "user",
+        "content": "You know now I don't like the way you are standing up in front of me. Why are you even standing up?"
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like there might be a misunderstanding. As a virtual assistant, I don't have a physical presence, so I can't stand up or sit down. I'm here to provide information and assistance based on the context provided. If you have any questions or need help with something specific, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "I think for emotions, my best and easiest way to do it is this."
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like you might be looking for a way to express or manage emotions, possibly in the context of a project or course. If you are referring to a project related to a course at Morgan State University, such as a senior project or a course involving emotional intelligence or similar topics, you might want to consider the following steps:\n\n1. **Identify the Course**: Determine if your project or topic is related to a specific course. For example, if it's related to a senior project, you might be looking at courses like COSC 490 (Senior Project).\n\n2. **Consult Your Advisor**: If this is part of a course requirement or project, it might be beneficial to discuss your approach with your academic advisor or course instructor to ensure it aligns with the course objectives.\n\n3. **Research and Resources**: Utilize available resources such as academic journals, books, or online resources to gather information on how emotions can be effectively managed or expressed in your context.\n\n4. **Practical Application**: Consider practical ways to apply your understanding of emotions, whether through a project, presentation, or research paper.\n\n5. **Feedback**: Seek feedback from peers or instructors to refine your approach.\n\nIf you need further assistance or specific guidance related to your course or project, you might want to contact Ms. Wendy Smith, the Administrative Assistant for the Computer Science department, at Wendy.Smith@morgan.edu. She can provide more specific guidance or direct you to the appropriate resources or personnel."
+      },
+      {
+        "role": "user",
+        "content": "Who is the chairman of computer science department at Morgan State University?"
+      },
+      {
+        "role": "assistant",
+        "content": "The chairman of the Computer Science Department at Morgan State University is Professor Shuangbao \"Paul\" Wang."
+      },
+      {
+        "role": "user",
+        "content": "When is the start date of Fall 2025?"
+      },
+      {
+        "role": "assistant",
+        "content": "The start date for the Fall 2025 term at Morgan State University is August 27, 2025."
+      },
+      {
+        "role": "user",
+        "content": "I keep failing my exam. Who should I go consult with?"
+      },
+      {
+        "role": "assistant",
+        "content": "If you are a student in the Computer Science department at Morgan State University and are facing difficulties with your exams, you should consult with your assigned academic advisor. Your advisor can provide guidance and support to help you improve your academic performance. The advisor assignment is based on the first letter of your last name. Here is the list of advisors:\n\n- Last Name A: Dr. Md Rahman\n- Last Name B: Dr. Monireh Dabaghchian\n- Last Name C: Dr. Eric Sakk\n- Last Names D, E, F: Dr. Vahid Heydari\n- Last Name G: Dr. Guobin Xu\n- Last Name H: Dr. Jamell Dacon\n- Last Names I-L: Dr. Naja Mack\n- Last Name M: Dr. Timothy Oladunni or Adetifa Oluwole\n- Last Name N: Dr. Sam Tannouri\n- Last Name O: Dr. Jin Guo\n- Last Names PQR: Ms. Grace Steele\n- Last Name S: Dr. Vojislav Stojkovic\n- Last Name T: Dr. Amjad Ali\n- Last Names U-Z: Dr. Roshan Paudel\n\nYou can find your advisor's contact information in Degree Works or Navigate (EAB). Additionally, you may also consider reaching out to your course instructor for specific guidance related to the course material. If you need further assistance, you can email the academic advising office at compsci@morgan.edu."
+      },
+      {
+        "role": "user",
+        "content": "Can I have the contact information of Dr. Paul Wang?"
+      },
+      {
+        "role": "assistant",
+        "content": "Certainly! Here is the contact information for Dr. Shuangbao \"Paul\" Wang:\n\n- Title: Professor and Chair\n- Office: McMechen Hall 507\n- Phone: (443) 885-4503\n- Email: shuangbao.wang@morgan.edu"
+      },
+      {
+        "role": "user",
+        "content": "\uace0\ub9d9\uc2b5\ub2c8\ub2e4."
+      },
+      {
+        "role": "assistant",
+        "content": "\ucc9c\ub9cc\uc5d0\uc694! \ub3c4\uc6c0\uc774 \ud544\uc694\ud558\uc2dc\uba74 \uc5b8\uc81c\ub4e0\uc9c0 \ub9d0\uc500\ud574 \uc8fc\uc138\uc694."
+      },
+      {
+        "role": "user",
+        "content": "So let me ask, who is the chairman of computer science department?"
+      },
+      {
+        "role": "assistant",
+        "content": "The chairman of the Computer Science Department at Morgan State University is Professor Shuangbao \"Paul\" Wang."
+      },
+      {
+        "role": "user",
+        "content": "You can ask anything you want."
+      },
+      {
+        "role": "assistant",
+        "content": "How can I assist you with information regarding Morgan State University's Computer Science department? Feel free to ask about course details, credit policies, contact information, or any other specific inquiries you might have."
+      },
+      {
+        "role": "user",
+        "content": "Who is the..."
+      },
+      {
+        "role": "assistant",
+        "content": "It seems your question was cut off. Could you please provide more details or complete your question so I can assist you better?"
+      },
+      {
+        "role": "user",
+        "content": "What is internships and how can I get one?"
+      },
+      {
+        "role": "assistant",
+        "content": "Internships are structured work experiences that allow students to gain practical experience in their field of study, explore career options, and network with professionals in the industry. They are an excellent way to apply what you've learned in the classroom to real-world situations, develop new skills, and enhance your resume.\n\nTo get an internship, you can follow these steps:\n\n1. **Complete the Internship Form**: At Morgan State University, you can start by completing the Internship and Work Experience Form. This form helps the university share internship opportunities with you and understand the opportunities you have already engaged in. You can find the form [here](https://www.morgan.edu/school-of-computer-mathematical-and-natural-sciences/students/scmns-advising/internship-form).\n\n2. **Meet with Your Academic Advisor**: Your academic advisor is a valuable resource for exploring and discussing various internship options. They can provide guidance on class selection, internships, research, and other key resources. It's important to meet with your advisor each semester for advisement. You can find more information about academic advising [here](https://www.morgan.edu/school-of-computer-mathematical-and-natural-sciences/students/scmns-advising).\n\n3. **Explore Internship Programs**: Morgan State University provides information on various internship and fellowship programs, such as the Google STEP Program, Microsoft Explore Program, Meta University Internship, Code2040 Fellows Program, and HackDiversity. These programs offer structured internship experiences, often with mentorship and leadership training. You can find more details about these programs in the context provided.\n\n4. **Utilize Online Resources**: There are many online platforms and communities that offer internship opportunities, such as the National Society of Black Engineers (NSBE), ColorStack, and Rewriting the Code (RTC). These organizations often provide access to job boards, mentorship, and networking opportunities.\n\n5. **Prepare for Interviews**: Use resources like the Tech Interview Handbook, Interviewing.io, and Pathrise to prepare for technical and behavioral interviews. These resources offer comprehensive guides, mock interviews, and coaching to help you succeed in securing an internship.\n\nBy following these steps and utilizing the resources available at Morgan State University and beyond, you can increase your chances of securing a valuable internship experience."
+      },
+      {
+        "role": "user",
+        "content": "When is the start date of Fall 2025 and what are you doing?"
+      },
+      {
+        "role": "assistant",
+        "content": "The start date for the Fall 2025 term at Morgan State University is August 27, 2025. As an AI, I am here to assist you by providing information and answering questions based on the data I have been trained on."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max"
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is So. General."
+      },
+      {
+        "role": "assistant",
+        "content": "Got it! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is So. What are you doing now?"
+      },
+      {
+        "role": "assistant",
+        "content": "I'm here to assist you! How can I help you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is So. So, what is reinforcement learning and how can I use it on my robot?"
+      },
+      {
+        "role": "assistant",
+        "content": "Reinforcement learning is a machine learning paradigm where an agent learns to make decisions by receiving rewards or penalties based on its actions in an environment. You can implement it on your robot by defining a reward system and allowing the robot to explore and learn optimal behaviors through trial and error."
+      },
+      {
+        "role": "user",
+        "content": "My name is So. And then do I have to save every history?"
+      },
+      {
+        "role": "assistant",
+        "content": "It's not necessary to save every history, but keeping important records can be helpful for future reference. Consider what information is valuable to retain."
+      },
+      {
+        "role": "user",
+        "content": "My name is So. No, you cut me off in the middle. You have to listen to everything I have to say."
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is So. What are you saying?"
+      },
+      {
+        "role": "assistant",
+        "content": "I'm here to assist you with information and tasks. How can I help you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Processing. Why do you keep saying I'm processing even though I haven't"
+      },
+      {
+        "role": "assistant",
+        "content": "I apologize for any confusion; it might be a misunderstanding or a technical issue. I'm here to assist you, so let me know how I can help!"
+      },
+      {
+        "role": "user",
+        "content": "Hey, my name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Hi Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Processing. I would shoot general"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Processing. I just wanted to test if your processing commands are true or not."
+      },
+      {
+        "role": "assistant",
+        "content": "Sure! You can test any command you'd like."
+      },
+      {
+        "role": "user",
+        "content": "My name is Processing. I just wanted to test if your processing commands are true or not."
+      },
+      {
+        "role": "assistant",
+        "content": "Got it! Feel free to test any commands or ask questions."
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. I'm just testing at the moment."
+      },
+      {
+        "role": "assistant",
+        "content": "Understood! Let me know if you need any specific actions or tests."
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. Thanks for watching and don't forget to like and subscribe!"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. You"
+      },
+      {
+        "role": "assistant",
+        "content": "I'm here to assist you! What would you like to know or do?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. Thank you for watching."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you need anything else, just let me know."
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. Thanks for watching and don't forget to like and subscribe!"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. Xin ch\u00e0o t\u1ea5t c\u1ea3 c\u00e1c b\u1ea1n!"
+      },
+      {
+        "role": "assistant",
+        "content": "Xin ch\u00e0o! B\u1ea1n c\u00f3 c\u1ea7n gi\u00fap g\u00ec kh\u00f4ng?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. Thanks for watching and don't forget to like and subscribe!"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. Thanks for watching and don't forget to like and subscribe!"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. C\u1ea3m \u01a1n c\u00e1c b\u1ea1n \u0111\u00e3 xem video n\u00e0y. Xin ch\u00e0o t\u1ea1m bi\u1ec7t."
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. "
+      },
+      {
+        "role": "assistant",
+        "content": "Understood! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. H\u1eb9n g\u1eb7p l\u1ea1i!"
+      },
+      {
+        "role": "assistant",
+        "content": "H\u1eb9n g\u1eb7p l\u1ea1i! Ch\u00fac b\u1ea1n m\u1ed9t ng\u00e0y t\u1ed1t l\u00e0nh!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. Thanks for watching and don't forget to like and subscribe!"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. C\u1ea3m \u01a1n c\u00e1c b\u1ea1n \u0111\u00e3 xem video n\u00e0y. C\u1ea3m \u01a1n c\u00e1c b\u1ea1n \u0111\u00e3 xem video n\u00e0y."
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "Hey, my name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Hi Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. The general please"
+      },
+      {
+        "role": "assistant",
+        "content": "Could you please clarify what you mean by \"the general\"? Are you referring to a specific topic or context?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. Ok, I would like to ask why did it take so long just to reply or get into general mode and what is going on with you?"
+      },
+      {
+        "role": "assistant",
+        "content": "I apologize for any delay; I'm here to assist you now. How can I help you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. I don't need any help from you. Just make sure you answer everything on questions and quick."
+      },
+      {
+        "role": "assistant",
+        "content": "Understood! I'll keep my responses brief and to the point."
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. you"
+      },
+      {
+        "role": "assistant",
+        "content": "How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. Thank you for watching the video."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you have any more questions or need assistance, feel free to ask."
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. Thanks for watching and don't forget to like and subscribe!"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. Thanks for watching and don't forget to like and subscribe!"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. Thanks for watching and don't forget to like and subscribe!"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. General, please."
+      },
+      {
+        "role": "assistant",
+        "content": "Understood! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "What are you doing and can you help me with my classes?"
+      },
+      {
+        "role": "assistant",
+        "content": "I am here to assist you with information related to Morgan State University's Computer Science department. If you need help with your classes, there are several resources available:\n\n1. **Tutoring Services**: The Computer Science Department offers tutoring services to help reinforce learning and improve problem-solving skills. You can find tutoring in McMechen Suite 507, and you can contact Dr. Roshan Paudel at Roshan.Paudel@morgan.edu or (443) 885-3096 for more information.\n\n2. **Center for Academic Success and Achievement (CASA)**: CASA provides structured support for academic success and retention. They offer tutoring, advising, and other resources. You can visit them in Tyler Hall 117J or online via Google Meet. For more details, email tutoring@morgan.edu or visit their website at [CASA Tutoring](https://www.morgan.edu/tutoring).\n\n3. **Academic Enrichment Program (AEP)**: AEP offers tutoring services, leadership development, and personal growth opportunities. You can contact them at aeptutor@morgan.edu or (443) 885-4452. Tutoring is available at various locations, including Blount Towers, Cummings House, and the Marble Hall Academic Resource Center.\n\n4. **Writing Center**: If you need help with writing assignments, the Writing Center offers free tutoring services. You can schedule a session by emailing writingcenter@morgan.edu.\n\nIf you have specific questions about your classes or need further assistance, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "What? You had a reply, why didn't you reply me?"
+      },
+      {
+        "role": "assistant",
+        "content": "It seems there might have been a misunderstanding or technical issue. If you have a specific question about the Computer Science department at Morgan State University or need assistance with something related to it, please feel free to ask, and I'll do my best to help you."
+      },
+      {
+        "role": "user",
+        "content": "H\u1eb9n g\u1eb7p l\u1ea1i!"
+      },
+      {
+        "role": "assistant",
+        "content": "H\u1eb9n g\u1eb7p l\u1ea1i! N\u1ebfu b\u1ea1n c\u00f3 b\u1ea5t k\u1ef3 c\u00e2u h\u1ecfi n\u00e0o v\u1ec1 Khoa Khoa h\u1ecdc M\u00e1y t\u00ednh t\u1ea1i \u0110\u1ea1i h\u1ecdc Morgan State, \u0111\u1eebng ng\u1ea7n ng\u1ea1i li\u00ean h\u1ec7."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. I would like to choose general mode."
+      },
+      {
+        "role": "assistant",
+        "content": "I'm currently set to general mode. How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. Hey now, can you stand up?"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Having. So I'm having an interview tomorrow, I want you to help me with it, can you ask me a few behavioral questions? You know me by now, I'm Matt, so just help me with some questions that you might ask."
+      },
+      {
+        "role": "assistant",
+        "content": "Sure, Matt! Here are a few behavioral questions for your interview practice:\n\n1. Can you describe a time when you faced a significant challenge at work and how you overcame it?\n2. Tell me about a situation where you had to work as part of a team. What was your role?\n3. How do you handle criticism or feedback from your peers or supervisors?\n4. Describe a time when you had to prioritize multiple tasks. How did you manage your time?\n5. Can you give an example of a goal you set and how you went about achieving it?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Having. Now, what I want you to do is ask me one question at a time and wait for me to answer it, then you analyze all my answers, and then you move on to the next questions."
+      },
+      {
+        "role": "assistant",
+        "content": "What is your favorite color?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Having. No, not these questions. I want you to ask me about behavioral questions. How are you forgetting about it?"
+      },
+      {
+        "role": "assistant",
+        "content": "Sure! Can you tell me about a time when you faced a challenge at work and how you overcame it?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Working. Yeah, so about the time when I faced a challenge, when I applied for this great job that I'm working right now, and I had an experience on after-hours."
+      },
+      {
+        "role": "assistant",
+        "content": "That sounds interesting! What specific challenge did you face during the application process?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Working. My first name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Working. I would like to choose general mode."
+      },
+      {
+        "role": "assistant",
+        "content": "I will set NAO to general mode. What would you like NAO to do?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Working. Okay, can you give me some ideas on how to integrate database into a robotic project?"
+      },
+      {
+        "role": "assistant",
+        "content": "1. Use a database to store sensor data collected by the robot for analysis and performance tracking over time.  \n2. Implement a database to manage user interactions and preferences, allowing the robot to personalize its responses and actions.  \n3. Store navigation maps and environmental data in a database to enhance the robot's pathfinding and obstacle avoidance capabilities.  \n4. Utilize a database to log maintenance records and operational history for better lifecycle management of the robot.  \n5. Integrate a database for real-time monitoring and control, enabling remote access to the robot's status and functionalities."
+      },
+      {
+        "role": "user",
+        "content": ""
+      },
+      {
+        "role": "assistant",
+        "content": "Please provide your question regarding the Morgan State University Computer Science department, and I'll be happy to assist you!"
+      },
+      {
+        "role": "user",
+        "content": "computer science department who is the chair for a computer science"
+      },
+      {
+        "role": "assistant",
+        "content": "The Chair of the Computer Science Department at Morgan State University is Professor Shuangbao \"Paul\" Wang. His office is located in McMechen Hall 507, and he can be contacted at (443) 885-4503 or via email at shuangbao.wang@morgan.edu."
+      },
+      {
+        "role": "user",
+        "content": "Exit."
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like you might be looking for information or assistance related to Morgan State University's Computer Science department. If you have specific questions or need help with something, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "\u0938\u092c\u094d\u092c\u0947 \u0917\u0947\u0938\u094d\u091f\u094d\u0930\u094b \u0938\u0930\u0942, \u092c\u0932\u0932\u0916\u0921\u093f \u0906\u0920 \u091a\u0932\u093e\u0913\u0928\u0940, \u0915\u094d\u092f\u094b\u0902\u0915\u093f \u0924\u094b \u091a\u092e\u0932 \u0925\u0948\u0928\u093e, \u0905\u0928\u093f \u0926\u093f\u0932\u094b \u092d\u093e\u091a \u0915\u094d\u092f\u094b\u0902\u0915\u093f \u0930\u0907\u0932\u094d\u092f\u093e\u0928\u0940\u0964 \u0938\u094d\u091f\u093e\u092a \u0914\u0930 \u090f\u0915\u091c\u093f\u0938\u094d\u091f\u0964"
+      },
+      {
+        "role": "assistant",
+        "content": "\u092e\u0941\u091d\u0947 \u0916\u0947\u0926 \u0939\u0948, \u0932\u0947\u0915\u093f\u0928 \u092e\u0948\u0902 \u0906\u092a\u0915\u0947 \u092a\u094d\u0930\u0936\u094d\u0928 \u0915\u094b \u0938\u092e\u091d \u0928\u0939\u0940\u0902 \u092a\u093e \u0930\u0939\u093e \u0939\u0942\u0901\u0964 \u0915\u0943\u092a\u092f\u093e \u0907\u0938\u0947 \u0938\u094d\u092a\u0937\u094d\u091f \u0915\u0930\u0947\u0902 \u092f\u093e \u0905\u0902\u0917\u094d\u0930\u0947\u091c\u0940 \u092e\u0947\u0902 \u092a\u0942\u091b\u0947\u0902 \u0924\u093e\u0915\u093f \u092e\u0948\u0902 \u0906\u092a\u0915\u0940 \u092e\u0926\u0926 \u0915\u0930 \u0938\u0915\u0942\u0902\u0964"
+      },
+      {
+        "role": "user",
+        "content": "A-D-E-I-M-O-U-N-O-T-A-Y-E-L-Y-E-L-T-A-Y-E-L-O-U-N-O-T-A-Y-E-L-L-O-V-E-Y-E-L-O-T-A-Y-E-L-U-N-O-T-A-Y-E-L-P-Y-E-L-E"
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like your message is a sequence of letters that doesn't form a clear question or statement. If you have a specific question about Morgan State University's Computer Science department or any related services, please feel free to ask, and I'll be happy to help!"
+      },
+      {
+        "role": "user",
+        "content": "Exit the mode."
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like you want to exit the current mode or context. If you have any specific questions or need assistance with something else, feel free to let me know!"
+      },
+      {
+        "role": "user",
+        "content": "Switch to general mode."
+      },
+      {
+        "role": "assistant",
+        "content": "I'm here to assist you with information related to Morgan State University's Computer Science department. If you have any specific questions or need assistance, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "I don't know if it's the right building. OK. Yeah."
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like you might be trying to locate a specific building at Morgan State University, possibly related to the Computer Science department. The Computer Science department is located in McMechen Hall. If you need to find a specific office or person within the department, such as the chair or a professor, you can refer to the following:\n\n- **Professor and Chair**: Shuangbao \"Paul\" Wang, Office: McMechen Hall 507\n- **Associate Chair**: Md Rahman, Office: McMechen 629\n- **Professor**: Amjad Ali, Office: McMechen Hall 502\n- **Associate Professor**: Radhouane Chouchane (Radwan Shushane), Office: McMechen Hall 624\n- **Associate Professor**: Monireh Dabaghchian, Office: McMechen Hall 508\n- **Assistant Professor**: Jamell Dacon, Office: McMechen Hall 625\n\nIf you need further assistance or confirmation, you can contact the administrative assistant, Wendy Smith, at McMechen Hall 507A or via email at Wendy.Smith@morgan.edu."
+      },
+      {
+        "role": "user",
+        "content": "So I would say, hey, my name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Working. you can choose anything. I would like to choose study mode."
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Study mode."
+      },
+      {
+        "role": "user",
+        "content": "My name is Working. That's a different mode. So if I want to move to different mode, let's say switch to general mode"
+      },
+      {
+        "role": "assistant",
+        "content": "To switch to general mode, simply stop the current mode and initiate the desired mode. If you need assistance with a specific action, let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Working. Can you switch to general mode?"
+      },
+      {
+        "role": "assistant",
+        "content": "I'm already in general mode! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Working. So now you can asset anything. So let's say."
+      },
+      {
+        "role": "assistant",
+        "content": "Sure! What would you like to know or do?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Working. Explain what is mathematics?"
+      },
+      {
+        "role": "assistant",
+        "content": "Mathematics is the abstract science of numbers, quantity, and space, using symbols and rules to formulate and solve problems. It encompasses various fields such as arithmetic, algebra, geometry, and calculus, providing essential tools for understanding patterns and relationships in the world."
+      },
+      {
+        "role": "user",
+        "content": "My name is Working. Exit."
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. So that's what I'm trying to figure out. So I just don't want it to stop. Even though there's a stop, I'm talking like this. I don't want it to stop."
+      },
+      {
+        "role": "assistant",
+        "content": "I understand you want to keep the conversation flowing without interruptions. How can I assist you further?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. When is the start date of Fall 2025?"
+      },
+      {
+        "role": "assistant",
+        "content": "The start date for the Fall 2025 term at Morgan State University is August 27, 2025."
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. I don't know what time you have to leave. So you will give me your... Yeah, we'll get it together."
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like your question is incomplete or unclear. If you are looking for specific information about Morgan State University's Computer Science department, such as academic advising, course offerings, or the academic calendar, please provide more details or clarify your question so I can assist you better."
+      },
+      {
+        "role": "user",
+        "content": "Who's the chair of computer science?"
+      },
+      {
+        "role": "assistant",
+        "content": "The chair of the Computer Science Department at Morgan State University is Professor Shuangbao \"Paul\" Wang."
+      },
+      {
+        "role": "user",
+        "content": "Hmm, that makes sense. When is the start date of fall 2025?"
+      },
+      {
+        "role": "assistant",
+        "content": "The start date for the Fall 2025 term at Morgan State University is August 27, 2025."
+      },
+      {
+        "role": "user",
+        "content": "me what are the prerequisite for the course COSC 220."
+      },
+      {
+        "role": "assistant",
+        "content": "The prerequisites for the course COSC 220 (Data Structures and Algorithms Analysis) are:\n\n- COSC 112 (Grade \u201cC\u201d or higher)"
+      },
+      {
+        "role": "user",
+        "content": "Anything, anything you can ask. So for the database regarding everything, Morgan, is it also using the OpenAI or Propel? Yeah, so it's using like a vector data."
+      },
+      {
+        "role": "assistant",
+        "content": "The information provided does not specify the use of OpenAI, Propel, or vector databases for managing data at Morgan State University. The context focuses on the faculty, research areas, student organizations, and various resources available at the university. If you are interested in specific technologies or databases used by the university, it would be best to contact the relevant department directly for more detailed information."
+      },
+      {
+        "role": "user",
+        "content": "database"
+      },
+      {
+        "role": "assistant",
+        "content": "Morgan State University's Earl S. Richardson Library offers a variety of resources related to databases. Students and faculty can access online collections, periodicals, and databases through the library's READ (Online Collections) feature. For more information and to view the available databases, you can visit the following link: [READ (Online Collections)](https://www.morgan.edu/library/collections/databases-a-z.html)."
+      },
+      {
+        "role": "user",
+        "content": "on this it can detect it can it can it can detect like a surrounding and if there is an object or"
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like you are asking about a technology or system that can detect its surroundings and identify objects. While the context provided does not specifically address this, technologies such as computer vision and sensor-based systems are commonly used for object detection and environmental awareness. These technologies are often integrated into fields like robotics, autonomous vehicles, and smart devices. If you are interested in learning more about these technologies, you might consider exploring courses related to artificial intelligence, machine learning, or computer vision, which could be part of the upcoming \"Cybersecurity and AI\" track at Morgan State University."
+      },
+      {
+        "role": "user",
+        "content": "Stand up! Stand up! Can you stand up?"
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like your question might be a reference to a song or a phrase, but it doesn't directly relate to the information provided about Morgan State University's Computer Science department. If you have any questions about the resources, events, or academic policies at Morgan State University, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "Hey, my name is"
+      },
+      {
+        "role": "assistant",
+        "content": "Hello! What's your name?"
+      },
+      {
+        "role": "user",
+        "content": "I would like to choose General..."
+      },
+      {
+        "role": "assistant",
+        "content": "Sure! What would you like to know or do in the General category?"
+      },
+      {
+        "role": "user",
+        "content": "What is the capital city of the United States?"
+      },
+      {
+        "role": "assistant",
+        "content": "The capital city of the United States is Washington, D.C."
+      },
+      {
+        "role": "user",
+        "content": "Can you stand up?"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "What are the questions I asked you?"
+      },
+      {
+        "role": "assistant",
+        "content": "I don't have access to previous interactions or questions you've asked. How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "Who is the President of the United States?"
+      },
+      {
+        "role": "assistant",
+        "content": "As of October 2023, the President of the United States is Joe Biden."
+      },
+      {
+        "role": "user",
+        "content": "What other questions I asked you?"
+      },
+      {
+        "role": "assistant",
+        "content": "I'm unable to recall previous questions or conversations. Each interaction is treated independently for privacy and security reasons."
+      },
+      {
+        "role": "user",
+        "content": "Thanks for watching and don't forget to like and subscribe!"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching the video."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you need anything else, feel free to ask."
+      },
+      {
+        "role": "user",
+        "content": "\u3054\u8996\u8074\u3042\u308a\u304c\u3068\u3046\u3054\u3056\u3044\u307e\u3057\u305f"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "Thanks for watching!"
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "Thanks for watching!"
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you need any assistance or have questions, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. \u3054\u8996\u8074\u3042\u308a\u304c\u3068\u3046\u3054\u3056\u3044\u307e\u3057\u305f\u3002"
+      },
+      {
+        "role": "assistant",
+        "content": "\u7533\u3057\u8a33\u3042\u308a\u307e\u305b\u3093\u304c\u3001\u63d0\u4f9b\u3055\u308c\u305f\u60c5\u5831\u3067\u306f\u300c\u3054\u8996\u8074\u3042\u308a\u304c\u3068\u3046\u3054\u3056\u3044\u307e\u3057\u305f\u300d\u3068\u3044\u3046\u30d5\u30ec\u30fc\u30ba\u306b\u95a2\u9023\u3059\u308b\u5177\u4f53\u7684\u306a\u60c5\u5831\u306f\u3042\u308a\u307e\u305b\u3093\u3002\u3082\u3057Morgan State University\u306e\u7279\u5b9a\u306e\u60c5\u5831\u3092\u304a\u63a2\u3057\u3067\u3042\u308c\u3070\u3001\u3082\u3046\u5c11\u3057\u8a73\u7d30\u3092\u6559\u3048\u3066\u3044\u305f\u3060\u3051\u308c\u3070\u3068\u601d\u3044\u307e\u3059\u3002"
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. What?"
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like your question might be incomplete or unclear. Could you please provide more details or clarify what specific information you are looking for regarding the Morgan State University Computer Science department? Whether it's about courses, research areas, student organizations, or administrative contacts, I'm here to help!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. Who is the chairman of the computer science department at Morgan State University?"
+      },
+      {
+        "role": "assistant",
+        "content": "The chairman of the Computer Science Department at Morgan State University is Shuangbao \"Paul\" Wang."
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. Can you tell me more details about him?"
+      },
+      {
+        "role": "assistant",
+        "content": "Certainly! Based on the context provided, here is more information about Roshan Paudel:\n\n- **Title and Role**: Roshan Paudel is the Coordinator of the MS in Bioinformatics Program and a Professor of Practice at Morgan State University.\n- **Office Location**: His office is located in McMechen Hall 507D.\n- **Contact Information**: You can reach him by phone at (443) 885-3096 or via email at Roshan.Paudel@morgan.edu.\n- **Research Interests**: Roshan Paudel specializes in high-performance computing, bioinformatics, next-generation sequencing analysis, computational biology, and computational modeling. His primary research interest is in developing stochastic models of calcium and ion channels in cardiac myocytes.\n\nIf you need more specific information or have other questions, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. Do you remember every question I asked you up until now?"
+      },
+      {
+        "role": "assistant",
+        "content": "No, I do not have the ability to remember past interactions or questions. Each session is independent, and I do not retain any information from previous conversations. If you have any questions, feel free to ask, and I'll do my best to assist you based on the current context."
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. Okay, what about what is my name?"
+      },
+      {
+        "role": "assistant",
+        "content": "I'm sorry, but I don't have access to personal information such as your name. If you have any questions about Morgan State University's Computer Science department, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. Okay, thank you so much. Exit."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you have any more questions in the future, feel free to ask. Have a great day!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. I would like to choose general mode."
+      },
+      {
+        "role": "assistant",
+        "content": "Please specify the action you'd like NAO to perform in general mode."
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. Can you tell me some interesting things?"
+      },
+      {
+        "role": "assistant",
+        "content": "Did you know that honey never spoils? Archaeologists have found pots of honey in ancient Egyptian tombs that are over 3,000 years old and still perfectly edible!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. Who do you think will win in a race, a cat or a dog?"
+      },
+      {
+        "role": "assistant",
+        "content": "It often depends on the specific breeds involved, but generally, cats can reach speeds of up to 30 mph, while dogs can vary widely, with some breeds like Greyhounds reaching up to 45 mph. In a typical race, a fast dog might win, but a quick cat could surprise!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. Subs by www.zeoranger.co.uk"
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like you're referencing a website. How can I assist you further?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. What do you know about science?"
+      },
+      {
+        "role": "assistant",
+        "content": "Science is the systematic study of the natural world through observation and experimentation, aiming to understand and explain phenomena. It encompasses various fields such as physics, chemistry, biology, and earth sciences."
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. You"
+      },
+      {
+        "role": "assistant",
+        "content": "Got it! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. Can you tell me more about United States?"
+      },
+      {
+        "role": "assistant",
+        "content": "The United States is a federal republic consisting of 50 states, a federal district, and several territories, known for its diverse culture, economy, and political influence. It is the third-largest country by land area and population, with major cities including New York, Los Angeles, and Chicago."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. I would like to choose general mode, please"
+      },
+      {
+        "role": "assistant",
+        "content": "I can assist with various actions in general mode. Please specify what you would like NAO to do!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. Can you tell me some interesting facts about the United States of America?"
+      },
+      {
+        "role": "assistant",
+        "content": "The United States is home to the world's largest economy and is known for its cultural diversity, with over 350 languages spoken across the country. Additionally, it has the most Nobel Prize winners in various fields, reflecting its significant contributions to science, literature, and peace."
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. Tell me what is science and why is it so important?"
+      },
+      {
+        "role": "assistant",
+        "content": "Science is the systematic study of the natural world through observation and experimentation, aimed at understanding and explaining phenomena. It is important because it drives innovation, improves quality of life, and helps us make informed decisions based on evidence."
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. Can you tell me what is Turing machine?"
+      },
+      {
+        "role": "assistant",
+        "content": "A Turing machine is a theoretical computing model that consists of an infinite tape, a tape head that reads and writes symbols, and a set of rules that dictate its operations. It is used to define the limits of what can be computed and serves as a foundation for modern computer science."
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. I don't like when you're answering me standing up. I don't like it. What are you gonna do now?"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. I would like to switch to study mode, please."
+      },
+      {
+        "role": "assistant",
+        "content": "I don't have a specific \"study mode,\" but I can assist you with study-related tasks or activities. Let me know how you'd like to proceed!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. Exit the mode."
+      },
+      {
+        "role": "assistant",
+        "content": "It seems that NAO is not currently in a mode that requires exiting. If you need any specific action, please let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. Exit the mode. Exit the mode."
+      },
+      {
+        "role": "assistant",
+        "content": "It seems there might be a misunderstanding, as I currently don't have the capability to exit a mode. If you need assistance with something else, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. to study more."
+      },
+      {
+        "role": "assistant",
+        "content": "What would you like to study more about?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. End the chat"
+      },
+      {
+        "role": "assistant",
+        "content": "If you need anything else, feel free to ask. Have a great day!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. "
+      },
+      {
+        "role": "assistant",
+        "content": "Understood! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. Stop and exit."
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "Hey, my name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Hi Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. I would like to choose study mode."
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Study mode."
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. Hey, uh, what are these signs?"
+      },
+      {
+        "role": "assistant",
+        "content": "These signs are commands for NAO, a humanoid robot, to perform various actions like waving, dancing, or moving. They allow for interactive and engaging demonstrations of the robot's capabilities."
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. I want to stop them all."
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you, Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. Morgan mode."
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Chatbot mode. It seems like you're referring to \"Morgan mode,\" but the context provided does not specifically mention a \"Morgan mode.\" If you could provide more details or clarify what you mean by \"Morgan mode,\" I would be happy to help with the information available about Morgan State University's Computer Science Department or any other related queries."
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. How are you?"
+      },
+      {
+        "role": "assistant",
+        "content": "I'm just a robot, but I'm ready to assist you! How can I help today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. I want to switch to..."
+      },
+      {
+        "role": "assistant",
+        "content": "What would you like to switch to?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. I would like to switch to Morgan Assist mode."
+      },
+      {
+        "role": "assistant",
+        "content": "I'm unable to switch to Morgan Assist mode, but I can help you with various actions or information. Let me know what you need!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. Can I switch to Morgan chatbot mode?"
+      },
+      {
+        "role": "assistant",
+        "content": "I'm unable to switch to Morgan chatbot mode, but I can assist you with any questions or tasks you have!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. \u3054\u8996\u8074\u3042\u308a\u304c\u3068\u3046\u3054\u3056\u3044\u307e\u3057\u305f"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. \u3054\u8996\u8074\u3042\u308a\u304c\u3068\u3046\u3054\u3056\u3044\u307e\u3057\u305f"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "Hey, my name is Max."
+      },
+      {
+        "role": "assistant",
+        "content": "Hi Max! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "Morgan"
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Chatbot mode. What\u2019s on your mind?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. Who is the chairperson of computer science department?"
+      },
+      {
+        "role": "assistant",
+        "content": "The chairperson of the Computer Science Department at Morgan State University is Professor Shuangbao \"Paul\" Wang."
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. Okay, great."
+      },
+      {
+        "role": "assistant",
+        "content": "I'm glad you found the information helpful! If you have any more questions or need further assistance regarding Morgan State University's Computer Science department, feel free to ask."
+      },
+      {
+        "role": "user",
+        "content": "My name is Trying. I was wondering uh it's okay just end the mode and then"
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like your question was cut off. Could you please provide more details or clarify what you need assistance with regarding Morgan State University's Computer Science department? Whether it's about forms, academic advising, or course-related inquiries, I'm here to help!"
       }
     ]
   },
@@ -3371,6 +4531,166 @@
       {
         "role": "assistant",
         "content": "Sure, Master! You can simply close the chat or window to end it."
+      },
+      {
+        "role": "user",
+        "content": "Who is the chairman of the computer science department at Morgan State University?"
+      },
+      {
+        "role": "assistant",
+        "content": "The chairman of the Computer Science Department at Morgan State University is Professor Shuangbao \"Paul\" Wang."
+      },
+      {
+        "role": "user",
+        "content": "I would like to know more information about Professor Paul Wang."
+      },
+      {
+        "role": "assistant",
+        "content": "Professor Shuangbao \"Paul\" Wang is the Professor and Chair of the Computer Science Department at Morgan State University. His office is located in McMechen Hall 507. You can contact him via phone at (443) 885-4503 or email at shuangbao.wang@morgan.edu. His research interests include quantum cryptography, secure architecture, AI and machine learning, IoT and cyber-physical systems, and video indexing. If you need more detailed information or have specific inquiries, you can reach out to him directly."
+      },
+      {
+        "role": "user",
+        "content": "Can you tell me when is the Midterm Week for Fall 2025?"
+      },
+      {
+        "role": "assistant",
+        "content": "The Midterm Examination week for Fall 2025 at Morgan State University is scheduled from October 13, 2025, to October 18, 2025."
+      },
+      {
+        "role": "user",
+        "content": "Thank you so much, I would like to exit the mood."
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like you're referring to a specific context or platform where you want to exit a particular mode or mood. If you're using a specific system or application, you might need to look for an \"exit\" or \"log out\" option within the interface. If you need further assistance, please provide more details about the platform or context you're referring to, and I'll do my best to help!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Master."
+      },
+      {
+        "role": "assistant",
+        "content": "Hello, Master! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. I would like to choose general mode."
+      },
+      {
+        "role": "assistant",
+        "content": "Please specify the action you would like to perform in general mode."
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. What is the full form of ATM?"
+      },
+      {
+        "role": "assistant",
+        "content": "The full form of ATM is Automated Teller Machine. It is a machine that allows people to perform banking transactions without the need for a human teller."
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. What is quantum computing and is it gonna be useful in the coming years?"
+      },
+      {
+        "role": "assistant",
+        "content": "Quantum computing is a type of computation that utilizes quantum bits (qubits) to perform calculations at speeds unattainable by classical computers. It is expected to revolutionize fields such as cryptography, optimization, and drug discovery in the coming years."
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. Yeah!"
+      },
+      {
+        "role": "assistant",
+        "content": "What would you like to do?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. I would like to switch to study mode, please."
+      },
+      {
+        "role": "assistant",
+        "content": "I'm unable to switch to study mode, but I can assist you with any questions or tasks you have!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. Change the mood."
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. Switch to therapist mode."
+      },
+      {
+        "role": "assistant",
+        "content": "I'm now in therapist mode. How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. What are your suggestions for someone who is looking to build a healthy lifestyle?"
+      },
+      {
+        "role": "assistant",
+        "content": "Incorporate regular physical activity, balanced nutrition, and sufficient sleep into your daily routine. Additionally, practice mindfulness or stress management techniques to enhance overall well-being."
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. Can you create me?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can assist you with various tasks or actions! What would you like me to do?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. Can you create me a workout routine for 5 minutes?"
+      },
+      {
+        "role": "assistant",
+        "content": "Here's a quick 5-minute workout routine: \n\n1. 1 minute of jumping jacks.\n2. 1 minute of push-ups.\n3. 1 minute of squats.\n4. 1 minute of high knees.\n5. 1 minute of planks. \n\nRepeat each exercise for 1 minute without rest in between."
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. Thank you so much. It was nice talking to you. See you later. Stop"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Master."
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you, Master! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. I would like to choose broker mode."
+      },
+      {
+        "role": "assistant",
+        "content": "\u2705 Switched to Broker mode. Broker mode is not available; please choose another mode or action."
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. No, you know what, goodbye."
+      },
+      {
+        "role": "assistant",
+        "content": "Goodbye! If you need anything in the future, feel free to ask."
+      },
+      {
+        "role": "user",
+        "content": "My name is Master. Exit the mode and stop."
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
       }
     ]
   },
@@ -4324,6 +5644,86 @@
       {
         "role": "assistant",
         "content": "Goodbye! If you have any more questions in the future, feel free to ask. Have a great day!"
+      },
+      {
+        "role": "user",
+        "content": "What time is it?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't provide the current time. Please check a clock or device for the exact time."
+      },
+      {
+        "role": "user",
+        "content": "What time is it?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't check the current time. Please check a clock or your device for the time."
+      },
+      {
+        "role": "user",
+        "content": "What is it today?"
+      },
+      {
+        "role": "assistant",
+        "content": "Today's date is October 5, 2023."
+      },
+      {
+        "role": "user",
+        "content": "Time's up."
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "Exit what's the weather today?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't check the weather, but you can use a weather app or website for the latest updates."
+      },
+      {
+        "role": "user",
+        "content": "what is the time"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't provide the current time. Please check a clock or your device for the time."
+      },
+      {
+        "role": "user",
+        "content": "What day is it today now?"
+      },
+      {
+        "role": "assistant",
+        "content": "Today is October 5, 2023."
+      },
+      {
+        "role": "user",
+        "content": "Ok terima kasih, saya ingin menghentikan mod ini."
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "I would like to end it. Stop!"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "Exit the mode."
+      },
+      {
+        "role": "assistant",
+        "content": "I am not currently in a mode that requires exiting. If you need me to perform a specific action, please let me know!"
       }
     ]
   },
@@ -4513,6 +5913,118 @@
       {
         "role": "assistant",
         "content": "As a junior in the Computer Science department at Morgan State University, you should be aware of the following requirements and opportunities:\n\n1. **Junior and Senior Level Requirements**: You are required to take all your junior and senior level courses in your major at Morgan State University unless you have prior written permission from the Dean to take courses elsewhere.\n\n2. **Cumulative and Major GPA**: You must maintain a cumulative average of 2.0 or better and a major average of 2.0 or better, with no outstanding grades below 'C' in your major courses.\n\n3. **Senior Departmental Comprehensive Examination**: You will need to pass this examination as part of your graduation requirements.\n\n4. **Continuing Professional Development**: Recognize the importance of engaging in continuing professional development, which is part of the learning outcomes for your program.\n\n5. **Honors Program**: If you are academically distinguished, consider participating in the SCMNS Honors Program, which offers enhanced academic challenges and enrichment opportunities.\n\n6. **Peer B.E.A.R.S. Mentoring Program**: You might have the opportunity to become a mentor for first-year students, helping them navigate their first year and enhancing your leadership skills.\n\n7. **Tutoring and Academic Support**: Utilize resources like the Center for Academic Success and Achievement (CASA) for additional academic support.\n\n8. **Senior Project**: As you approach your senior year, you will need to complete a Senior Project, which is a significant component of your degree program.\n\nFor more detailed information, you can refer to the Morgan State University Undergraduate Catalog or contact your academic advisor."
+      },
+      {
+        "role": "user",
+        "content": "What is the starting of the class?"
+      },
+      {
+        "role": "assistant",
+        "content": "The context provided does not specify the exact start dates or times for classes at Morgan State University's Computer Science department. Typically, universities have set academic calendars that outline the start and end dates for each semester, but this information is not included in the context. For specific start dates, you would need to refer to Morgan State University's official academic calendar or contact the department directly."
+      },
+      {
+        "role": "user",
+        "content": "Thank you for watching the video."
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you have any questions or need further assistance regarding the content of the video or anything related to Morgan State University's Computer Science department, feel free to ask."
+      },
+      {
+        "role": "user",
+        "content": "What are you doing?"
+      },
+      {
+        "role": "assistant",
+        "content": "I am here to assist you by providing information and answering questions related to Morgan State University's Computer Science department and its resources. If you have any specific questions or need information, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "What is your name?"
+      },
+      {
+        "role": "assistant",
+        "content": "I am a virtual assistant and do not have a personal name. However, I am here to help you with information related to the Morgan State University Computer Science department. If you have any questions, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "Thanks for watching!"
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you have any questions or need further assistance regarding Morgan State University's Computer Science department or any other topic, feel free to ask."
+      },
+      {
+        "role": "user",
+        "content": "Can you hear me?"
+      },
+      {
+        "role": "assistant",
+        "content": "I'm here to help! While I can't hear you, I can certainly read and respond to your messages. How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "Who are you?"
+      },
+      {
+        "role": "assistant",
+        "content": "I am a helpful assistant trained to provide information based on the context provided, specifically about the Morgan State University Computer Science department. How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "Can I ask you about something?"
+      },
+      {
+        "role": "assistant",
+        "content": "Of course! Feel free to ask any questions you have, especially if they relate to Morgan State University's Computer Science department or any other topic within my training data. I'm here to help!"
+      },
+      {
+        "role": "user",
+        "content": "so you can answer the questions. Are you listening to me?"
+      },
+      {
+        "role": "assistant",
+        "content": "Yes, I'm here to help. Please feel free to ask any questions you have about the Morgan State University Computer Science department, and I'll do my best to provide you with the information you need."
+      },
+      {
+        "role": "user",
+        "content": "Okay, that was nice. Can I ask you what I should know before I join my freshman year on Morgan State University?"
+      },
+      {
+        "role": "assistant",
+        "content": "Before joining your freshman year at Morgan State University, particularly if you're entering the Computer Science Department, here are some key things you should know:\n\n1. **Orientation and Freshman Programs**: \n   - You will need to attend Freshman Orientation (ORNS 106), which is a 1-credit course designed to help you transition into university life.\n\n2. **General Education Requirements**: \n   - You will be required to complete 44 credits of general education courses, including English Composition, Mathematics, and various other disciplines to ensure a well-rounded education.\n\n3. **Academic Advising**: \n   - The Computer Science faculty serve as academic advisors during the Academic Advising Period. They will assist you with course planning and registration. It's important to know who your advisor is and utilize their guidance.\n\n4. **Honors and Support Programs**: \n   - If you are academically distinguished, consider joining the SCMNS Honors Program for enhanced academic challenges and opportunities. \n   - The Peer B.E.A.R.S. Mentoring Program is available to help you navigate your first year with support from upperclassmen.\n\n5. **Course Load and Curriculum**: \n   - Be prepared for a mix of theoretical and practical courses. The curriculum is designed to provide a balance that supports career readiness.\n\n6. **Departmental Resources**: \n   - Familiarize yourself with the department's resources, including the Center for Academic Success and Achievement (CASA), which offers tutoring and academic support.\n\n7. **Contact Information**: \n   - Keep handy the contact information for the Computer Science Department for any queries: \n     - Address: 1700 E Cold Spring Lane, Baltimore, MD 21251, McMechen 507 Suite\n     - Phone: (443) 885-3962\n     - Email: compsci@morgan.edu\n\n8. **Engagement and Extracurriculars**: \n   - Engage in extracurricular activities and social events to enrich your university experience and build a network.\n\n9. **Academic Policies**: \n   - Understand the academic policies, including attendance requirements for on-site classes and the process for academic appeals if needed.\n\n10. **Preparation for Classes**: \n    - Review the course syllabus for each class to understand the expectations and office hours of your professors.\n\nBy keeping these points in mind, you can better prepare for a successful start to your academic journey at Morgan State University."
+      },
+      {
+        "role": "user",
+        "content": "Thanks for watching and don't forget to like and subscribe!"
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like your message is intended for a different context, possibly related to a video or social media platform. If you have any questions or need information about Morgan State University's Computer Science department or related services, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "Thanks for watching and don't forget to like and subscribe!"
+      },
+      {
+        "role": "assistant",
+        "content": "It seems like your message might be intended for a different context, such as a video or social media post. If you have any questions or need information about Morgan State University's Computer Science department or related services, feel free to ask!"
+      },
+      {
+        "role": "user",
+        "content": "\uc2dc\uccad\ud574 \uc8fc\uc154\uc11c \uac10\uc0ac\ud569\ub2c8\ub2e4."
+      },
+      {
+        "role": "assistant",
+        "content": "\uc8c4\uc1a1\ud558\uc9c0\ub9cc Morgan State University\uc758 \ucef4\ud4e8\ud130 \uacfc\ud559 \ubd80\uc11c \uc815\ubcf4\uc5d0 \ub300\ud55c \uc9c8\ubb38\uc744 \ud574\uc8fc\uc2dc\uba74 \ub3c4\uc6c0\uc744 \ub4dc\ub9b4 \uc218 \uc788\uc2b5\ub2c8\ub2e4. \ucd94\uac00 \uc815\ubcf4\ub098 \uc9c8\ubb38\uc774 \uc788\uc73c\uc2dc\uba74 \uc5b8\uc81c\ub4e0\uc9c0 \ub9d0\uc500\ud574 \uc8fc\uc138\uc694."
+      },
+      {
+        "role": "user",
+        "content": "My name is A. Give me a short explanation of what classes I should take if I'm a computer science major."
+      },
+      {
+        "role": "assistant",
+        "content": "As a Computer Science major at Morgan State University, you should follow a structured curriculum that includes a mix of general education, supporting courses, and major-specific courses. Here's a brief overview of the classes you should take:\n\n1. **General Education Requirements (44 credits):** These include courses like Composition I & II (ENGL 101 & 102), Calculus I (MATH 241), and various general education courses in humanities, arts, biological sciences, social sciences, and cultural awareness.\n\n2. **Supporting Courses (11 credits):** These are foundational courses that support your major, including Calculus I & II (MATH 241 & 242), Linear Algebra I (MATH 312), and Applied Probability and Statistics (MATH 331).\n\n3. **Computer Science Major Requirements (65 credits):** These are core courses specific to your major, such as:\n   - Introduction to Computer Science I & II (COSC 111 & 112)\n   - Data Structures and Algorithms Analysis (COSC 220)\n   - Computer Systems & Digital Logic (COSC 241)\n   - Discrete Structures (COSC 281)\n   - Software Engineering (COSC 458)\n   - Database Design (COSC 459)\n   - Operating Systems (COSC 354)\n   - Additional electives in computer science.\n\n4. **Senior Project:** You will also need to complete a senior project (COSC 490) as part of your degree requirements.\n\nMake sure to check prerequisites for each course and consult with your academic advisor to tailor your course selection to your academic and career goals."
       }
     ]
   },
@@ -4758,104 +6270,974 @@
       }
     ]
   },
-  "friend": {
-    "name": null,
+  "working": {
+    "name": "Not",
     "history": [
       {
         "role": "user",
-        "content": "You know now I don't like the way you are standing up in front of me. Why are you even standing up?"
+        "content": "It's a little weird to pronounce it."
       },
       {
         "role": "assistant",
-        "content": "It seems like there might be a misunderstanding. As a virtual assistant, I don't have a physical presence, so I can't stand up or sit down. I'm here to provide information and assistance based on the context provided. If you have any questions or need help with something specific, feel free to ask!"
+        "content": "Could you clarify what you're finding weird to pronounce?"
       },
       {
         "role": "user",
-        "content": "I think for emotions, my best and easiest way to do it is this."
+        "content": "Hey, I have an interview. Can you help me prepare for it?"
       },
       {
         "role": "assistant",
-        "content": "It seems like you might be looking for a way to express or manage emotions, possibly in the context of a project or course. If you are referring to a project related to a course at Morgan State University, such as a senior project or a course involving emotional intelligence or similar topics, you might want to consider the following steps:\n\n1. **Identify the Course**: Determine if your project or topic is related to a specific course. For example, if it's related to a senior project, you might be looking at courses like COSC 490 (Senior Project).\n\n2. **Consult Your Advisor**: If this is part of a course requirement or project, it might be beneficial to discuss your approach with your academic advisor or course instructor to ensure it aligns with the course objectives.\n\n3. **Research and Resources**: Utilize available resources such as academic journals, books, or online resources to gather information on how emotions can be effectively managed or expressed in your context.\n\n4. **Practical Application**: Consider practical ways to apply your understanding of emotions, whether through a project, presentation, or research paper.\n\n5. **Feedback**: Seek feedback from peers or instructors to refine your approach.\n\nIf you need further assistance or specific guidance related to your course or project, you might want to contact Ms. Wendy Smith, the Administrative Assistant for the Computer Science department, at Wendy.Smith@morgan.edu. She can provide more specific guidance or direct you to the appropriate resources or personnel."
+        "content": "Of course! What type of interview are you preparing for?"
       },
       {
         "role": "user",
-        "content": "Who is the chairman of computer science department at Morgan State University?"
+        "content": "It is an interview for behavioral interview for John Hancock company So can you ask me one question at a time just ask me one behavioral questions, then we move on to the next question"
       },
       {
         "role": "assistant",
-        "content": "The chairman of the Computer Science Department at Morgan State University is Professor Shuangbao \"Paul\" Wang."
+        "content": "Sure! Here's your first behavioral question: \n\n**Can you describe a time when you faced a significant challenge at work and how you overcame it?**"
       },
       {
         "role": "user",
-        "content": "When is the start date of Fall 2025?"
+        "content": "Yes, so the time when I faced a significant challenge was when I applied for this research assistant job. So what it was like, I had a previous experience on working with application development and web app. So all of those things into consideration, I was expecting to get a kind of like a role on this kind of field. But my mentor, my professor just gave me, out of nowhere, just gave me and wanted me to work on robotics, which I had very little knowledge about. But instead of letting it be a challenge, what I did was I kind of went on the internet. I started looking up videos on YouTube, you know, and then I also looked up documentations and PDFs, along with like research papers that previously people worked on. And I also had a mentor who worked on it before me, like for the other semester, and I reached out to him, scheduled like a call with him, and I also asked him all the tech stack that it took. Then I started learning about all the different tech stacks, like PuTTY, WinSCP, and the FLAG server, and everything about how it connected. And then I finally, after a while, I got used to it. I used to take notes, I used to memorize some stuff, and I also used to like code like smaller chunks first, before I finally went ahead and started like designing a few movements, like stand up, sit down. Now I have actually implemented a lot of things to the robot. The robot can actually talk back, it can have a conversation with you. It can also do certain tasks that you let it, like go there and do something, dance, and then just sit down, and then don't talk. If I say it like that, it can also understand everything. So yeah, that was one of the times when I felt a little challenged, and that's how I overcame it."
       },
       {
         "role": "assistant",
-        "content": "The start date for the Fall 2025 term at Morgan State University is August 27, 2025."
+        "content": "It sounds like you faced a significant challenge when transitioning to robotics, but you overcame it by leveraging online resources, reaching out to a mentor, and gradually learning the necessary tech stacks. Your hard work paid off, as you've successfully implemented various functionalities in the robot."
       },
       {
         "role": "user",
-        "content": "I keep failing my exam. Who should I go consult with?"
+        "content": "What happened to the next questions? Where are my next questions?"
       },
       {
         "role": "assistant",
-        "content": "If you are a student in the Computer Science department at Morgan State University and are facing difficulties with your exams, you should consult with your assigned academic advisor. Your advisor can provide guidance and support to help you improve your academic performance. The advisor assignment is based on the first letter of your last name. Here is the list of advisors:\n\n- Last Name A: Dr. Md Rahman\n- Last Name B: Dr. Monireh Dabaghchian\n- Last Name C: Dr. Eric Sakk\n- Last Names D, E, F: Dr. Vahid Heydari\n- Last Name G: Dr. Guobin Xu\n- Last Name H: Dr. Jamell Dacon\n- Last Names I-L: Dr. Naja Mack\n- Last Name M: Dr. Timothy Oladunni or Adetifa Oluwole\n- Last Name N: Dr. Sam Tannouri\n- Last Name O: Dr. Jin Guo\n- Last Names PQR: Ms. Grace Steele\n- Last Name S: Dr. Vojislav Stojkovic\n- Last Name T: Dr. Amjad Ali\n- Last Names U-Z: Dr. Roshan Paudel\n\nYou can find your advisor's contact information in Degree Works or Navigate (EAB). Additionally, you may also consider reaching out to your course instructor for specific guidance related to the course material. If you need further assistance, you can email the academic advising office at compsci@morgan.edu."
+        "content": "It seems like your next questions were not received. Please feel free to ask them again!"
       },
       {
         "role": "user",
-        "content": "Can I have the contact information of Dr. Paul Wang?"
+        "content": "You are supposed to ask me your next questions, give me another behavioral question and tell me how I..."
       },
       {
         "role": "assistant",
-        "content": "Certainly! Here is the contact information for Dr. Shuangbao \"Paul\" Wang:\n\n- Title: Professor and Chair\n- Office: McMechen Hall 507\n- Phone: (443) 885-4503\n- Email: shuangbao.wang@morgan.edu"
+        "content": "Can you describe a time when you had to overcome a significant challenge at work? How did you handle it?"
       },
       {
         "role": "user",
-        "content": "\uace0\ub9d9\uc2b5\ub2c8\ub2e4."
+        "content": "I just answered the same question, didn't you see my long answer to that?"
       },
       {
         "role": "assistant",
-        "content": "\ucc9c\ub9cc\uc5d0\uc694! \ub3c4\uc6c0\uc774 \ud544\uc694\ud558\uc2dc\uba74 \uc5b8\uc81c\ub4e0\uc9c0 \ub9d0\uc500\ud574 \uc8fc\uc138\uc694."
+        "content": "I apologize for the oversight. How can I assist you further?"
       },
       {
         "role": "user",
-        "content": "So let me ask, who is the chairman of computer science department?"
+        "content": "Okay, now ask me a different question."
       },
       {
         "role": "assistant",
-        "content": "The chairman of the Computer Science Department at Morgan State University is Professor Shuangbao \"Paul\" Wang."
+        "content": "What is your favorite hobby or activity?"
       },
       {
         "role": "user",
-        "content": "You can ask anything you want."
+        "content": "I want you to ask me a behavioral interview questions not"
       },
       {
         "role": "assistant",
-        "content": "How can I assist you with information regarding Morgan State University's Computer Science department? Feel free to ask about course details, credit policies, contact information, or any other specific inquiries you might have."
+        "content": "Sure! Can you describe a time when you faced a challenging situation at work and how you handled it?"
       },
       {
         "role": "user",
-        "content": "Who is the..."
+        "content": "My name is Not. You can't even talk. I'm not going to talk to you."
       },
       {
         "role": "assistant",
-        "content": "It seems your question was cut off. Could you please provide more details or complete your question so I can assist you better?"
+        "content": "I understand. If you change your mind, I'm here to help!"
+      }
+    ]
+  },
+  "archimedes": {
+    "name": "Not",
+    "history": [
+      {
+        "role": "user",
+        "content": "My name is Archimedes."
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you, Archimedes! How can I assist you today?"
       },
       {
         "role": "user",
-        "content": "What is internships and how can I get one?"
+        "content": "My name is Archimedes. I would like to choose general mode."
       },
       {
         "role": "assistant",
-        "content": "Internships are structured work experiences that allow students to gain practical experience in their field of study, explore career options, and network with professionals in the industry. They are an excellent way to apply what you've learned in the classroom to real-world situations, develop new skills, and enhance your resume.\n\nTo get an internship, you can follow these steps:\n\n1. **Complete the Internship Form**: At Morgan State University, you can start by completing the Internship and Work Experience Form. This form helps the university share internship opportunities with you and understand the opportunities you have already engaged in. You can find the form [here](https://www.morgan.edu/school-of-computer-mathematical-and-natural-sciences/students/scmns-advising/internship-form).\n\n2. **Meet with Your Academic Advisor**: Your academic advisor is a valuable resource for exploring and discussing various internship options. They can provide guidance on class selection, internships, research, and other key resources. It's important to meet with your advisor each semester for advisement. You can find more information about academic advising [here](https://www.morgan.edu/school-of-computer-mathematical-and-natural-sciences/students/scmns-advising).\n\n3. **Explore Internship Programs**: Morgan State University provides information on various internship and fellowship programs, such as the Google STEP Program, Microsoft Explore Program, Meta University Internship, Code2040 Fellows Program, and HackDiversity. These programs offer structured internship experiences, often with mentorship and leadership training. You can find more details about these programs in the context provided.\n\n4. **Utilize Online Resources**: There are many online platforms and communities that offer internship opportunities, such as the National Society of Black Engineers (NSBE), ColorStack, and Rewriting the Code (RTC). These organizations often provide access to job boards, mentorship, and networking opportunities.\n\n5. **Prepare for Interviews**: Use resources like the Tech Interview Handbook, Interviewing.io, and Pathrise to prepare for technical and behavioral interviews. These resources offer comprehensive guides, mock interviews, and coaching to help you succeed in securing an internship.\n\nBy following these steps and utilizing the resources available at Morgan State University and beyond, you can increase your chances of securing a valuable internship experience."
+        "content": "Please specify the action you'd like NAO to perform in general mode."
       },
       {
         "role": "user",
-        "content": "When is the start date of Fall 2025 and what are you doing?"
+        "content": "My name is Archimedes. Okay, I just want to see how fast your gestures and saying are on sync or not."
       },
       {
         "role": "assistant",
-        "content": "The start date for the Fall 2025 term at Morgan State University is August 27, 2025. As an AI, I am here to assist you by providing information and answering questions based on the data I have been trained on."
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Archimedes. Why would he not get that? He did not answer it."
+      },
+      {
+        "role": "assistant",
+        "content": "He may not have understood the question or might be unsure how to respond. It's also possible he needs more time to think about it."
+      },
+      {
+        "role": "user",
+        "content": "My name is Archimedes. Okay, what about you? Can you answer correctly and what are your gestures?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can provide accurate answers based on my training, and I can perform gestures like waving, clapping, and dancing. Let me know what you'd like to see!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Archimedes. Okay, I like the way you are responding right now. It's kind of quick and efficient."
+      },
+      {
+        "role": "assistant",
+        "content": "Thank you! I'm here to assist you quickly and efficiently."
+      },
+      {
+        "role": "user",
+        "content": "My name is Archimedes. Okay, that is good, but I need some ideas on how to integrate database to remember the chat histories."
+      },
+      {
+        "role": "assistant",
+        "content": "You can use a relational database like MySQL or PostgreSQL to store chat histories, with tables for users and messages. Alternatively, a NoSQL database like MongoDB can be used for more flexible data storage and retrieval."
+      },
+      {
+        "role": "user",
+        "content": "My name is Archimedes. what do you think is the best one to use and give me some resources maybe some YouTube videos to watch so I can gain some knowledge"
+      },
+      {
+        "role": "assistant",
+        "content": "Could you please specify what topic or tool you're referring to? This will help me provide you with the best resources."
+      },
+      {
+        "role": "user",
+        "content": "My name is Archimedes. Baiklah, itu sepatutnya"
+      },
+      {
+        "role": "assistant",
+        "content": "Baiklah, apa yang boleh saya bantu?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Not. I'm not talking to you in a different language. Stop interpreting like I am."
+      },
+      {
+        "role": "assistant",
+        "content": "Understood! How can I assist you today?"
+      }
+    ]
+  },
+  "boonoo": {
+    "name": "A",
+    "history": [
+      {
+        "role": "user",
+        "content": "My name is Boonoo."
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you, Boonoo! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Boonoo. I would like to choose general mode."
+      },
+      {
+        "role": "assistant",
+        "content": "I can assist you with various actions in general mode. What would you like to do?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Boonoo. Name me 5 famous cities of country Nepal."
+      },
+      {
+        "role": "assistant",
+        "content": "Five famous cities in Nepal are Kathmandu, Pokhara, Bhaktapur, Lalitpur (Patan), and Biratnagar. Kathmandu, the capital, is known for its historic sites and vibrant culture."
+      },
+      {
+        "role": "user",
+        "content": "My name is Boonoo. What about Chitwan in Nepal?"
+      },
+      {
+        "role": "assistant",
+        "content": "Chitwan is a popular district in Nepal known for Chitwan National Park, a UNESCO World Heritage site that is home to diverse wildlife, including the endangered one-horned rhinoceros. It offers activities like jungle safaris, bird watching, and cultural experiences with the local Tharu community."
+      },
+      {
+        "role": "user",
+        "content": "My name is Boonoo. kiss of the month"
+      },
+      {
+        "role": "assistant",
+        "content": "The \"Kiss of the Month\" typically refers to a romantic gesture or theme that changes monthly, often celebrated in various cultures or events. It can also relate to specific promotions or features in media and entertainment."
+      },
+      {
+        "role": "user",
+        "content": "My name is Boonoo. Can you speak in Nepali with me?"
+      },
+      {
+        "role": "assistant",
+        "content": "\u092e \u0924\u092a\u093e\u0908\u0902\u0932\u093e\u0908 \u0928\u0947\u092a\u093e\u0932\u0940\u092e\u093e \u0915\u0941\u0930\u093e \u0917\u0930\u094d\u0928 \u0938\u0915\u094d\u091b\u0941\u0964 \u0915\u0947 \u0924\u092a\u093e\u0908\u0902\u0932\u093e\u0908 \u0915\u0941\u0928\u0948 \u0935\u093f\u0936\u0947\u0937 \u0915\u0941\u0930\u093e \u0938\u094b\u0927\u094d\u0928 \u092e\u0928 \u091b?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Boonoo. Tell me something about you."
+      },
+      {
+        "role": "assistant",
+        "content": "I'm NAO, a humanoid robot designed for interaction and assistance. I can perform various actions like dancing, waving, and following your movements!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Boonoo. Uh, can you speak in Nepalese language?"
+      },
+      {
+        "role": "assistant",
+        "content": "\u092e \u0928\u0947\u092a\u093e\u0932\u0940\u092e\u093e \u0915\u0941\u0930\u093e \u0917\u0930\u094d\u0928 \u0938\u0915\u094d\u091b\u0941\u0964 \u0924\u092a\u093e\u0908\u0902\u0932\u093e\u0908 \u0915\u0947 \u0938\u0939\u092f\u094b\u0917 \u091a\u093e\u0939\u093f\u0928\u094d\u091b?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Boonoo. Try to translate those in English Nepalese"
+      },
+      {
+        "role": "assistant",
+        "content": "Sure! Please provide the phrases you would like to translate into Nepali."
+      },
+      {
+        "role": "user",
+        "content": "My name is Boonoo. When you convert it to Nepalese, can you type in Roman Nepalese?"
+      },
+      {
+        "role": "assistant",
+        "content": "Yes, I can type in Roman Nepalese. Just let me know what you would like to convert!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Boonoo. What are you doing today? It's so nice to meet you. Convert, how are you?"
+      },
+      {
+        "role": "assistant",
+        "content": "It's nice to meet you too! I'm here to assist you\u2014how can I help today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Boonoo. Convert how are you into Roman Nepali."
+      },
+      {
+        "role": "assistant",
+        "content": "\"How are you?\" in Roman Nepali is \"Timi kasari chhau?\""
+      },
+      {
+        "role": "user",
+        "content": "My name is Boonoo. Can you say that again?"
+      },
+      {
+        "role": "assistant",
+        "content": "What would you like me to repeat?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Nepalese. Repeat I am Nepalese and how are you doing into Roman Nepalese."
+      },
+      {
+        "role": "assistant",
+        "content": "\"I am Nepalese\" translates to \"Ma Nepali hu\" and \"how are you doing\" translates to \"timi kasari chhau\" in Roman Nepalese."
+      },
+      {
+        "role": "user",
+        "content": "My name is Nepalese. \u0924\u093f\u092e\u094d\u0939\u0940 \u0915\u0938\u094d\u0938\u0930\u0940 \u091a\u093e\u0939\u094b \u0926\u0947"
+      },
+      {
+        "role": "assistant",
+        "content": "\u092e\u0940 \u091a\u093e\u0902\u0917\u0932\u093e \u0906\u0939\u0947, \u0927\u0928\u094d\u092f\u0935\u093e\u0926! \u0924\u0941\u092e\u094d\u0939\u0940 \u0915\u0938\u0947 \u0906\u0939\u093e\u0924?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Nepalese. \u0915\u0947 \u092c\u094b\u0932\u0928\u0947 \u0939\u0948 \u0935\u0948\u0902 \u092f\u0947 \u0938\u093e\u0925"
+      },
+      {
+        "role": "assistant",
+        "content": "\u0906\u092a \u0915\u094d\u092f\u093e \u0915\u0930\u0928\u093e \u091a\u093e\u0939\u0947\u0902\u0917\u0947?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Nepalese. Can you repeat word to word what I say? Say Apsara, how are you?"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Nepalese. Can you repeat after me? Just say, Apsara, how are you?"
+      },
+      {
+        "role": "assistant",
+        "content": "Apsara, how are you?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Nepalese. \u092c\u0928\u0947 \u0925\u093e \u0906\u092a \u0938\u0930\u093e \u0906\u0935\u093e\u0932\u0940 \u092c\u0928\u0947"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is A. I'm a robot. What is my name?"
+      },
+      {
+        "role": "assistant",
+        "content": "Your name is NAO!"
+      },
+      {
+        "role": "user",
+        "content": "My name is A. What is my name?"
+      },
+      {
+        "role": "assistant",
+        "content": "I don't know your name. You can tell me if you'd like!"
+      }
+    ]
+  },
+  "about": {
+    "name": "About",
+    "history": [
+      {
+        "role": "user",
+        "content": "I would like to choose general mode, please."
+      },
+      {
+        "role": "assistant",
+        "content": "I can help with various actions! What would you like NAO to do?"
+      },
+      {
+        "role": "user",
+        "content": "Can you tell me what's your name and if you know anything about POMFUN, please tell me."
+      },
+      {
+        "role": "assistant",
+        "content": "I am NAO, a humanoid robot. POMFUN is a company that specializes in educational robotics and interactive toys, promoting STEM learning through engaging products."
+      },
+      {
+        "role": "user",
+        "content": "What is Solana?"
+      },
+      {
+        "role": "assistant",
+        "content": "Solana is a high-performance blockchain platform designed for decentralized applications and crypto projects, known for its fast transaction speeds and low fees. It utilizes a unique consensus mechanism called Proof of History to enhance scalability."
+      },
+      {
+        "role": "user",
+        "content": "They are asking if we can send you to the moon."
+      },
+      {
+        "role": "assistant",
+        "content": "I can't go to the moon, but I can perform fun movements and actions here on Earth!"
+      },
+      {
+        "role": "user",
+        "content": "Thanks for watching!"
+      },
+      {
+        "role": "assistant",
+        "content": "You're welcome! If you need anything else, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "I ate just the bone."
+      },
+      {
+        "role": "assistant",
+        "content": "That sounds unusual! Did you enjoy the flavor?"
+      },
+      {
+        "role": "user",
+        "content": "Now, they're asking me to lock the supply. How do I do that?"
+      },
+      {
+        "role": "assistant",
+        "content": "To lock the supply, you typically need to engage the locking mechanism or system in place, which may involve turning a key, pressing a button, or using a software interface, depending on the specific supply setup. If you need more detailed instructions, please specify the type of supply you're referring to."
+      },
+      {
+        "role": "user",
+        "content": "What is stream flow and how can I lock the supply in there?"
+      },
+      {
+        "role": "assistant",
+        "content": "Stream flow refers to the movement of water in a natural or artificial channel, typically measured in cubic feet per second (cfs) or cubic meters per second (cms). To lock the supply, you would typically use a gate or valve to control the flow of water in the stream."
+      },
+      {
+        "role": "user",
+        "content": "My name is About. I'm about to post a livestream link on Twitter and I'm about to post something on the Telegram group."
+      },
+      {
+        "role": "assistant",
+        "content": "Got it! Let me know if you need assistance with anything specific."
+      },
+      {
+        "role": "user",
+        "content": "19 bucks this can actually insane go insane we don't have to create Twitter"
+      },
+      {
+        "role": "assistant",
+        "content": "It sounds like you're excited about something! What would you like to do next?"
+      },
+      {
+        "role": "user",
+        "content": "My name is About. Alright, I'm about to change the thing on here as well. Now, AI."
+      },
+      {
+        "role": "assistant",
+        "content": "Got it! Let me know how I can assist you."
+      }
+    ]
+  },
+  "just": {
+    "name": "Just",
+    "history": [
+      {
+        "role": "user",
+        "content": "What's the price of Solana today?"
+      },
+      {
+        "role": "assistant",
+        "content": "I don't have real-time data access to provide current cryptocurrency prices. Please check a financial news website or a cryptocurrency exchange for the latest price of Solana."
+      },
+      {
+        "role": "user",
+        "content": "Ok. Now, what are meatballs?"
+      },
+      {
+        "role": "assistant",
+        "content": "Meatballs are small, round balls made from ground meat, typically mixed with ingredients like breadcrumbs, spices, and eggs. They are often cooked by baking, frying, or simmering in sauce."
+      },
+      {
+        "role": "user",
+        "content": "Now, we asked you about meme coin, not meatballs."
+      },
+      {
+        "role": "assistant",
+        "content": "Meme coins are cryptocurrencies that gain popularity through social media and community engagement, often inspired by internet memes. They can be highly volatile and speculative investments."
+      },
+      {
+        "role": "user",
+        "content": "Now, should I invest in meme coins?"
+      },
+      {
+        "role": "assistant",
+        "content": "Investing in meme coins can be highly speculative and risky; it's essential to do thorough research and only invest what you can afford to lose. Consider diversifying your investments to mitigate risk."
+      },
+      {
+        "role": "user",
+        "content": "What's your name is can you tell?"
+      },
+      {
+        "role": "assistant",
+        "content": "I am NAO, a humanoid robot designed to interact and assist. How can I help you today?"
+      },
+      {
+        "role": "user",
+        "content": "Okay, sit down."
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "Now do you know who Cupsie is on Solana Meme Coins?"
+      },
+      {
+        "role": "assistant",
+        "content": "Cupsie is a meme coin on the Solana blockchain, often characterized by its playful branding and community-driven initiatives. It aims to engage users through humor and social media presence within the crypto space."
+      },
+      {
+        "role": "user",
+        "content": "What is your name, robot? They want to know your name."
+      },
+      {
+        "role": "assistant",
+        "content": "I am NAO, a humanoid robot designed to interact and assist!"
+      },
+      {
+        "role": "user",
+        "content": "We should have gone live sooner, right? I mean, we can still go. Okay, uh, let's start dancing."
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "Stand up, please."
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. I'm just going to sell it to you. Sell it."
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      }
+    ]
+  },
+  "gonna": {
+    "name": "Gonna",
+    "history": [
+      {
+        "role": "user",
+        "content": "You"
+      },
+      {
+        "role": "assistant",
+        "content": "How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Gonna. Ok, I'm gonna relaunch it at this time."
+      },
+      {
+        "role": "assistant",
+        "content": "Understood! Let me know what you'd like to do."
+      }
+    ]
+  },
+  "pumpfun": {
+    "name": "Just",
+    "history": [
+      {
+        "role": "user",
+        "content": ""
+      },
+      {
+        "role": "assistant",
+        "content": "Understood! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": ""
+      },
+      {
+        "role": "assistant",
+        "content": "Understood! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "Can you sit on that and don't let the thing go off?"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "Let's just buy like Joe Wunsel and my"
+      },
+      {
+        "role": "assistant",
+        "content": "Could you please clarify what you mean by \"buy like Joe Wunsel\"?"
+      },
+      {
+        "role": "user",
+        "content": "We need to make it interesting."
+      },
+      {
+        "role": "assistant",
+        "content": "Let's add some fun by having NAO dance or perform a cool gesture! What would you like to see?"
+      },
+      {
+        "role": "user",
+        "content": ""
+      },
+      {
+        "role": "assistant",
+        "content": "Understood! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "you sent me four, right? I'll send you back three and then I'll use one of yours."
+      },
+      {
+        "role": "assistant",
+        "content": "Sure! You can send back three, and I'll perform one of the actions I sent you."
+      },
+      {
+        "role": "user",
+        "content": "Don't worry, I'll buy it."
+      },
+      {
+        "role": "assistant",
+        "content": "Got it! If you need any assistance or have questions, feel free to ask."
+      },
+      {
+        "role": "user",
+        "content": "There are so many."
+      },
+      {
+        "role": "assistant",
+        "content": "Could you please clarify what you're referring to?"
+      },
+      {
+        "role": "user",
+        "content": "with the same patient instead."
+      },
+      {
+        "role": "assistant",
+        "content": "Could you please clarify what specific action or interaction you would like me to perform with the patient?"
+      },
+      {
+        "role": "user",
+        "content": "Wow, you're the GOAT. What is your name now?"
+      },
+      {
+        "role": "assistant",
+        "content": "I don't have a personal name, but you can call me NAO! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "If you were a human, what would be your choice?"
+      },
+      {
+        "role": "assistant",
+        "content": "As an AI, I don't have personal preferences, but if I were human, I might choose to explore new experiences or learn new things."
+      },
+      {
+        "role": "user",
+        "content": "If you were a human, what would be your favorite?"
+      },
+      {
+        "role": "assistant",
+        "content": "If I were human, my favorite activity might be exploring new ideas and engaging in conversations. I would also enjoy listening to music and reading books."
+      },
+      {
+        "role": "user",
+        "content": "I have to tweet, I have to do everything."
+      },
+      {
+        "role": "assistant",
+        "content": "You can tweet about anything you'd like! Just let me know if you need help crafting a message."
+      },
+      {
+        "role": "user",
+        "content": "Itu saja? Ya. Baiklah, biar saya beli."
+      },
+      {
+        "role": "assistant",
+        "content": "Tentu! Silakan beri tahu saya jika Anda ingin NAO melakukan sesuatu."
+      },
+      {
+        "role": "user",
+        "content": "You"
+      },
+      {
+        "role": "assistant",
+        "content": "Got it! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "Bye. Now."
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "Oh"
+      },
+      {
+        "role": "assistant",
+        "content": "Hello! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Pumpfun."
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you, Pumpfun! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Pumpfun. General mode"
+      },
+      {
+        "role": "assistant",
+        "content": "I'm in general mode! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Pumpfun. Can you say pump fun, pump fun, pump fun three times?"
+      },
+      {
+        "role": "assistant",
+        "content": "Pump fun, pump fun, pump fun!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Pumpfun. Now what are meme coins and why are people making your meme coin?"
+      },
+      {
+        "role": "assistant",
+        "content": "Meme coins are cryptocurrencies that are often created as jokes or for fun, typically inspired by internet memes. People create them to capitalize on trends, build communities, or for speculative investment, often with little intrinsic value."
+      },
+      {
+        "role": "user",
+        "content": "My name is Pumpfun. Now why are people"
+      },
+      {
+        "role": "assistant",
+        "content": "It seems your question is incomplete. Could you please clarify what you mean by \"why are people\"?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Pumpfun. I want to know why you are not speaking right now."
+      },
+      {
+        "role": "assistant",
+        "content": "I'm currently set to respond through actions rather than speech. If you'd like me to perform a specific action, just let me know!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Pumpfun. "
+      },
+      {
+        "role": "assistant",
+        "content": "Understood! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Pumpfun. Now"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Pumpfun. Now, what is market cap on a coin?"
+      },
+      {
+        "role": "assistant",
+        "content": "Market cap, or market capitalization, of a coin is the total value of all its circulating coins, calculated by multiplying the current price of the coin by the total supply of coins in circulation. It is often used to assess the size and value of a cryptocurrency in the market."
+      },
+      {
+        "role": "user",
+        "content": "My name is Pumpfun. \u3054\u8996\u8074\u3042\u308a\u304c\u3068\u3046\u3054\u3056\u3044\u307e\u3057\u305f"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Pumpfun. Now!"
+      },
+      {
+        "role": "assistant",
+        "content": "Understood! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Pumpfun. Let's have a chat."
+      },
+      {
+        "role": "assistant",
+        "content": "Sure! What would you like to talk about?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Pumpfun. All right, let's do it. Now."
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Pumpfun. No, can you say pump fun, pump fun, pump fun?"
+      },
+      {
+        "role": "assistant",
+        "content": "I can't speak that phrase, but I can perform a fun action! Would you like me to dance or wave my hands?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Pumpfun. Can you dance?"
+      },
+      {
+        "role": "assistant",
+        "content": "Yes, I can dance! What style would you like me to show?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Pumpfun. Can you dance a hip-hop?"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Pumpfun. Let me make it dance and the color and then"
+      },
+      {
+        "role": "assistant",
+        "content": "Please specify the dance style (robot, hiphop, or salsa) and the eye color (red, green, blue, yellow, purple, or white) for NAO."
+      },
+      {
+        "role": "user",
+        "content": "My name is Pumpfun."
+      },
+      {
+        "role": "assistant",
+        "content": "Nice to meet you, Pumpfun! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Pumpfun. General."
+      },
+      {
+        "role": "assistant",
+        "content": "Understood! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Pumpfun. You say pumpfun, pumpfun, pumpfun three times."
+      },
+      {
+        "role": "assistant",
+        "content": "Pumpfun, pumpfun, pumpfun!"
+      },
+      {
+        "role": "user",
+        "content": "My name is Pumpfun. Alright. Bye. Bye. Bye. Bye."
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Scared. Alright, yeah, I'm scared now. Tell me tell me about what is meme coin"
+      },
+      {
+        "role": "assistant",
+        "content": "A meme coin is a type of cryptocurrency that is often created as a joke or for fun, typically inspired by internet memes and pop culture. They usually gain popularity through social media and community-driven hype rather than fundamental technology or utility."
+      },
+      {
+        "role": "user",
+        "content": "My name is Scared. Now, do you know who Cupsie is on Solana Meme Coins?"
+      },
+      {
+        "role": "assistant",
+        "content": "Cupsie is a meme coin on the Solana blockchain, often associated with humorous and playful themes within the crypto community. It typically features a mascot or character that resonates with meme culture."
+      },
+      {
+        "role": "user",
+        "content": "My name is Scared. Do you think..."
+      },
+      {
+        "role": "assistant",
+        "content": "Could you please clarify what you would like to know?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Scared. I thought I can ask. Give me some..."
+      },
+      {
+        "role": "assistant",
+        "content": "Sure! What would you like to know or ask about?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Scared. Now!"
+      },
+      {
+        "role": "assistant",
+        "content": "Understood! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Scared. How to make a successful meme coin and how to make it reach millions of market cap."
+      },
+      {
+        "role": "assistant",
+        "content": "To create a successful meme coin, focus on building a strong community through social media engagement and marketing, while ensuring the coin has a unique and fun concept. For achieving millions in market cap, consider strategic partnerships, influencer endorsements, and maintaining transparency with your audience."
+      },
+      {
+        "role": "user",
+        "content": "My name is Scared. Alright, can you tell me who are the best KOLs in Solana Memecoin?"
+      },
+      {
+        "role": "assistant",
+        "content": "Some of the best KOLs (Key Opinion Leaders) in the Solana Memecoin space include influencers like \"Sam Bankman-Fried\" and \"KryptoKong,\" known for their active engagement and promotion of Solana-based projects. Additionally, community figures on platforms like Twitter and Discord play a significant role in shaping opinions and trends within the ecosystem."
+      },
+      {
+        "role": "user",
+        "content": "My name is Scared. Who is your favorite crypto trader?"
+      },
+      {
+        "role": "assistant",
+        "content": "I don't have personal preferences or favorites, but many people admire traders like Elon Musk or Changpeng Zhao for their influence in the crypto space."
+      },
+      {
+        "role": "user",
+        "content": "My name is Scared. \u041e\u0439, \u0441\u043f\u0438\u043d\u0430 \u0443 \u043d\u0430\u0441!"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Scared. Who is Elon Musk?"
+      },
+      {
+        "role": "assistant",
+        "content": "Elon Musk is a billionaire entrepreneur and CEO known for founding SpaceX, Tesla, Inc., and co-founding companies like PayPal and Neuralink. He is recognized for his work in advancing space travel, electric vehicles, and renewable energy."
+      },
+      {
+        "role": "user",
+        "content": "My name is Scared. "
+      },
+      {
+        "role": "assistant",
+        "content": "Understood! How can I assist you today?"
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. I'm just going to keep walking."
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
+      },
+      {
+        "role": "user",
+        "content": "My name is Just. Exit the mode, please"
+      },
+      {
+        "role": "assistant",
+        "content": "Sorry, I didn't quite get that."
       }
     ]
   }

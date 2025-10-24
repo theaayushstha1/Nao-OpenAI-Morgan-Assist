@@ -24,13 +24,11 @@ YES_WORDS = ["yes","yeah","yep","sure","ok","okay","please"]
 NO_WORDS  = ["no","nope","nah","not now","later","maybe later","no thanks"]
 
 ASSIST_LINE = (
-    "How can I assist you today?"
+    "How can I assist you today? "
     "You can say 'let's chat' to talk with me, "
     "'mini nao' for tools like time and weather, "
-    "'chatbot mode' for university help, "
     "or SIMPLY ask me to 'dance' or 'follow you'."
 )
-
 
 # --- small utils ---
 
@@ -261,7 +259,7 @@ def _go_to_posture_bg_delayed(nao_ip, port, name, speed, delay=0.05):
             pass
     _run_bg(_work)
 
-# --- yes/no (FIXED: subscribe a temporary listener) ---
+# --- yes/no ---
 
 def _ask_and_listen_yes_no(nao_ip, port, tts, asr, memory, timeout_s=YESNO_TIMEOUT_S):
     """
@@ -275,7 +273,7 @@ def _ask_and_listen_yes_no(nao_ip, port, tts, asr, memory, timeout_s=YESNO_TIMEO
     _safe_unsub(asr, listener)
     try:
         asr.pause(True)
-        asr.setVocabulary(vocab, False)  # small set, no spotting
+        asr.setVocabulary(vocab, False)
         asr.subscribe(listener)
         asr.pause(False)
     except:
@@ -307,7 +305,6 @@ def _ask_and_listen_yes_no(nao_ip, port, tts, asr, memory, timeout_s=YESNO_TIMEO
 def _start_taichi_dance(nao_ip, port, tts):
     """
     Start a preinstalled TaiChi dance behavior via ALBehaviorManager.
-    Tries common IDs and falls back to fuzzy matching on 'taich'.
     """
     try:
         mgr = ALProxy("ALBehaviorManager", nao_ip, port)
@@ -368,8 +365,7 @@ def _start_taichi_dance(nao_ip, port, tts):
 
 def _start_follow_me(nao_ip, port, tts):
     """
-    Start a preinstalled Follow/Follow me behavior via ALBehaviorManager.
-    Matches common ids and any behavior containing 'follow'.
+    Start a preinstalled Follow/Follow me behavior.
     """
     try:
         mgr = ALProxy("ALBehaviorManager", nao_ip, port)
@@ -378,13 +374,12 @@ def _start_follow_me(nao_ip, port, tts):
         except: pass
         return
 
-    # names seen in packages
     candidates = [
         "Follow me/behavior",
         "follow me/behavior",
         "follow_me/behavior",
         "follow-me/behavior",
-        "Follow me",          # if exposed at root
+        "Follow me",
         "follow_me",
         "follow-me",
     ]
@@ -413,7 +408,6 @@ def _start_follow_me(nao_ip, port, tts):
         except: pass
         return
 
-    # If already running, restart for a clean start
     try:
         if mgr.isBehaviorRunning(chosen):
             mgr.stopBehavior(chosen)
@@ -440,11 +434,19 @@ def listen_for_command(nao_ip, port=9559):
         "nao",
         "stand up",
         "sit down",
+        # ✅ All these return "chat" - mode selection happens inside chat_mode.py
         "let's chat",
         "let's talk",
         "talk mode",
         "start a conversation",
         "chat mode",
+        "morgan assist",
+        "morgan chatbot",
+        "morgan chat",
+        "chatbot",
+        "chatbot mode",
+        "university chatbot",
+        # mini nao mode
         "mini nao",
         "mini-nao",
         "mininao",
@@ -460,14 +462,6 @@ def listen_for_command(nao_ip, port=9559):
         "come with me",
         "give me your hand",
         "let's go nao",
-        # new chatbot triggers
-        "morgan assist",
-        "morgan chatbot",
-        "morgan chat",
-        "chatbot",
-        "chatbot mode",
-        "custom chatbot",
-        "university chatbot"
     ]
 
     _safe_unsub(asr, "NAO_Chat_Listener")
@@ -481,8 +475,7 @@ def listen_for_command(nao_ip, port=9559):
     head_flag = {"stop": False}
     _run_bg(_head_track_guard, nao_ip, port, head_flag)
 
-    _say_paused(tts, asr,
-        "System Initializing. Say 'Nao' to ACTIVATE me.")
+    _say_paused(tts, asr, "System Initializing. Say 'Nao' to ACTIVATE me.")
 
     last_trigger = 0.0
     last_word    = ""
@@ -491,16 +484,20 @@ def listen_for_command(nao_ip, port=9559):
         while True:
             word, conf = _read_word(memory)
             if not word:
-                time.sleep(0.05); continue
+                time.sleep(0.05)
+                continue
 
             now = time.time()
             if conf <= MIN_CONF or word not in MAIN_VOCAB:
-                time.sleep(0.05); continue
+                time.sleep(0.05)
+                continue
 
             if (now - last_trigger) < DEBOUNCE_SECONDS:
-                time.sleep(0.05); continue
+                time.sleep(0.05)
+                continue
             if word == last_word and (now - last_trigger) < SAME_WORD_COOLDOWN:
-                time.sleep(0.05); continue
+                time.sleep(0.05)
+                continue
 
             last_trigger = now
             last_word    = word
@@ -513,7 +510,6 @@ def listen_for_command(nao_ip, port=9559):
 
                 if d is not None and d <= NEAR_SHAKE_DIST:
                     ans = _ask_and_listen_yes_no(nao_ip, port, tts, asr, memory, timeout_s=YESNO_TIMEOUT_S)
-                    # restore main vocab for the rest of the loop
                     _set_vocab(asr, MAIN_VOCAB, spotting=False)
                     if ans is True:
                         _extend_hand_for_shake_hold(nao_ip, port, tts, asr, hold_s=5.0)
@@ -522,10 +518,10 @@ def listen_for_command(nao_ip, port=9559):
                 else:
                     _wave_any_posture_bg(nao_ip, port)
                     _say_nowait(tts, asr, "Hello, I am Nao. It is very nice to meet you. " + ASSIST_LINE)
-                    
-                    
+                
                 _flush_word(memory)
 
+            # ✅ ALL CHAT TRIGGERS NOW RETURN "chat" 
             elif word in ["let's chat", "let's talk", "talk mode", "start a conversation", "chat mode"]:
                 _stop_move_now(nao_ip, port)
                 head_flag["stop"] = True
@@ -534,6 +530,17 @@ def listen_for_command(nao_ip, port=9559):
                 _flush_word(memory)
                 return "chat"
             
+            # ✅ MORGAN/CHATBOT TRIGGERS ALSO RETURN "chat"
+            # Mode selection happens inside chat_mode.py
+            elif word in ["morgan assist", "morgan chatbot", "morgan chat", 
+                         "chatbot", "chatbot mode", "university chatbot"]:
+                _stop_move_now(nao_ip, port)
+                head_flag["stop"] = True
+                _tracker_stop_now(nao_ip, port)
+                _say_paused(tts, asr, "Okay, entering chat mode. I can help with Morgan University questions.")
+                _flush_word(memory)
+                return "chat"  # ✅ Changed from "chatbot" to "chat"
+            
             elif word in ["mini nao", "mini-nao", "mininao", "mini nao mode"]:
                 _stop_move_now(nao_ip, port)
                 head_flag["stop"] = True
@@ -541,18 +548,6 @@ def listen_for_command(nao_ip, port=9559):
                 _say_paused(tts, asr, "Okay, MiniNao is ready for your service. Let me stand up first.")
                 _flush_word(memory)
                 return "mininao"
-            
-            elif word in [
-                "morgan assist", "morgan chatbot", "morgan chat",
-                "chatbot", "chatbot mode", "custom chatbot", "university chatbot"
-            ]:
-                _stop_move_now(nao_ip, port)
-                head_flag["stop"] = True
-                _tracker_stop_now(nao_ip, port)
-                _say_paused(tts, asr, "Okay, switching to Morgan chatbot mode. Let’s begin.")
-                _flush_word(memory)
-                return "chatbot"
-
 
             elif word == "stand up":
                 _go_to_posture_bg_delayed(nao_ip, port, "StandInit", 0.6, delay=0.05)
