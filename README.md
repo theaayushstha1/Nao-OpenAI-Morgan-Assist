@@ -157,10 +157,9 @@ Adjust TRAIL_MS, NO_SPEECH_TIMEOUT_S, and thresholds in audio_handler.py.
 curl http://localhost:5000/test
 # => {"message":"Test route working!"}
 
-<<<<<<< HEAD
 ## 📜 License
 
-** Released under the MIT License. See LICENSE **
+**Released under the MIT License. See LICENSE**
 .
 
 .
