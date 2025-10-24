@@ -163,13 +163,6 @@ curl http://localhost:5000/test
 ** Released under the MIT License. See LICENSE **
 .
 
-# 👨‍💻 Author
-
-**Aayush Shrestha — Lead Developer**
-=======
-# 📜 License
-
-**Released under the MIT License. See LICENSE**
 .
 
 ## 👨‍💻 Authors
