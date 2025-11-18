@@ -632,6 +632,148 @@ def face_list():
     for n in names:
         counts[n] = counts.get(n, 0) + 1
     return jsonify({"ok": True, "counts": counts, "total_encodings": len(encs)})
+# ----------------- Therapist Mode Routes -----------------
+
+@app.route('/transcribe', methods=['POST'])
+def transcribe_only():
+    """
+    Simple transcription endpoint for therapist name capture
+    """
+    if 'audio' not in request.files:
+        return jsonify({"error": "no audio file"}), 400
+    
+    try:
+        audio_file = request.files['audio']
+        filename = secure_filename(audio_file.filename or "input.wav")
+        temp_path = os.path.join(TEMP_DIR, filename)
+        
+        audio_file.save(temp_path)
+        print("Transcribing audio for name capture...", flush=True)
+        
+        # Validate audio
+        try:
+            _validate_audio_or_503(temp_path)
+        except RuntimeError as ve:
+            return jsonify({'error': 'audio_invalid', 'detail': str(ve)}), 503
+        
+        # Transcribe
+        transcript = transcribe_with_retry_path(temp_path, WHISPER_MODEL, max_tries=3)
+        text = (
+            getattr(transcript, "text", None)
+            or getattr(transcript, "data", {}).get("text", "")
+            or (transcript.get("text", "") if isinstance(transcript, dict) else "")
+            or ""
+        ).strip()
+        
+        print(u"Transcribed name: {}".format(text), flush=True)
+        
+        return jsonify({"text": text})
+        
+    except Exception as e:
+        print("Transcription error: {}".format(e), flush=True)
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        try:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        except:
+            pass
+
+
+@app.route('/therapist_chat', methods=['POST'])
+def therapist_chat():
+    """
+    FAST Therapist mode - same speed as regular chat
+    """
+    if 'audio' not in request.files:
+        return jsonify({"error": "no audio file"}), 400
+    
+    try:
+        audio_file = request.files['audio']
+        username = (request.form.get('username') or 'Friend').strip()
+        mood = (request.form.get('mood') or 'neutral').strip()
+        history_json = request.form.get('history', '[]')
+        
+        # Parse history
+        try:
+            history = json.loads(history_json)
+        except:
+            history = []
+        
+        # Save and transcribe audio
+        filename = secure_filename(audio_file.filename or "therapy_input.wav")
+        temp_path = os.path.join(TEMP_DIR, filename)
+        audio_file.save(temp_path)
+        
+        print(u"[THERAPIST] Processing for {}".format(username), flush=True)
+        
+        # Validate audio (quick check)
+        try:
+            _validate_audio_or_503(temp_path)
+        except RuntimeError as ve:
+            return jsonify({'error': 'audio_invalid', 'detail': str(ve)}), 503
+        
+        # Transcribe (with retries like regular chat)
+        transcript = transcribe_with_retry_path(temp_path, WHISPER_MODEL, max_tries=3)
+        user_input = (
+            getattr(transcript, "text", None)
+            or getattr(transcript, "data", {}).get("text", "")
+            or (transcript.get("text", "") if isinstance(transcript, dict) else "")
+            or ""
+        ).strip()
+        
+        print(u"[THERAPIST] User: {}".format(user_input), flush=True)
+        
+        # Simple therapist system prompt (shorter = faster)
+        system_prompt = """You are NAO, a caring therapy assistant. Be warm and supportive.
+
+Current user: {username} (mood: {mood})
+
+Guidelines:
+- Listen and validate feelings
+- Ask gentle follow-up questions
+- Offer practical coping strategies when appropriate
+- Keep responses conversational (2-3 sentences)
+- Be present and empathetic
+
+Respond naturally and supportively.""".format(username=username, mood=mood)
+        
+        # Build minimal conversation (only last 6 messages for speed)
+        messages = [{"role": "system", "content": system_prompt}]
+        messages.extend(history[-6:])  # Only last 6 messages
+        messages.append({"role": "user", "content": user_input})
+        
+        # Get GPT response (same as regular chat)
+        response = openai.ChatCompletion.create(
+            model="gpt-4o-mini",  # Fast model
+            messages=messages,
+            max_tokens=150,  # ✅ Shorter = faster
+            temperature=0.8
+        )
+        
+        reply = response['choices'][0]['message']['content'].strip()
+        
+        print(u"[THERAPIST] Reply: {}".format(reply), flush=True)
+        
+        return jsonify({
+            "user_input": user_input,
+            "reply": reply,
+            "mood": mood,
+            "username": username
+        })
+        
+    except Exception as e:
+        print("[THERAPIST] Error: {}".format(e), flush=True)
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        try:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        except:
+            pass
+
 
 if __name__ == "__main__":
     print("Starting Flask server on http://0.0.0.0:5000/", flush=True)
