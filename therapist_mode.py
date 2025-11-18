@@ -3,7 +3,7 @@
 """
 Therapist Mode - FULLY FEATURED WITH FACE RECOGNITION, REGISTRATION, MOOD DETECTION,
 SESSION MEMORY, UNICODE FIX, SAFE PRINTS, FORCED FACE REGISTER AFTER TIMEOUT,
-AND MOOD-PERSONALIZED RESPONSES WITH DANCE
+MOOD-PERSONALIZED RESPONSES, AND SESSION HOLD UNTIL EXIT DETECTED (NO AUTO EXIT)
 """
 from __future__ import print_function
 from naoqi import ALProxy
@@ -23,7 +23,6 @@ SERVER_URL = "http://{}:5000".format(SERVER_IP)
 
 USER_DATA_FILE = "/data/home/nao/therapist_users.json"
 
-# Global proxies, set after qi session connection
 tts = posture = leds = motion = None
 session = None
 
@@ -96,16 +95,15 @@ def _detect_exit(text):
     if not text:
         return False
     t = text.lower()
-    return any(word in t for word in EXIT_WORDS)
+    # Only exit if exit word is at sentence end or by itself to reduce false positives
+    return any(t.strip().endswith(word) or t.strip() == word for word in EXIT_WORDS)
 
 
 def detect_mood(qi_session, timeout=7.0):
-    """Detect user mood with ALFaceDetection and ALMemory; ensure camera enabled."""
     try:
         memory = qi_session.service("ALMemory")
         face_detection = qi_session.service("ALFaceDetection")
         cam_video = qi_session.service("ALVideoDevice")
-        # Ensure camera is active by subscribing to video stream
         subscriber = cam_video.subscribe("MoodDetectionTemp", 0, 11, 5)
         face_detection.subscribe("Therapist_MoodDetection")
         start_time = time.time()
@@ -127,7 +125,6 @@ def detect_mood(qi_session, timeout=7.0):
 
 
 def recognize_face(qi_session, timeout=10):
-    """Try to recognize user face using ALFaceDetection"""
     try:
         memory = qi_session.service("ALMemory")
         face_detection = qi_session.service("ALFaceDetection")
@@ -151,11 +148,14 @@ def recognize_face(qi_session, timeout=10):
 
 
 def register_face(qi_session, name, timeout=20):
-    """Register a user face with name, with timeout and forced registration after timeout"""
     try:
         face_detection = qi_session.service("ALFaceDetection")
         tts_local = qi_session.service("ALTextToSpeech")
         memory = qi_session.service("ALMemory")
+        # Enable camera subscription explicitly to ensure camera is active
+        cam_video = qi_session.service("ALVideoDevice")
+        subscriber = cam_video.subscribe("FaceRegisterCam", 0, 11, 5)
+
         tts_local.say("Please look at the camera to register your face, {}.".format(name))
         face_detection.subscribe("FaceRegister")
         start_time = time.time()
@@ -165,7 +165,7 @@ def register_face(qi_session, name, timeout=20):
             if elapsed > timeout:
                 if not face_registered:
                     tts_local.say("Face not detected visually but I'll take a picture now.")
-                    # Forcing registration even if face_detected event didn't occur
+                    # Forcing registration without face_detected event
                     face_detection.learnFace(name)
                     tts_local.say("Thank you, {}. Your face has been registered.".format(name))
                 else:
@@ -191,6 +191,7 @@ def register_face(qi_session, name, timeout=20):
             pass
     finally:
         face_detection.unsubscribe("FaceRegister")
+        cam_video.unsubscribe(subscriber)
 
 
 def mood_personalized_response(mood, username):
@@ -199,11 +200,13 @@ def mood_personalized_response(mood, username):
         if mood == "sad":
             tts.say("I see you are sad, {}. How about I dance for you to cheer you up?".format(username))
             motion.moveInit()
-            # Example: Taichi dance
             try:
                 motion.runBehavior("taichi")
             except:
-                tts.say("Sorry, I cannot do the dance right now.")
+                try:
+                    tts.say("Sorry, I cannot do the dance right now.")
+                except:
+                    pass
         elif mood == "happy":
             tts.say("You look happy, {}! Would you like to share why you're feeling great?".format(username))
         elif mood == "neutral":
@@ -257,8 +260,8 @@ def therapy_loop(username, mood):
 
     tts.say("I'm here to listen. How are you feeling today?")
 
-    for turn in range(15):
-        print("[THERAPIST] Turn {}/15".format(turn + 1))
+    for turn in range(1, 1000):  # allow very long session, only exit on exit phrase
+        print("[THERAPIST] Turn {}".format(turn))
         wav = record_audio(NAO_IP)
         print("[Audio recorded]", wav)
         if not wav or not os.path.exists(wav):
@@ -292,23 +295,25 @@ def therapy_loop(username, mood):
                 safe_print("[USER]", user_input)
                 safe_print("[REPLY]", reply)
 
-                if _detect_exit(user_input):
+                if not _detect_exit(user_input):
+                    # Only add and respond if session is still going on
+                    history.append({"role": "user", "content": user_input})
+                    history.append({"role": "assistant", "content": reply})
+                    session_data['messages'].append({'user': user_input, 'assistant': reply})
+
+                    if reply:
+                        try:
+                            clean_reply = clean_unicode_for_tts(reply)
+                            tts.say(clean_reply)
+                        except Exception as e:
+                            print("[TTS ERROR]:", e)
+                            tts.say("I'm here listening.")
+                    else:
+                        tts.say("Tell me more.")
+                else:
+                    # On exit words only terminate
                     tts.say("Thank you for sharing with me today, {}. Take care.".format(username))
                     break
-
-                history.append({"role": "user", "content": user_input})
-                history.append({"role": "assistant", "content": reply})
-                session_data['messages'].append({'user': user_input, 'assistant': reply})
-
-                if reply:
-                    try:
-                        clean_reply = clean_unicode_for_tts(reply)
-                        tts.say(clean_reply)
-                    except Exception as e:
-                        print("[TTS ERROR]:", e)
-                        tts.say("I'm here listening.")
-                else:
-                    tts.say("Tell me more.")
 
         except requests.Timeout:
             print("[TIMEOUT] Server took too long.")
