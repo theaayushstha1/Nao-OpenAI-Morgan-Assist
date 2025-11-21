@@ -7,6 +7,8 @@ Wake listener: head-only face tracking, polite greet, consent handshake, no walk
 from naoqi import ALProxy
 import time
 import threading
+import subprocess
+import os
 
 DEBOUNCE_SECONDS    = 2.0
 SAME_WORD_COOLDOWN  = 3.0
@@ -24,11 +26,15 @@ YES_WORDS = ["yes","yeah","yep","sure","ok","okay","please"]
 NO_WORDS  = ["no","nope","nah","not now","later","maybe later","no thanks"]
 
 ASSIST_LINE = (
-    "How can I assist you today? "
-    "You can say 'let's chat' to talk with me, "
-    "'mini nao' for tools like time and weather, "
-    "or SIMPLY ask me to 'dance' or 'follow you'."
+    "How may I assist you today? "
+    "Say 'let's chat' for conversation mode. "
+    "For Morgan State University help, just say 'morgan assist' and I will be there for you."
+    "Say 'mini nao' for time, weather, or smart tools. "
+    
+    "If support is needed, say 'therapist mode'. "
+    "Ask me to 'dance' or to 'follow you' anytime. "
 )
+
 
 # --- small utils ---
 
@@ -300,6 +306,36 @@ def _ask_and_listen_yes_no(nao_ip, port, tts, asr, memory, timeout_s=YESNO_TIMEO
     _flush_word(memory)
     return result
 
+# --- Shutdown/Sleep helpers ---
+
+def _shutdown_robot(tts, asr):
+    """Properly shut down NAO robot"""
+    _say_paused(tts, asr, "Shutting down now. Goodbye!")
+    time.sleep(1)
+    try:
+        # Create a flag file to signal shutdown
+        with open("/tmp/nao_shutdown_requested", "w") as f:
+            f.write("1")
+        # Try system shutdown
+        subprocess.call(["sudo", "shutdown", "-h", "now"])
+    except:
+        try:
+            subprocess.call(["shutdown", "-h", "now"])
+        except:
+            pass
+
+def _sleep_robot(nao_ip, port, tts, asr):
+    """Put NAO to rest/crouch position and stop all activities"""
+    _say_paused(tts, asr, "Going to sleep.")
+    try:
+        # Stop all movements
+        motion = ALProxy("ALMotion", nao_ip, port)
+        motion.rest()
+    except:
+        pass
+    # Return "exit" to stop the main loop
+    return "exit"
+
 # --- TaiChi behavior helper ---
 
 def _start_taichi_dance(nao_ip, port, tts):
@@ -434,7 +470,7 @@ def listen_for_command(nao_ip, port=9559):
         "nao",
         "stand up",
         "sit down",
-        # ✅ All these return "chat" - mode selection happens inside chat_mode.py
+        # Chat triggers
         "let's chat",
         "let's talk",
         "talk mode",
@@ -462,6 +498,25 @@ def listen_for_command(nao_ip, port=9559):
         "come with me",
         "give me your hand",
         "let's go nao",
+        # ✅ SHUTDOWN/SLEEP TRIGGERS
+        "shutdown",
+        "shut down",
+        "nao shutdown",
+        "nao shut down",
+        "power off",
+        "turn off",
+        "sleep",
+        "go to sleep",
+        "nao sleep",
+        "good night",
+        "therapist",
+        "therapist mode",
+        "therapy",
+        "therapy mode",
+        "counseling",
+        "counseling mode",
+        "talk to someone",
+        "i need help",
     ]
 
     _safe_unsub(asr, "NAO_Chat_Listener")
@@ -505,7 +560,34 @@ def listen_for_command(nao_ip, port=9559):
             _safe_unsub(asr, "NAO_Chat_Listener")
             print("[Heard]: {} (conf {:.2f})".format(word, conf))
 
-            if word == "nao":
+           
+            if word in ["shutdown", "shut down", "nao shutdown", "nao shut down", "power off", "turn off"]:
+                _stop_move_now(nao_ip, port)
+                head_flag["stop"] = True
+                _tracker_stop_now(nao_ip, port)
+                _shutdown_robot(tts, asr)
+                return "exit"  # Exit main loop
+            
+            
+            elif word in ["sleep", "go to sleep", "nao sleep", "good night"]:
+                _stop_move_now(nao_ip, port)
+                head_flag["stop"] = True
+                _tracker_stop_now(nao_ip, port)
+                result = _sleep_robot(nao_ip, port, tts, asr)
+                _flush_word(memory)
+                return result  # Returns "exit"
+            
+            elif word in ["therapist", "therapist mode", "therapy", "therapy mode", 
+                        "counseling", "counseling mode", "talk to someone", "i need help"]:
+                _stop_move_now(nao_ip, port)
+                head_flag["stop"] = True
+                _tracker_stop_now(nao_ip, port)
+                _say_paused(tts, asr, "Entering therapy mode. I'm here to listen and support you.")
+                _flush_word(memory)
+                return "therapist"
+
+
+            elif word == "nao":
                 d = _estimate_user_distance(memory)
 
                 if d is not None and d <= NEAR_SHAKE_DIST:
@@ -521,7 +603,7 @@ def listen_for_command(nao_ip, port=9559):
                 
                 _flush_word(memory)
 
-            # ✅ ALL CHAT TRIGGERS NOW RETURN "chat" 
+            # ALL CHAT TRIGGERS NOW RETURN "chat" 
             elif word in ["let's chat", "let's talk", "talk mode", "start a conversation", "chat mode"]:
                 _stop_move_now(nao_ip, port)
                 head_flag["stop"] = True
@@ -530,8 +612,7 @@ def listen_for_command(nao_ip, port=9559):
                 _flush_word(memory)
                 return "chat"
             
-            # ✅ MORGAN/CHATBOT TRIGGERS ALSO RETURN "chat"
-            # Mode selection happens inside chat_mode.py
+            # MORGAN/CHATBOT TRIGGERS ALSO RETURN "chat"
             elif word in ["morgan assist", "morgan chatbot", "morgan chat", 
                          "chatbot", "chatbot mode", "university chatbot"]:
                 _stop_move_now(nao_ip, port)
@@ -539,7 +620,7 @@ def listen_for_command(nao_ip, port=9559):
                 _tracker_stop_now(nao_ip, port)
                 _say_paused(tts, asr, "Okay, entering chat mode. I can help with Morgan University questions.")
                 _flush_word(memory)
-                return "chat"  # ✅ Changed from "chatbot" to "chat"
+                return "chat"
             
             elif word in ["mini nao", "mini-nao", "mininao", "mini nao mode"]:
                 _stop_move_now(nao_ip, port)
