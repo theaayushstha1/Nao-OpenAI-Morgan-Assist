@@ -237,9 +237,6 @@ def upload_audio():
             else:
                 memory_manager.store_user_name(username, extracted)
 
-        known = memory_manager.get_user_name(username)
-        if known and ("my name is" not in user_input.lower()):
-            user_input = "My name is {}. {}".format(known, user_input)
 
         if mode == "chatbot":
             embedding = get_embedding(user_input)
