@@ -28,10 +28,10 @@ NO_WORDS  = ["no","nope","nah","not now","later","maybe later","no thanks"]
 ASSIST_LINE = (
     "How may I assist you today? "
     "Say 'let's chat' for conversation mode. "
-    "For Morgan State University help, just say 'morgan assist' and I will be there for you."
+    "'morgan assist' For Morgan State University help."
     "Say 'mini nao' for time, weather, or smart tools. "
     
-    "If support is needed, say 'therapist mode'. "
+    "Also If support is needed, say 'therapist mode'. "
     "Ask me to 'dance' or to 'follow you' anytime. "
 )
 
