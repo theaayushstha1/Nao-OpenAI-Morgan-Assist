@@ -14,7 +14,7 @@ FAST_REMINDER_DEFAULT_MIN = 10
 
 BALT_LAT, BALT_LON = 39.2904, -76.6122  # Baltimore, MD
 
-SERVER_IP   = "172.20.95.123"
+SERVER_IP   = "172.20.95.105"
 SERVER_URL  = "http://{}:5000/upload".format(SERVER_IP)
 
 STATE_FILE = "/data/home/nao/Sound/state.json"
@@ -26,7 +26,7 @@ DEFAULT_TIMEOUT = 8
 
 # ──────────────────────────────────────────────────────────────────────────────
 # STORAGE
-# ──────────────────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────────────────── 
 _DEFAULT_STATE = {
     "todos": [],
     "reminders": [],
