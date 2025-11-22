@@ -29,7 +29,7 @@ ASSIST_LINE = (
     "How may I assist you today? "
     "Say 'let's chat' for conversation mode. "
     "'morgan assist' For Morgan State University help."
-    "Say 'mini nao' for time, weather, or smart tools. "
+    "Additionally for smart tools Say 'mini nao' "
     
     "Also If support is needed, say 'therapist mode'. "
     "Ask me to 'dance' or to 'follow you' anytime. "

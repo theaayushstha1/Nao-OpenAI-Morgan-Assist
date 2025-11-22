@@ -50,13 +50,11 @@ def _detect_exit_intent(text):
     text_lower = text.lower().strip()
     for pattern in EXIT_PATTERNS:
         if re.search(pattern, text_lower, re.IGNORECASE):
-            print("[EXIT DETECTED] Pattern match: {}".format(pattern))
             return True
     words = text_lower.split()
     if len(words) <= 3:
         for keyword in EXIT_KEYWORDS:
             if keyword in words:
-                print("[EXIT DETECTED] Keyword: {}".format(keyword))
                 return True
     return False
 
@@ -109,10 +107,24 @@ def get_user_sessions(username):
 def add_user_session(username, session_data):
     data = load_user_data()
     if username not in data:
-        data[username] = {'name': username, 'sessions': []}
+        data[username] = {'name': username, 'sessions': [], 'milestones': [], 'preferred_skills': []}
     data[username]['sessions'].append(session_data)
     data[username]['sessions'] = data[username]['sessions'][-10:]
+    # Save milestones and tags if present
+    milestone = session_data.get('milestone')
+    if milestone:
+        if 'milestones' not in data[username]:
+            data[username]['milestones'] = []
+        data[username]['milestones'].append(milestone)
+    preferred = session_data.get('preferred_skill')
+    if preferred and preferred not in data[username].get('preferred_skills', []):
+        data[username]['preferred_skills'].append(preferred)
     save_user_data(data)
+
+def extract_last_summaries(username, num=3):
+    sessions = get_user_sessions(username)
+    # Each session_data should include a 'summary' field if you want (optional)
+    return [s.get('summary', '') for s in sessions[-num:] if s.get('summary')]
 
 def recognize_face_naoqi(qi_session, timeout=10):
     global tts
@@ -136,15 +148,12 @@ def recognize_face_naoqi(qi_session, timeout=10):
                                 face_name = extra_info[2]
                                 if face_name and isinstance(face_name, (str, unicode)) and str(face_name).strip() != "":
                                     recognized_name = str(face_name)
-                                    print("[NAO recognized]: {}".format(recognized_name))
-                                    tts.say("Welcome back, {}!".format(recognized_name))
+                                    tts.say("Welcome back, {}.".format(recognized_name))
                                     break
             except Exception as e:
                 print("[Memory read error]:", e)
             time.sleep(0.3)
         face_detection.unsubscribe("TherapistFaceReco")
-        if not recognized_name:
-            print("[No face recognized after {} seconds]".format(timeout))
         return recognized_name
     except Exception as e:
         print("[NAO face recognition error]:", e)
@@ -173,7 +182,6 @@ def learn_new_face_naoqi(qi_session, name):
                 if face_data and isinstance(face_data, list) and len(face_data) >= 2:
                     if face_data[1] and len(face_data[1]) > 0:
                         face_found = True
-                        print("[Face detected, preparing to learn...]")
                         break
             except:
                 pass
@@ -181,25 +189,19 @@ def learn_new_face_naoqi(qi_session, name):
         if face_found:
             tts.say("Perfect. Hold still for just a moment.")
             time.sleep(1)
-            print("[Learning face as]: {}".format(name))
             face_detection.learnFace(name)
             time.sleep(3)
             tts.say("Got it. I'll remember you next time, {}.".format(name))
-            print("[Face learned successfully]: {}".format(name))
-            result = True
+            return True
         else:
             tts.say("I couldn't see your face clearly. Let's continue anyway.")
-            print("[Face not detected during learning]")
-            result = False
+            return False
         try:
             face_detection.unsubscribe("TherapistFaceLearn")
         except:
             pass
-        return result
     except Exception as e:
         print("[Learn face error]:", e)
-        import traceback
-        traceback.print_exc()
         try:
             face_detection.unsubscribe("TherapistFaceLearn")
         except:
@@ -300,77 +302,93 @@ def mood_personalized_response(mood, username):
     except Exception as e:
         print("[Mood response error]:", e)
 
+def summarize_session(history):
+    # Simple extract: last user and assistant message, key moods
+    key_points = []
+    for msg in history[-8:]:
+        if msg['role'] == 'user':
+            mood = detect_mood_from_speech(msg['content'])
+            if mood != 'neutral':
+                key_points.append(f"expressed {mood}")
+        elif msg['role'] == 'assistant' and 'breathing' in msg['content'].lower():
+            key_points.append("did a breathing exercise")
+        elif msg['role'] == 'assistant' and 'grounding' in msg['content'].lower():
+            key_points.append("did a grounding exercise")
+    return ", ".join(set(key_points)) if key_points else None
+
 def therapy_loop(username, mood):
     global tts, leds
     session_data = {'timestamp': time.time(), 'mood': mood, 'messages': []}
     history = []
     previous_sessions = get_user_sessions(username)
+    session_num = len(previous_sessions) + 1
+
+    # Acknowledge milestones and continuity
     if previous_sessions:
-        tts.say("Good to see you again, {}. I remember our last talk.".format(username))
-    try:
-        leds.fadeRGB("FaceLeds", 0.0, 0.8, 1.0, 0.4)
-    except:
-        pass
-    if mood != "neutral":
-        mood_personalized_response(mood, username)
-    tts.say("How are you feeling today?")
+        tts.say(f"Welcome back, {username}. This is our session number {session_num}.")
+        # Use last session's summary if present
+        last_summary = previous_sessions[-1].get('summary')
+        if last_summary:
+            tts.say(f"Last time, we focused on {last_summary}.")
+        else:
+            tts.say("It's good to have you back.")
+    else:
+        tts.say(f"Nice to meet you, {username}.")
+
+    # Mood check-in
+    tts.say("To begin, how are you feeling today, with one word or a number from 1 to 10?")
+    first_input = ""
     for turn in range(1, 1000):
-        print("[THERAPIST] Turn {}".format(turn))
         wav = record_audio(NAO_IP)
-        print("[Audio recorded]", wav)
         if not wav or not os.path.exists(wav):
             tts.say("I didn't hear you. Could you say that again?")
             continue
+
         try:
             with open(wav, 'rb') as f:
                 files = {'audio': f}
                 data = {'username': username, 'mood': mood, 'history': json.dumps(history), 'previous_sessions': json.dumps(previous_sessions[-3:])}
-                print("[Sending audio to server...]")
                 resp = requests.post(SERVER_URL + "/therapist_chat", files=files, data=data, timeout=45)
                 if resp.status_code != 200:
-                    print("[Server error]:", resp.status_code)
                     tts.say("Sorry, I'm having trouble understanding. Try again.")
                     continue
                 result = resp.json()
                 user_input = result.get('user_input', '')
                 reply = result.get('reply', '')
-                safe_print("[USER]", user_input)
-                safe_print("[REPLY]", reply)
+                if turn == 1:
+                    first_input = user_input
+                    tts.say(f"Thank you for sharing.")
                 if _detect_exit_intent(user_input):
-                    tts.say("Thank you for talking with me today, {}. Take care.".format(username))
+                    tts.say(f"Thank you for talking with me today, {username}. Take care of yourself.")
                     break
                 speech_mood = detect_mood_from_speech(user_input)
                 if speech_mood != "neutral" and speech_mood != mood:
                     mood = speech_mood
-                    print("[Mood updated]: {}".format(mood))
                     mood_personalized_response(mood, username)
                 history.append({"role": "user", "content": user_input})
                 history.append({"role": "assistant", "content": reply})
                 session_data['messages'].append({'user': user_input, 'assistant': reply})
                 if reply:
-                    try:
-                        clean_reply = clean_unicode_for_tts(reply)
-                        tts.say(clean_reply)
-                    except Exception as e:
-                        print("[TTS ERROR]:", e)
-                        tts.say("I'm listening.")
+                    clean_reply = clean_unicode_for_tts(reply)
+                    tts.say(clean_reply)
                 else:
                     tts.say("Tell me more.")
-        except requests.Timeout:
-            print("[TIMEOUT] Server took too long.")
-            tts.say("That took too long. Let's try again.")
-            continue
         except Exception as e:
-            print("[ERROR]:", e)
-            import traceback
-            traceback.print_exc()
+            print("[THERAPIST ERROR]:", e)
             tts.say("Let me try that again.")
             continue
+
+    # Summarize session for continuity
+    session_data['summary'] = summarize_session(history)
+    session_data['milestone'] = None
+    if session_num % 5 == 0:
+        session_data['milestone'] = f"Reached {session_num} sessions"
+        tts.say(f"Wow, {username}, we've had {session_num} sessions together now. That's a real commitment to yourself—and I'm honored to support you on this journey.")
+        time.sleep(0.5)
+        tts.say("Celebrating progress, no matter how small, is important. Thank you for trusting me along the way.")
+
     add_user_session(username, session_data)
-    try:
-        leds.fadeRGB("FaceLeds", 1.0, 1.0, 1.0, 0.3)
-    except:
-        pass
+    leds.fadeRGB("FaceLeds", 1.0, 1.0, 1.0, 0.3)
 
 def start_therapist_mode():
     global tts, posture, leds, motion, session_obj
@@ -385,29 +403,19 @@ def start_therapist_mode():
     except Exception as e:
         print("[THERAPIST] Could not connect to qi session:", e)
         return
-    print("[THERAPIST] Starting therapist mode...")
     tts.say("Starting therapist mode.")
     time.sleep(0.5)
-    print("[Attempting face recognition...]")
     username = recognize_face_naoqi(session_obj, timeout=10)
     if not username:
-        print("[No face recognized, asking for name...]")
         username = ask_name()
-        print("[Name captured]: {}".format(username))
-        print("[Starting face learning for {}...]".format(username))
         learned = learn_new_face_naoqi(session_obj, username)
-        if learned:
-            print("[Face successfully learned as {}]".format(username))
-        else:
-            print("[Face learning failed, continuing with name only]")
-    mood = "neutral"
+    # Empathy: calming robot behaviors
     try:
-        tts.say("Let's get comfortable.")
         posture.goToPosture("Sit", 0.5)
+        leds.fadeRGB("FaceLeds", 0.2, 0.6, 1.0, 0.4)  # Soft blue/cyan
     except:
         pass
-    therapy_loop(username, mood)
-    print("[THERAPIST] Session complete")
+    therapy_loop(username, "neutral")
 
 if __name__ == "__main__":
     start_therapist_mode()
