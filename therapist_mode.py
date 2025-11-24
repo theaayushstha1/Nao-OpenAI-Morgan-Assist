@@ -309,7 +309,7 @@ def summarize_session(history):
         if msg['role'] == 'user':
             mood = detect_mood_from_speech(msg['content'])
             if mood != 'neutral':
-                key_points.append(f"expressed {mood}")
+                key_points.append("expressed {}".format(mood))
         elif msg['role'] == 'assistant' and 'breathing' in msg['content'].lower():
             key_points.append("did a breathing exercise")
         elif msg['role'] == 'assistant' and 'grounding' in msg['content'].lower():
@@ -325,18 +325,20 @@ def therapy_loop(username, mood):
 
     # Acknowledge milestones and continuity
     if previous_sessions:
-        tts.say(f"Welcome back, {username}. This is our session number {session_num}.")
+        tts.say("Welcome back, {}. This is our session number {}.".format(username, session_num))
+
         # Use last session's summary if present
         last_summary = previous_sessions[-1].get('summary')
         if last_summary:
-            tts.say(f"Last time, we focused on {last_summary}.")
+            tts.say("Last time, we focused on {}.".format(last_summary))
+
         else:
             tts.say("It's good to have you back.")
     else:
-        tts.say(f"Nice to meet you, {username}.")
+        tts.say("Nice to meet you, {}.".format(username))
 
     # Mood check-in
-    tts.say("To begin, how are you feeling today, with one word or a number from 1 to 10?")
+    tts.say("To begin, how are you feeling today?")
     first_input = ""
     for turn in range(1, 1000):
         wav = record_audio(NAO_IP)
@@ -357,9 +359,9 @@ def therapy_loop(username, mood):
                 reply = result.get('reply', '')
                 if turn == 1:
                     first_input = user_input
-                    tts.say(f"Thank you for sharing.")
+                    tts.say("Thank you for sharing.")
                 if _detect_exit_intent(user_input):
-                    tts.say(f"Thank you for talking with me today, {username}. Take care of yourself.")
+                    tts.say("Thank you for talking with me today, {}. Take care of yourself.".format(username))
                     break
                 speech_mood = detect_mood_from_speech(user_input)
                 if speech_mood != "neutral" and speech_mood != mood:
@@ -382,11 +384,10 @@ def therapy_loop(username, mood):
     session_data['summary'] = summarize_session(history)
     session_data['milestone'] = None
     if session_num % 5 == 0:
-        session_data['milestone'] = f"Reached {session_num} sessions"
-        tts.say(f"Wow, {username}, we've had {session_num} sessions together now. That's a real commitment to yourself—and I'm honored to support you on this journey.")
+        session_data['milestone'] = "Reached {} sessions".format(session_num)
+        tts.say("Wow, {}, we've had {} sessions together now. That's a real commitment to yourself—and I'm honored to support you on this journey.".format(username, session_num))
         time.sleep(0.5)
         tts.say("Celebrating progress, no matter how small, is important. Thank you for trusting me along the way.")
-
     add_user_session(username, session_data)
     leds.fadeRGB("FaceLeds", 1.0, 1.0, 1.0, 0.3)
 
