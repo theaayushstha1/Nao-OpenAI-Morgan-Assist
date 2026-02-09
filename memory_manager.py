@@ -4,6 +4,8 @@ import os, json
 _BASE = os.path.dirname(os.path.abspath(__file__))
 _STORE = os.path.join(_BASE, "memory.json")
 
+MAX_HISTORY = 50
+
 def _load():
     if not os.path.exists(_STORE):
         return {}
@@ -26,6 +28,11 @@ def _save(data):
     with open(tmp, "w") as f:
         json.dump(data, f, indent=2)
     os.replace(tmp, _STORE)
+
+def _trim_history(history):
+    if len(history) > MAX_HISTORY:
+        return history[-MAX_HISTORY:]
+    return history
 
 def initialize_user(username):
     u = (username or "guest").strip().lower()
@@ -58,6 +65,7 @@ def add_user_message(username, text):
     if u not in data:
         data[u] = {"name": None, "history": []}
     data[u]["history"].append({"role":"user","content":text})
+    data[u]["history"] = _trim_history(data[u]["history"])
     _save(data)
 
 def add_bot_reply(username, text):
@@ -66,11 +74,8 @@ def add_bot_reply(username, text):
     if u not in data:
         data[u] = {"name": None, "history": []}
     data[u]["history"].append({"role":"assistant","content":text})
+    data[u]["history"] = _trim_history(data[u]["history"])
     _save(data)
-
-def save_chat_history(username):
-    
-    pass
 
 def migrate_username(old_u, new_u):
     old_u = (old_u or "guest").strip().lower()
@@ -87,5 +92,6 @@ def migrate_username(old_u, new_u):
         data[new_u]["name"] = data[old_u]["name"]
     # merge history
     data[new_u]["history"].extend(data[old_u].get("history", []))
+    data[new_u]["history"] = _trim_history(data[new_u]["history"])
     del data[old_u]
     _save(data)

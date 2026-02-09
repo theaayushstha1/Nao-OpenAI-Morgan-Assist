@@ -10,6 +10,8 @@ import threading
 import subprocess
 import os
 
+from utils.speech import random_phrase, time_of_day_greeting, format_expressive
+
 DEBOUNCE_SECONDS    = 2.0
 SAME_WORD_COOLDOWN  = 3.0
 MIN_CONF            = 0.45
@@ -26,13 +28,12 @@ YES_WORDS = ["yes","yeah","yep","sure","ok","okay","please"]
 NO_WORDS  = ["no","nope","nah","not now","later","maybe later","no thanks"]
 
 ASSIST_LINE = (
-    "How may I assist you today? "
-    "Say 'let's chat' for conversation mode. "
-    "'morgan assist' For Morgan State University help."
-    "Additionally for smart tools Say 'mini nao' "
-    
-    "Also If support is needed, say 'therapist mode'. "
-    "Ask me to 'dance' or to 'follow you' anytime. "
+    "How may I assist you today? \\pau=400\\ "
+    "Say 'let's chat' to start a conversation. \\pau=300\\ "
+    "Say 'morgan assist' for Morgan State University support. \\pau=300\\ "
+    "Say 'mini nao' for quick tools and utilities. \\pau=300\\ "
+    "Say 'therapist mode' if you'd like someone to talk to. \\pau=300\\ "
+    "You can also ask me to dance or follow you at any time. "
 )
 
 
@@ -189,7 +190,7 @@ def _extend_hand_for_shake_hold(nao_ip, port, tts, asr, hold_s=4.0):
     try:
         m  = ALProxy("ALMotion", nao_ip, port)
     except:
-        _say_nowait(tts, asr, "I hope you are doing great. " + ASSIST_LINE)
+        _say_nowait(tts, asr, format_expressive("I hope you are having a wonderful day. ", "warm") + ASSIST_LINE)
         return
 
     almoves = None
@@ -212,7 +213,7 @@ def _extend_hand_for_shake_hold(nao_ip, port, tts, asr, hold_s=4.0):
         angles = [ 0.35,            0.12,           1.20,        0.90,         0.00,      1.00]
         m.angleInterpolationWithSpeed(names, angles, 0.55)
 
-        _say_nowait(tts, asr, "I hope you are doing great. " + ASSIST_LINE)
+        _say_nowait(tts, asr, format_expressive("I hope you are having a wonderful day. ", "warm") + ASSIST_LINE)
 
         t_end = time.time() + float(hold_s)
         while time.time() < t_end:
@@ -224,7 +225,7 @@ def _extend_hand_for_shake_hold(nao_ip, port, tts, asr, hold_s=4.0):
         angles2 = [ 1.40,           -0.20,           1.20,        0.50,         0.00,      0.40]
         m.angleInterpolationWithSpeed(names2, angles2, 0.45)
     except:
-        _say_nowait(tts, asr, "I really hope you are doing great. " + ASSIST_LINE)
+        _say_nowait(tts, asr, format_expressive("I truly hope you are having a great day. ", "warm") + ASSIST_LINE)
     finally:
         try: m.setBreathEnabled("RArm", True)
         except: pass
@@ -286,7 +287,8 @@ def _ask_and_listen_yes_no(nao_ip, port, tts, asr, memory, timeout_s=YESNO_TIMEO
         pass
 
     _flush_word(memory)
-    _say_paused(tts, asr, "Hello, I am Nao. Nice to meet you. Would you like to shake my hand?")
+    _say_paused(tts, asr, format_expressive(
+        "{} My name is NAO. It's a pleasure to meet you. Would you like to shake my hand?".format(time_of_day_greeting()), "warm"))
 
     t0 = time.time()
     result = None
@@ -310,7 +312,7 @@ def _ask_and_listen_yes_no(nao_ip, port, tts, asr, memory, timeout_s=YESNO_TIMEO
 
 def _shutdown_robot(tts, asr):
     """Properly shut down NAO robot"""
-    _say_paused(tts, asr, "Shutting down now. Goodbye!")
+    _say_paused(tts, asr, format_expressive("Shutting down now. Thank you, and goodbye!", "warm"))
     time.sleep(1)
     try:
         # Create a flag file to signal shutdown
@@ -326,7 +328,7 @@ def _shutdown_robot(tts, asr):
 
 def _sleep_robot(nao_ip, port, tts, asr):
     """Put NAO to rest/crouch position and stop all activities"""
-    _say_paused(tts, asr, "Going to sleep.")
+    _say_paused(tts, asr, format_expressive("Going to rest now. Good night, and take care!", "calm"))
     try:
         # Stop all movements
         motion = ALProxy("ALMotion", nao_ip, port)
@@ -530,7 +532,8 @@ def listen_for_command(nao_ip, port=9559):
     head_flag = {"stop": False}
     _run_bg(_head_track_guard, nao_ip, port, head_flag)
 
-    _say_paused(tts, asr, "System Initializing. Say 'Nao' to ACTIVATE me.")
+    _say_paused(tts, asr, format_expressive(
+        "{} All systems are online. Say 'Nao' whenever you would like to begin.".format(time_of_day_greeting()), "warm"))
 
     last_trigger = 0.0
     last_word    = ""
@@ -582,7 +585,7 @@ def listen_for_command(nao_ip, port=9559):
                 _stop_move_now(nao_ip, port)
                 head_flag["stop"] = True
                 _tracker_stop_now(nao_ip, port)
-                _say_paused(tts, asr, "Entering therapy mode. I'm here to listen and support you.")
+                _say_paused(tts, asr, format_expressive(random_phrase("entering_therapist"), "calm"))
                 _flush_word(memory)
                 return "therapist"
 
@@ -599,7 +602,8 @@ def listen_for_command(nao_ip, port=9559):
                         _say_nowait(tts, asr, ASSIST_LINE)
                 else:
                     _wave_any_posture_bg(nao_ip, port)
-                    _say_nowait(tts, asr, "Hello, I am Nao. It is very nice to meet you. " + ASSIST_LINE)
+                    _say_nowait(tts, asr, format_expressive(
+                        "{} My name is NAO. It is truly a pleasure to meet you. ".format(time_of_day_greeting()), "warm") + ASSIST_LINE)
                 
                 _flush_word(memory)
 
@@ -608,7 +612,7 @@ def listen_for_command(nao_ip, port=9559):
                 _stop_move_now(nao_ip, port)
                 head_flag["stop"] = True
                 _tracker_stop_now(nao_ip, port)
-                _say_paused(tts, asr, "Okay, let's have a chat!")
+                _say_paused(tts, asr, format_expressive(random_phrase("entering_chat"), "warm"))
                 _flush_word(memory)
                 return "chat"
             
@@ -618,7 +622,7 @@ def listen_for_command(nao_ip, port=9559):
                 _stop_move_now(nao_ip, port)
                 head_flag["stop"] = True
                 _tracker_stop_now(nao_ip, port)
-                _say_paused(tts, asr, "Okay, entering chat mode. I can help with Morgan University questions.")
+                _say_paused(tts, asr, format_expressive(random_phrase("entering_chatbot"), "warm"))
                 _flush_word(memory)
                 return "chat"
             
@@ -626,7 +630,7 @@ def listen_for_command(nao_ip, port=9559):
                 _stop_move_now(nao_ip, port)
                 head_flag["stop"] = True
                 _tracker_stop_now(nao_ip, port) 
-                _say_paused(tts, asr, "Okay, MiniNao is ready for your service. Let me stand up first.")
+                _say_paused(tts, asr, format_expressive(random_phrase("entering_mininao") + " Let me stand up first.", "warm"))
                 _flush_word(memory)
                 return "mininao"
 

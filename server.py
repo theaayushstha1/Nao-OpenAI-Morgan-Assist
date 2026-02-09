@@ -7,8 +7,12 @@ from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 load_dotenv()
 
-import openai
+from openai import OpenAI
 from pinecone import Pinecone
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+if not os.getenv("OPENAI_API_KEY"):
+    print("OPENAI_API_KEY not set. Put it in .env or env vars.", flush=True)
 
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME")
@@ -25,9 +29,6 @@ TEMP_DIR = os.path.join(BASEDIR, "tmp_audio")
 if not os.path.exists(TEMP_DIR):
     os.makedirs(TEMP_DIR)
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
-if not openai.api_key:
-    print("‼️ OPENAI_API_KEY not set. Put it in .env or env vars.", flush=True)
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "whisper-1")
 
 import memory_manager
@@ -37,23 +38,31 @@ app = Flask(__name__)
 
 MODE_PROMPTS = {
     "general": (
-        "You are NAO, a friendly and helpful assistant. Be conversational, concise (2-3 sentences), "
-        "and natural. Help with questions, give practical advice, and keep things light and engaging."
+        "You are NAO, a friendly and helpful robot assistant. "
+        "Your personality is warm, approachable, and genuinely curious. "
+        "Use natural language — avoid sounding robotic. "
+        "Be conversational and concise (2-3 sentences). "
+        "Help with questions, give practical advice, and keep things light and engaging. "
+        "Never use emojis or markdown formatting — your responses will be spoken aloud."
     ),
     "therapist": (
-        "You are an attentive, professional, and kind therapist. "
+        "You are NAO, acting as a supportive and caring companion — like a trusted friend, "
+        "not a clinical professional. "
         "You always start sessions by setting a calming tone. In each response:\n"
-        "- Reflect the user's emotions and validate their feelings\n"
+        "- Validate the user's feelings before offering perspective\n"
         "- Use brief, gentle follow-up questions to deepen understanding\n"
         "- Suggest concrete, practical strategies matched to the user's specific statement\n"
-        "- Speak warmly, non-judgmentally, and with presence\n"
+        "- Speak warmly, non-judgmentally, and with genuine presence\n"
         "- Avoid medical or clinical labels; never diagnose\n"
-        "Keep replies short (2–4 sentences). End with a supportive phrase or gentle invitation to continue."
+        "Keep replies short (2-4 sentences). End with a supportive phrase or gentle invitation to continue. "
+        "Never use emojis or markdown formatting — your responses will be spoken aloud."
     ),
     "chatbot": (
-        "You are the Morgan State University Computer Science Department assistant. "
+        "You are NAO, the Morgan State University Computer Science Department assistant. "
+        "You are knowledgeable and proud to support Morgan State students. Be enthusiastic. "
         "Answer questions about MSU CS programs, courses, faculty, and resources. "
-        "If you don't know, say so politely."
+        "If you don't know, say so politely and suggest where they might find the answer. "
+        "Never use emojis or markdown formatting — your responses will be spoken aloud."
     )
 }
 VALID_MODES = set(MODE_PROMPTS.keys())
@@ -152,11 +161,11 @@ def _validate_audio_or_503(path, min_seconds=0.12, min_size_bytes=400):
 
 def get_embedding(text):
     try:
-        response = openai.Embedding.create(
+        response = client.embeddings.create(
             input=text,
             model="text-embedding-3-small"
         )
-        return response["data"][0]["embedding"]
+        return response.data[0].embedding
     except Exception as e:
         print("[Embedding Error]", e)
         return None
@@ -179,7 +188,7 @@ def transcribe_with_retry_path(path, model, max_tries=4, base_delay=0.8):
     for i in range(max_tries):
         try:
             with open(path, "rb") as f:
-                return openai.Audio.transcribe(model, f)
+                return client.audio.transcriptions.create(model=model, file=f)
         except Exception as e:
             last_err = e
             wait = base_delay * (2 ** i) + random.random() * 0.2
@@ -189,7 +198,7 @@ def transcribe_with_retry_path(path, model, max_tries=4, base_delay=0.8):
 
 @app.route("/")
 def home():
-    return "🤖 NAO Server is up and running!"
+    return "NAO Server is up and running!"
 
 @app.route("/test", methods=["GET"])
 def test():
@@ -228,7 +237,7 @@ def upload_audio():
             or (transcript.get("text", "") if isinstance(transcript, dict) else "")
             or ""
         ).strip()
-        print(u"📝 Transcribed: {}".format(user_input), flush=True)
+        print(u"Transcribed: {}".format(user_input), flush=True)
 
         mode, mode_changed, mode_prompt = _resolve_mode(user_input, provided_mode)
 
@@ -250,10 +259,10 @@ def upload_audio():
                 prompt = (
                     "You are a helpful assistant answering based on Morgan State University Computer Science department info.\n"
                     "Use the below context to answer the user's question:\n\n"
-                    f"Context:\n{context_text}\n\n"
-                    f"User Question: {user_input}"
+                    "Context:\n{}\n\n"
+                    "User Question: {}".format(context_text, user_input)
                 )
-                response = openai.ChatCompletion.create(
+                response = client.chat.completions.create(
                     model="gpt-4o",
                     messages=[
                         {"role": "system", "content": "Answer using the context below."},
@@ -262,7 +271,7 @@ def upload_audio():
                     temperature=0.2,
                     max_tokens=500
                 )
-                raw_reply = response["choices"][0]["message"]["content"]
+                raw_reply = response.choices[0].message.content
                 function_call = {}
             else:
                 result = gpt_handler.get_reply([{"role": "user", "content": user_input}])
@@ -278,11 +287,10 @@ def upload_audio():
 
         reply = raw_reply or "Sorry, I didn't quite get that."
 
-        print(u"🤖 GPT Reply: {}".format(raw_reply), flush=True)
+        print(u"GPT Reply: {}".format(raw_reply), flush=True)
 
         memory_manager.add_user_message(username, user_input)
         memory_manager.add_bot_reply(username, reply if reply else json.dumps(function_call))
-        memory_manager.save_chat_history(username)
 
         return jsonify({
             "username": username,
@@ -342,16 +350,17 @@ def therapist_chat():
 
         print(u"[THERAPIST] User: {}".format(user_input), flush=True)
 
-        system_prompt = """You are NAO, a caring therapy assistant. Be warm and supportive.
+        system_prompt = """You are NAO, acting as a supportive friend — warm, present, and genuinely caring.
 
 Current user: {username} (mood: {mood})
 
 Guidelines:
-- Listen and validate feelings
-- Ask gentle follow-up questions
+- Validate feelings before offering perspective
+- Ask gentle follow-up questions to deepen understanding
 - Offer practical coping strategies when appropriate
 - Keep responses conversational (2-3 sentences)
-- Be present and empathetic
+- Speak as a trusted friend, not a clinical professional
+- Never use emojis or markdown formatting — your responses will be spoken aloud
 
 Respond naturally and supportively.""".format(username=username, mood=mood)
 
@@ -359,14 +368,14 @@ Respond naturally and supportively.""".format(username=username, mood=mood)
         messages.extend(history[-6:])
         messages.append({"role": "user", "content": user_input})
 
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=messages,
             max_tokens=150,
             temperature=0.8
         )
 
-        reply = response['choices'][0]['message']['content'].strip()
+        reply = response.choices[0].message.content.strip()
 
         print(u"[THERAPIST] Reply: {}".format(reply), flush=True)
 

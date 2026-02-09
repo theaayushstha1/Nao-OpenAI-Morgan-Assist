@@ -6,7 +6,7 @@ from wake_listener import listen_for_command
 from chat_mode import enter_chat_mode
 from mini_nao import enter_mini_nao_mode
 from chatbot_mode import chatbot_mode
-from audio_handler import record_audio  
+from therapist_mode import start_therapist_mode
 
 def main():
     print("Starting NAO Chat System...")
@@ -21,9 +21,14 @@ def main():
         elif command == "mininao":
             enter_mini_nao_mode(nao_ip=NAO_IP, port=NAO_PORT)
         elif command == "chatbot":
-            chatbot_mode(lambda: record_audio(NAO_IP), tts)
+            chatbot_mode(nao_ip=NAO_IP, nao_port=NAO_PORT)
+        elif command == "therapist":
+            start_therapist_mode()
+        elif command == "exit":
+            print("Shutting down NAO Chat System.")
+            break
         else:
-            print("❌ Unknown command:", command)
+            print("Unknown command:", command)
 
 if __name__ == "__main__":
     main()

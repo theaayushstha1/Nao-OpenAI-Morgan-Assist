@@ -1,40 +1,22 @@
 # chatbot_mode.py
 # -*- coding: utf-8 -*-
+from __future__ import print_function
 from naoqi import ALProxy
 import os, json, requests, time, random, re, threading, qi
 
-SERVER_URL = "http://172.20.95.105:5000/upload"
+from utils.exit_detection import detect_exit_intent
+from utils.name_utils import extract_name
+from utils.face_naoqi import recognize_face_naoqi, learn_new_face_naoqi
+from utils.ask_name_utils import ask_name
+from utils.speech import (random_phrase, time_of_day_greeting, add_filler,
+                          animated_expressive_say, expressive_say)
+
+SERVER_IP = os.environ.get("SERVER_IP", "172.20.95.105")
+SERVER_URL = "http://{}:5000/upload".format(SERVER_IP)
 TIMEOUT = 20
 CHATBOT_MEMORY_FILE = "/data/home/nao/chatbot_users.json"
 
-EXIT_PATTERNS = [
-    r"^(goodbye|bye)$",
-    r"\b(exit|quit|stop|end|goodbye|bye|close)\b.*\b(chat|mode|conversation|talking|session)\b",
-    r"\b(chat|mode|conversation|talking|session)\b.*\b(exit|quit|stop|end|goodbye|bye|close)\b",
-    r"^(exit|quit|stop now|end chat|bye bye|that's all|that is all)$",
-    r"^(i'm done|i am done|we're done|we are done)$",
-    r"\b(i (want|need) to (go|leave|stop)|let me (go|leave)|gotta go)\b",
-    r"\b(talk to you later|catch you later|see you later)\b",
-    r"\b(thanks.*bye|thank you.*bye|thanks.*good(bye)?)\b",
-    r"\b(stop.*mode|exit.*mode|leave.*mode|quit.*mode)\b",
-    r"\b(go back|return|switch back)\b.*\b(wake|main|menu)\b",
-]
-
-EXIT_KEYWORDS = ["exit", "quit", "stop", "end", "goodbye", "bye", "close", "done", "finished", "that's all", "no more", "leave", "go back"]
-
-def _detect_exit_intent(text):
-    if not text:
-        return False
-    text_lower = text.lower().strip()
-    for pattern in EXIT_PATTERNS:
-        if re.search(pattern, text_lower, re.IGNORECASE):
-            return True
-    words = text_lower.split()
-    if len(words) <= 3:
-        for keyword in EXIT_KEYWORDS:
-            if keyword in words:
-                return True
-    return False
+SESSION = requests.Session()
 
 def get_available_gestures(behav_mgr):
     try:
@@ -101,132 +83,6 @@ def with_processing_announcer(tts, func):
         except:
             pass
 
-def recognize_face_naoqi(qi_session, tts, timeout=10):
-    try:
-        memory = qi_session.service("ALMemory")
-        face_detection = qi_session.service("ALFaceDetection")
-        face_detection.subscribe("ChatbotFaceReco")
-        tts.say("Look into my eyes.")
-        start_time = time.time()
-        recognized_name = None
-        while time.time() - start_time < timeout:
-            try:
-                face_data = memory.getData("FaceDetected")
-                if face_data and isinstance(face_data, list) and len(face_data) >= 2:
-                    face_info_list = face_data[1]
-                    if face_info_list and len(face_info_list) > 0:
-                        first_face = face_info_list[0]
-                        if isinstance(first_face, list) and len(first_face) >= 2:
-                            extra_info = first_face[1]
-                            if isinstance(extra_info, list) and len(extra_info) >= 3:
-                                face_name = extra_info[2]
-                                if face_name and isinstance(face_name, (str, unicode)) and str(face_name).strip() != "":
-                                    recognized_name = str(face_name)
-                                    tts.say("Hello {}! Nice to see you.".format(recognized_name))
-                                    break
-            except Exception:
-                pass
-            time.sleep(0.3)
-        face_detection.unsubscribe("ChatbotFaceReco")
-        return recognized_name
-    except Exception:
-        try:
-            face_detection.unsubscribe("ChatbotFaceReco")
-        except:
-            pass
-        return None
-
-def extract_name(t):
-    if not t:
-        return None
-    patterns = [
-        r"(?:my name is|i am|i'm|call me|this is)\s+([A-Za-z]+)",
-        r"^([A-Za-z]+)$",
-    ]
-    for pattern in patterns:
-        m = re.search(pattern, t.strip(), re.IGNORECASE)
-        if m:
-            name = m.group(1).capitalize()
-            if name.lower() not in ["the", "a", "an", "my", "is", "am"]:
-                return name
-    words = t.strip().split()
-    if words:
-        first_word = words[0].capitalize()
-        if len(first_word) > 1 and first_word.isalpha():
-            return first_word
-    return None
-
-def learn_new_face_naoqi(qi_session, tts, name):
-    try:
-        face_detection = qi_session.service("ALFaceDetection")
-        memory = qi_session.service("ALMemory")
-        tts.say("Look into my eyes so I can remember you.")
-        time.sleep(1)
-        try:
-            face_detection.subscribe("ChatbotFaceLearn")
-        except:
-            pass
-        start_time = time.time()
-        face_found = False
-        while time.time() - start_time < 8:
-            try:
-                face_data = memory.getData("FaceDetected")
-                if face_data and isinstance(face_data, list) and len(face_data) >= 2:
-                    if face_data[1] and len(face_data[1]) > 0:
-                        face_found = True
-                        break
-            except:
-                pass
-            time.sleep(0.3)
-        if face_found:
-            tts.say("Perfect. Hold still please.")
-            time.sleep(1)
-            face_detection.learnFace(name)
-            time.sleep(3)
-            tts.say("Got it, {}!".format(name))
-            result = True
-        else:
-            tts.say("Couldn't see you clearly. Let's continue anyway.")
-            result = False
-        try:
-            face_detection.unsubscribe("ChatbotFaceLearn")
-        except:
-            pass
-        return result
-    except Exception:
-        try:
-            face_detection.unsubscribe("ChatbotFaceLearn")
-        except:
-            pass
-        return False
-
-def ask_name(tts, nao_ip):
-    from audio_handler import record_audio
-    tts.say("What's your name?")
-    time.sleep(0.5)
-    for attempt in range(2):
-        wav = record_audio(nao_ip)
-        if not wav or not os.path.exists(wav):
-            if attempt == 0:
-                tts.say("Didn't catch that. Please say your name.")
-            continue
-        try:
-            import requests
-            SERVER_URL = "http://172.20.95.105:5000/upload"
-            with open(wav, 'rb') as f:
-                r = requests.post(SERVER_URL, files={"file": f}, data={"username": "guest"}, timeout=20)
-            spoken = (r.json() or {}).get("user_input", "")
-            name = extract_name(spoken)
-            if name:
-                return name
-            elif attempt == 0:
-                tts.say("Didn't catch your name. Please repeat.")
-                time.sleep(0.3)
-        except Exception:
-            if attempt == 0:
-                tts.say("Sorry, could you repeat your name?")
-    return "Guest"
-
 def load_user_sessions(username):
     try:
         if os.path.exists(CHATBOT_MEMORY_FILE):
@@ -253,8 +109,10 @@ def save_user_session(username, session_data):
     except:
         pass
 
-def chatbot_mode(record_audio_func, nao_ip="127.0.0.1", nao_port=9559):
-    print("🧠 Morgan Chatbot Mode (with RAG/Pinecone + Face reco/memory)")
+def chatbot_mode(nao_ip="127.0.0.1", nao_port=9559):
+    from audio_handler import record_audio
+
+    print("Morgan Chatbot Mode (with RAG/Pinecone + Face reco/memory)")
     qi_session = qi.Session()
     qi_session.connect("tcp://127.0.0.1:9559")
     tts = ALProxy("ALTextToSpeech", nao_ip, nao_port)
@@ -264,12 +122,16 @@ def chatbot_mode(record_audio_func, nao_ip="127.0.0.1", nao_port=9559):
     except Exception:
         behav_mgr, pool = None, []
 
-    username = recognize_face_naoqi(qi_session, tts, timeout=10)
+    username = recognize_face_naoqi(qi_session, tts, subscriber_name="ChatbotFaceReco", timeout=10)
     if not username:
-        username = ask_name(tts, nao_ip)
-        learned = learn_new_face_naoqi(qi_session, tts, username)
+        username = ask_name(tts, nao_ip, SERVER_URL, SESSION, lambda ip: record_audio(ip))
+        learned = learn_new_face_naoqi(qi_session, tts, username, subscriber_name="ChatbotFaceLearn")
         if learned:
             pass
+    else:
+        expressive_say(tts, "{} {}".format(
+            time_of_day_greeting(username),
+            random_phrase("greeting_known", name=username)), "warm")
 
     try:
         posture = ALProxy("ALRobotPosture", nao_ip, nao_port)
@@ -277,13 +139,13 @@ def chatbot_mode(record_audio_func, nao_ip="127.0.0.1", nao_port=9559):
     except:
         pass
 
-    tts.say("Hello {}! You may ask any Morgan question.".format(username))
+    expressive_say(tts, random_phrase("entering_chatbot"), "warm")
 
     messages = []
     prior_sessions = load_user_sessions(username)
 
     while True:
-        audio = record_audio_func()
+        audio = record_audio(nao_ip)
         def call():
             with open(audio, 'rb') as f:
                 return requests.post(
@@ -294,15 +156,15 @@ def chatbot_mode(record_audio_func, nao_ip="127.0.0.1", nao_port=9559):
                 )
         res = with_processing_announcer(tts, call)
         if res.status_code != 200:
-            _safe_say(tts, behav_mgr, "Sorry, I couldn't understand that.", pool)
+            _safe_say(tts, behav_mgr, random_phrase("error_connection"), pool)
             continue
 
         data = res.json() or {}
         user_input = (data.get("user_input") or "").strip()
         reply = (data.get("reply") or "").strip()
 
-        if _detect_exit_intent(user_input):
-            _safe_say(tts, behav_mgr, "Exiting chatbot mode. See you later!", pool)
+        if detect_exit_intent(user_input):
+            _safe_say(tts, behav_mgr, random_phrase("farewell", name=username), pool)
             try:
                 behav_mgr.stopAllBehaviors()
             except:
@@ -312,9 +174,9 @@ def chatbot_mode(record_audio_func, nao_ip="127.0.0.1", nao_port=9559):
         messages.append({'user': user_input, 'bot': reply})
 
         if reply:
-            _safe_say(tts, behav_mgr, reply, pool)
+            animated_expressive_say(qi_session, add_filler(reply), "warm", fallback_tts=tts)
         else:
-            _safe_say(tts, behav_mgr, "I couldn't find anything useful.", pool)
+            _safe_say(tts, behav_mgr, random_phrase("error_not_understood"), pool)
 
         try:
             behav_mgr.stopAllBehaviors()

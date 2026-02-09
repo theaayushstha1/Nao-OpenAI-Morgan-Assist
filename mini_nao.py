@@ -3,10 +3,11 @@ from __future__ import print_function
 import os, time, json, re, threading, requests, calendar
 import datetime as _dt
 from naoqi import ALProxy
+from utils.exit_detection import detect_exit_intent
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# CONFIG 
+# CONFIG
 # ──────────────────────────────────────────────────────────────────────────────
 CHECK_INTERVALS = 0.25  # timer/reminder check frequency
 FAST_MODE = True  # fewer follow-up prompts
@@ -14,7 +15,7 @@ FAST_REMINDER_DEFAULT_MIN = 10
 
 BALT_LAT, BALT_LON = 39.2904, -76.6122  # Baltimore, MD
 
-SERVER_IP   = "172.20.95.105"
+SERVER_IP   = os.environ.get("SERVER_IP", "172.20.95.105")
 SERVER_URL  = "http://{}:5000/upload".format(SERVER_IP)
 
 STATE_FILE = "/data/home/nao/Sound/state.json"
@@ -95,54 +96,6 @@ def _fmt_hhmm_ampm(local_dt):
     h = local_dt.hour % 12 or 12
     ap = "A M" if local_dt.hour < 12 else "P M"
     return "{}:{:02d} {}".format(h, local_dt.minute, ap)
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# EXIT DETECTION
-# ──────────────────────────────────────────────────────────────────────────────
-EXIT_PATTERNS = [
-    r"\b(exit|quit|stop|end|goodbye|bye|close)\b.*\b(chat|mode|conversation|talking|session)\b",
-    r"\b(chat|mode|conversation|talking|session)\b.*\b(exit|quit|stop|end|goodbye|bye|close)\b",
-    r"^(exit|quit|stop now|end chat|goodbye|bye bye|that's all|that is all)$",
-    r"^(i'm done|i am done|we're done|we are done)$",
-    r"^(stop talking|stop listening|no more)$",
-    r"\b(i (want|need) to (go|leave|stop)|let me (go|leave)|gotta go)\b",
-    r"\b(talk to you later|catch you later|see you later)\b",
-    r"\b(thanks.*bye|thank you.*bye|thanks.*good(bye)?)\b",
-    r"\b(stop.*mode|exit.*mode|leave.*mode|quit.*mode)\b",
-    r"\b(go back|return|switch back)\b.*\b(wake|main|menu)\b",
-]
-
-EXIT_KEYWORDS = [
-    "exit", "quit", "stop", "end", "goodbye", "bye", "close",
-    "done", "finished", "that's all", "no more", "leave", "go back"
-]
-
-def _is_exit_intent(text):
-    """Check transcribed text for exit intent"""
-    t = (text or "").strip().lower()
-    if not t: return False
-    
-    # Don't exit for "stop the timer/music..."
-    for tw in ("timer","alarm","music","sound","ringtone","countdown"):
-        if ("stop " + tw) in t or ("stop the " + tw) in t:
-            return False
-    
-    # Check regex patterns
-    for pattern in EXIT_PATTERNS:
-        if re.search(pattern, t, re.IGNORECASE):
-            print("[EXIT DETECTED] Pattern: {}".format(pattern))
-            return True
-    
-    # Check keywords in short utterances
-    words = t.split()
-    if len(words) <= 3:
-        for keyword in EXIT_KEYWORDS:
-            if keyword in words:
-                print("[EXIT DETECTED] Keyword: {}".format(keyword))
-                return True
-    
-    return False
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -454,7 +407,7 @@ def enter_mini_nao_mode(nao_ip="127.0.0.1", port=9559):
             print("[USER INPUT] {}".format(user_text))
 
             # Check server's transcription for exit intent
-            if _is_exit_intent(user_text):
+            if detect_exit_intent(user_text):
                 _say(tts, "Exiting MiniNao.")
                 print("👋 Exit detected")
                 break

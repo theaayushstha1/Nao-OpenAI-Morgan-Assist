@@ -1,3 +1,15 @@
-﻿.env
+.env
 .env.txt
 code.env
+__pycache__/
+*.pyc
+*.pyo
+tmp_audio/
+memory.json
+memory/
+*.wav
+OneDrive/
+face_store.json
+face_encodings.pkl
+*.bak
+.DS_Store

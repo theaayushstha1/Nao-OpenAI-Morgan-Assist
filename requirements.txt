@@ -4,7 +4,7 @@ requests==2.32.3
 python-dotenv==1.0.1
 
 # OpenAI
-openai==0.28.0
+openai>=1.50.0
 
 # Pinecone client
 pinecone-client==3.2.2

@@ -1,0 +1,306 @@
+# -*- coding: utf-8 -*-
+"""
+Central speech module for NAO robot.
+Provides phrase pools, expressive TTS, animated speech, and conversational helpers.
+Python 2.7 compatible.
+"""
+from __future__ import print_function
+import random
+import time
+
+# ---------------------------------------------------------------------------
+# Phrase pools — 4-6 variants each, {name} placeholders where appropriate
+# ---------------------------------------------------------------------------
+
+PHRASE_POOLS = {
+    "greeting_known": [
+        "Hello, {name}! It's wonderful to see you again.",
+        "Welcome back, {name}! How have you been?",
+        "{name}, it's always a pleasure to see you.",
+        "Good to see you, {name}. How have things been?",
+        "Welcome back, {name}. I'm glad you're here.",
+    ],
+    "greeting_unknown": [
+        "Hello! I don't believe we've been introduced. My name is NAO.",
+        "Welcome! My name is NAO. May I ask yours?",
+        "Hello there! I'm NAO, and it's a pleasure to meet you.",
+        "Hi! I'm NAO. I'd love to get to know you.",
+    ],
+    "entering_chat": [
+        "Conversation mode is ready. I'm all ears.",
+        "Let's talk! What would you like to discuss?",
+        "I'm ready for a great conversation.",
+        "Chat mode activated. Feel free to speak naturally.",
+    ],
+    "entering_chatbot": [
+        "Morgan State assistant is ready to help.",
+        "I'm here to answer your Morgan State questions.",
+        "Let's explore what Morgan State has to offer. Ask away!",
+        "Morgan State knowledge base is ready. How can I help?",
+    ],
+    "entering_therapist": [
+        "I'm here to listen and support you.",
+        "This is a safe and confidential space. Take your time.",
+        "I'm here for you, whenever you're ready to talk.",
+        "Take your time. I'm right here with you.",
+    ],
+    "entering_mininao": [
+        "Mini NAO utilities are ready. What can I help you with?",
+        "Your personal assistant tools are ready.",
+        "Mini NAO is at your service. What would you like to do?",
+        "Let me help you with that. What do you need?",
+    ],
+    "farewell": [
+        "It was a pleasure, {name}. Take care!",
+        "Until next time, {name}. Have a wonderful day!",
+        "Goodbye, {name}. I really enjoyed our conversation.",
+        "I look forward to speaking with you again, {name}.",
+        "Take care, {name}! See you soon.",
+    ],
+    "farewell_therapist": [
+        "Take good care of yourself, {name}.",
+        "You showed real strength today, {name}. I'm proud of you.",
+        "Thank you for talking with me today, {name}. Be kind to yourself.",
+        "Remember, {name}, it takes real courage to share. I'm proud of you.",
+        "Until next time, {name}. You're doing better than you think.",
+    ],
+    "processing": [
+        "Let me think about that for you.",
+        "I'm working on that now.",
+        "Just a moment, please.",
+        "Give me one moment.",
+        "Bear with me, I'm processing that.",
+    ],
+    "error_connection": [
+        "I'm experiencing a brief connection issue. Could we try that again?",
+        "It seems the connection was interrupted. Let me try once more.",
+        "I encountered a connection issue. Shall we try again?",
+        "I had difficulty reaching the server. One more attempt?",
+    ],
+    "error_not_heard": [
+        "I didn't quite catch that. Could you say it again?",
+        "I apologize, I didn't hear that clearly. Could you repeat it?",
+        "I couldn't hear you clearly. Could you repeat that?",
+        "I wasn't able to pick that up. Would you mind saying it again?",
+    ],
+    "error_not_understood": [
+        "I'm not quite sure how to respond to that. Could you rephrase?",
+        "Could you try phrasing that a different way?",
+        "I'm having difficulty with that one. Could you elaborate?",
+        "I want to give you a good answer. Could you ask that differently?",
+    ],
+    "error_general": [
+        "Let me try that again.",
+        "I encountered a small issue. Let me try once more.",
+        "Something didn't go as expected. Let me try again.",
+        "My apologies. Let me give that another attempt.",
+    ],
+    "acknowledgment": [
+        "Thank you for sharing that.",
+        "I hear you. Thank you.",
+        "That's very insightful. Thank you for sharing.",
+        "I appreciate you telling me that.",
+        "I understand. Thank you for telling me.",
+    ],
+    "mood_sad": [
+        "I can sense you're feeling down, {name}. I'm right here with you.",
+        "It sounds like things are tough right now, {name}. I'm here to listen.",
+        "I hear the sadness in your words, {name}. You don't have to face this alone.",
+        "It's okay to feel this way, {name}. I'm not going anywhere.",
+    ],
+    "mood_happy": [
+        "You sound wonderful today, {name}! That truly makes me happy to hear.",
+        "I love hearing that positivity, {name}. It's truly uplifting.",
+        "That's wonderful, {name}! Your energy is contagious.",
+        "You're in a wonderful place, {name}. I'd love to hear more about what's going well.",
+    ],
+    "mood_angry": [
+        "I can hear the frustration, {name}. Your feelings are completely valid.",
+        "It sounds like something really got to you, {name}. I'm listening.",
+        "I understand you're upset, {name}. Let's talk through it together.",
+        "Your frustration makes sense, {name}. I'm here for you.",
+    ],
+    "mood_stressed": [
+        "It sounds like you're carrying a lot right now, {name}.",
+        "That does sound stressful, {name}. Take a deep breath with me.",
+        "I can tell there's a lot on your plate, {name}. Let's take it one step at a time.",
+        "You're dealing with a lot, {name}. It's okay to pause and breathe.",
+    ],
+    "mood_calm": [
+        "You seem at peace today, {name}. That's really wonderful.",
+        "I can tell you're in a good headspace, {name}. That's great to hear.",
+        "You sound relaxed today, {name}. What a lovely way to be.",
+        "There's a nice calm about you today, {name}.",
+    ],
+    "posture_done": [
+        "There we go.",
+        "All done.",
+        "How does that feel?",
+        "All set.",
+    ],
+    "dance_intro": [
+        "Watch this!",
+        "Allow me to demonstrate my moves!",
+        "Here we go! Watch closely.",
+        "I've been looking forward to this!",
+    ],
+    "dance_followup": [
+        "How was that?",
+        "Not bad for a robot, right?",
+        "I've been working on that one!",
+        "I hope you enjoyed that!",
+    ],
+    "ask_name": [
+        "May I know your name?",
+        "What should I call you?",
+        "I'd love to know your name.",
+        "What would you like me to call you?",
+    ],
+    "ask_name_retry": [
+        "I apologize, I didn't catch that. Could you say your name once more?",
+        "I'm sorry, I missed that. Could you repeat your name?",
+        "Would you mind saying your name one more time?",
+        "I didn't quite get that. What is your name?",
+    ],
+    "listening_cue": [
+        "Mm-hmm.",
+        "I see.",
+        "Please, go on.",
+        "I'm listening.",
+        "I understand.",
+    ],
+    "filler": [
+        "Hmm, ",
+        "Well, ",
+        "Let me see, ",
+        "That's a good point, ",
+    ],
+}
+
+
+# ---------------------------------------------------------------------------
+# Expressive style presets  (speed%, pitch%)
+# ---------------------------------------------------------------------------
+
+STYLES = {
+    "warm":       {"speed": 90,  "pitch": 95},
+    "excited":    {"speed": 110, "pitch": 110},
+    "calm":       {"speed": 80,  "pitch": 90},
+    "thinking":   {"speed": 85,  "pitch": 95},
+    "empathetic": {"speed": 85,  "pitch": 90},
+    "neutral":    {"speed": 100, "pitch": 100},
+}
+
+
+# ---------------------------------------------------------------------------
+# Core helpers
+# ---------------------------------------------------------------------------
+
+def random_phrase(category, **kwargs):
+    """Pick a random phrase from *category* and format with **kwargs."""
+    pool = PHRASE_POOLS.get(category, [])
+    if not pool:
+        return ""
+    phrase = random.choice(pool)
+    if kwargs:
+        try:
+            return phrase.format(**kwargs)
+        except (KeyError, IndexError):
+            return phrase
+    return phrase
+
+
+def time_of_day_greeting(name=None):
+    """Return 'Good morning/afternoon/evening, {name}!' based on local time."""
+    hour = time.localtime().tm_hour
+    if hour < 12:
+        part = "Good morning"
+    elif hour < 17:
+        part = "Good afternoon"
+    else:
+        part = "Good evening"
+    if name:
+        return "{}, {}!".format(part, name)
+    return "{}!".format(part)
+
+
+def add_filler(text, probability=0.3):
+    """Randomly prepend a conversational filler to *text*."""
+    if not text:
+        return text
+    if random.random() < probability:
+        filler = random.choice(PHRASE_POOLS.get("filler", ["Well, "]))
+        # Lowercase the first character of text after filler
+        return filler + text[0].lower() + text[1:]
+    return text
+
+
+# ---------------------------------------------------------------------------
+# TTS tag helpers
+# ---------------------------------------------------------------------------
+
+def format_expressive(text, style="neutral"):
+    """Wrap *text* with naoqi TTS tags for speed and pitch. Returns tagged string."""
+    s = STYLES.get(style, STYLES["neutral"])
+    prefix = "\\rspd={speed}\\ \\vct={pitch}\\".format(speed=s["speed"], pitch=s["pitch"])
+    suffix = "\\rspd=100\\ \\vct=100\\"
+    return "{} {} {}".format(prefix, text, suffix)
+
+
+def expressive_say(tts, text, style="neutral"):
+    """Speak *text* with expressive TTS tags applied."""
+    tagged = format_expressive(text, style)
+    try:
+        tts.say(tagged)
+    except Exception as e:
+        print("[expressive_say error]: {}".format(e))
+        try:
+            tts.say(text)
+        except Exception:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# ALAnimatedSpeech helpers
+# ---------------------------------------------------------------------------
+
+def animated_say(session, text, fallback_tts=None):
+    """Use ALAnimatedSpeech to speak with auto-gestures.
+    Falls back to plain tts.say() if ALAnimatedSpeech is unavailable.
+
+    Args:
+        session: qi.Session (connected).
+        text: string to speak.
+        fallback_tts: ALTextToSpeech proxy to use as fallback.
+    """
+    try:
+        anim_speech = session.service("ALAnimatedSpeech")
+        anim_speech.say(text)
+    except Exception as e:
+        print("[animated_say fallback]: {}".format(e))
+        if fallback_tts:
+            try:
+                fallback_tts.say(text)
+            except Exception:
+                pass
+
+
+def animated_expressive_say(session, text, style="neutral", fallback_tts=None):
+    """Combined animated speech with expressive TTS tags."""
+    tagged = format_expressive(text, style)
+    animated_say(session, tagged, fallback_tts=fallback_tts)
+
+
+# ---------------------------------------------------------------------------
+# Listening cue
+# ---------------------------------------------------------------------------
+
+def listening_cue(tts, probability=0.15):
+    """Emit a brief acknowledgment cue with the given probability."""
+    if random.random() < probability:
+        cue = random_phrase("listening_cue")
+        if cue:
+            try:
+                tts.say(cue)
+            except Exception:
+                pass

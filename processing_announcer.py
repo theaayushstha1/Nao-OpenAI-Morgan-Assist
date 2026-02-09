@@ -3,6 +3,8 @@ import threading
 import time
 import random
 
+from utils.speech import PHRASE_POOLS
+
 class ProcessingAnnouncer(object):
     """
     Speaks after a delay ONLY if work is still ongoing.
@@ -25,14 +27,11 @@ class ProcessingAnnouncer(object):
         self.max_utterances = int(max_utterances)
         self._stop = threading.Event()
         self._thread = None
-        self._phrases = phrases or [
-            "One moment…",
-            "analyzing your command",
-            "I'm processing your request",
-            "Processing at the moment…",
-            "Just a sec please…",
-            "please hold on…","please bare with me…",
-        ]
+        self._phrases = phrases or PHRASE_POOLS.get("processing", [
+            "Let me think about that.",
+            "Working on it.",
+            "Just a moment.",
+        ])
 
     def start(self):
         if self._thread and self._thread.is_alive():
