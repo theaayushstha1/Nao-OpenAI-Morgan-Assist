@@ -12,6 +12,28 @@ import os
 
 from utils.speech import random_phrase, time_of_day_greeting, format_expressive
 
+_MODE_HINT_MAP = {
+    "chat": "chat",
+    "let's chat": "chat",
+    "chatbot": "morgan",
+    "morgan": "morgan",
+    "morgan assist": "morgan",
+    "therapist": "therapy",
+    "therapist mode": "therapy",
+    "therapy": "therapy",
+    "mini nao": "skills",
+    "mini": "skills",
+}
+
+
+def extract_hint(phrase):
+    """Return one of chat/morgan/therapy/skills, or None if no match."""
+    if not phrase:
+        return None
+    key = phrase.strip().lower()
+    return _MODE_HINT_MAP.get(key)
+
+
 DEBOUNCE_SECONDS    = 2.0
 SAME_WORD_COOLDOWN  = 3.0
 MIN_CONF            = 0.45
