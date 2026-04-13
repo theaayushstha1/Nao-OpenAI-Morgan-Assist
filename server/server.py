@@ -1,0 +1,143 @@
+"""Flask app exposing POST /turn for NAO."""
+from __future__ import annotations
+
+import asyncio
+import base64
+import os
+import tempfile
+import wave
+
+from flask import Flask, jsonify, request
+from openai import OpenAI
+
+from agents import Runner
+
+from server import config, safety, session
+from server.agents import pick_initial_agent
+
+app = Flask(__name__)
+_client = OpenAI(api_key=config.OPENAI_API_KEY)
+
+
+# ───────── helpers ─────────
+
+def _validate_wav(path: str) -> bool:
+    if os.path.getsize(path) < 400:
+        return False
+    try:
+        with wave.open(path, "rb") as w:
+            dur = w.getnframes() / float(w.getframerate() or 1)
+            return dur >= 0.12
+    except Exception:
+        return False
+
+
+def _transcribe(path: str) -> str:
+    with open(path, "rb") as f:
+        resp = _client.audio.transcriptions.create(
+            model=config.WHISPER_MODEL, file=f,
+        )
+    return resp.text
+
+
+def _build_user_message(transcript: str, image_b64: str | None):
+    if not image_b64:
+        return transcript
+    return [
+        {"type": "text", "text": transcript},
+        {"type": "image_url", "image_url": {
+            "url": f"data:image/jpeg;base64,{image_b64}",
+        }},
+    ]
+
+
+def _run_agent(username: str, hint: str | None, transcript: str,
+               image_b64: str | None) -> tuple[str, str, list[dict], bool]:
+    agent = pick_initial_agent(username, hint)
+    sess = session.get_or_create_session(username)
+    ctx = {
+        "username": username,
+        "actions_queue": [],
+        "emotion_log": [],
+        "latest_image_b64": image_b64,
+        "suppress_image": False,
+    }
+    message = _build_user_message(transcript, image_b64)
+    result = asyncio.run(Runner.run(agent, message, context=ctx, session=sess))
+    active = getattr(result, "last_agent", agent).name
+    return (
+        result.final_output,
+        active,
+        list(ctx["actions_queue"]),
+        bool(ctx["suppress_image"]),
+    )
+
+
+def _run_recap(username: str) -> str:
+    """End-session recap stub — persists a neutral recap."""
+    from server.tools.emotion import _recap_session_impl
+    ctx = {"username": username, "emotion_log": []}
+    return _recap_session_impl(ctx)
+
+
+# ───────── routes ─────────
+
+@app.get("/health")
+def health():
+    return jsonify(ok=True)
+
+
+@app.post("/turn")
+def turn():
+    username = request.form.get("username") or "guest"
+    hint = request.form.get("hint") or None
+    end_session = request.form.get("end_session", "").lower() == "true"
+
+    if end_session:
+        body = _run_recap(username)
+        return jsonify(
+            username=username, user_input="", reply=body,
+            active_agent="therapist", actions=[], crisis=False,
+            suppress_image=False,
+        )
+
+    audio = request.files.get("audio")
+    image = request.files.get("image")
+    if not audio:
+        return jsonify(error="missing_audio"), 400
+
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        audio.save(tmp.name)
+        wav_path = tmp.name
+    try:
+        if not _validate_wav(wav_path):
+            return jsonify(error="invalid_audio"), 503
+        transcript = _transcribe(wav_path)
+    finally:
+        os.unlink(wav_path)
+
+    crisis = safety.crisis_check(transcript)
+    if crisis.positive:
+        return jsonify(
+            username=username, user_input=transcript,
+            reply=safety.HOTLINE_REPLY, active_agent="safety",
+            actions=[{"name": "change_eye_color", "args": {"color": "white"}}],
+            crisis=True, suppress_image=False,
+        )
+
+    consent = session.get_camera_consent(username)
+    image_b64 = None
+    if image and consent:
+        image_b64 = base64.b64encode(image.read()).decode("ascii")
+
+    reply, active, actions, suppress = _run_agent(username, hint, transcript, image_b64)
+
+    return jsonify(
+        username=username, user_input=transcript, reply=reply,
+        active_agent=active, actions=actions, crisis=False,
+        suppress_image=suppress,
+    )
+
+
+if __name__ == "__main__":
+    app.run(host=config.SERVER_IP, port=config.SERVER_PORT, debug=False)
