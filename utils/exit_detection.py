@@ -31,8 +31,7 @@ _STOP_TARGET_WORDS = ("timer", "alarm", "music", "sound", "ringtone", "countdown
 def detect_exit_intent(text):
     """Check transcribed text for exit intent.
 
-    Uses the most complete detection logic (from mini_nao) which includes
-    a guard against false positives like "stop the timer".
+    Regex-based with guards against false positives like "stop the timer".
     """
     t = (text or "").strip().lower()
     if not t:
