@@ -1,34 +1,39 @@
 # -*- coding: utf-8 -*-
+"""NAO entry point. Wake loop -> conversation.run(hint)."""
+from __future__ import print_function
 
-from config import NAO_IP, NAO_PORT
-from naoqi import ALProxy
-from wake_listener import listen_for_command
-from chat_mode import enter_chat_mode
-from mini_nao import enter_mini_nao_mode
-from chatbot_mode import chatbot_mode
-from therapist_mode import start_therapist_mode
+import qi
+
+import config
+import wake_listener
+import conversation
+
+
+def _get_phrase():
+    try:
+        result = wake_listener.listen_for_command(config.NAO_IP, config.NAO_PORT)
+        if isinstance(result, tuple):
+            return result[0] if result else None
+        return result
+    except Exception as e:
+        print("wake error:", e)
+        return None
+
 
 def main():
-    print("Starting NAO Chat System...")
-
-    tts = ALProxy("ALTextToSpeech", NAO_IP, NAO_PORT)
-
+    session = qi.Session()
+    session.connect("tcp://{0}:{1}".format(config.NAO_IP, config.NAO_PORT))
     while True:
-        command = listen_for_command(NAO_IP, NAO_PORT)
+        phrase = _get_phrase()
+        hint = wake_listener.extract_hint(phrase)
+        try:
+            conversation.run(session, initial_hint=hint)
+        except KeyboardInterrupt:
+            print("Exiting.")
+            return
+        except Exception as e:
+            print("Conversation loop error:", e)
 
-        if command == "chat":
-            enter_chat_mode(tts, nao_ip=NAO_IP, port=NAO_PORT)
-        elif command == "mininao":
-            enter_mini_nao_mode(nao_ip=NAO_IP, port=NAO_PORT)
-        elif command == "chatbot":
-            chatbot_mode(nao_ip=NAO_IP, nao_port=NAO_PORT)
-        elif command == "therapist":
-            start_therapist_mode()
-        elif command == "exit":
-            print("Shutting down NAO Chat System.")
-            break
-        else:
-            print("Unknown command:", command)
 
 if __name__ == "__main__":
     main()
