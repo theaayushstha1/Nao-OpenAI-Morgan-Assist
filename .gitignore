@@ -1,17 +1,22 @@
+# Environment
 .env
-.env.txt
-code.env
+.env.*
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
-tmp_audio/
-memory.json
-memory/
-*.wav
-OneDrive/
-face_store.json
-face_encodings.pkl
-*.bak
-.DS_Store
-.worktrees/
+.pytest_cache/
+
+# Virtualenvs
 server/.venv/
+.venv/
+
+# macOS
+.DS_Store
+
+# Worktrees
+.worktrees/
+
+# Temp
+*.bak
