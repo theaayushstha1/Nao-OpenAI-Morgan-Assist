@@ -14,3 +14,4 @@ face_encodings.pkl
 *.bak
 .DS_Store
 .worktrees/
+server/.venv/
