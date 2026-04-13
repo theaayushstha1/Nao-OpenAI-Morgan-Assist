@@ -97,7 +97,8 @@ Router reads the first user message and the optional wake-phrase hint, then hand
 | `identify_distortion(thought)` | Classifies one of 10 classic CBT distortions (catastrophizing, all-or-nothing, mind reading, personalization, fortune-telling, emotional reasoning, shoulds, labeling, magnification/minimization, filtering) + gentle explanation. |
 | `suggest_reframe(thought, distortion)` | Returns 2 alternative balanced thoughts. |
 | `set_led_color(color)` | NAO action tool — mood-reflecting LEDs. |
-| `recap_session()` | End-of-session summary of emotions, thoughts, reframes; persists to user's therapist history. |
+| `set_camera_consent(enabled)` | Persist the user's camera preference to the session DB; surfaces as `suppress_image` in the response so NAO stops uploading images. |
+| `recap_session()` | End-of-session summary of emotions, thoughts, reframes; persists to user's therapist history. Invoked automatically when the `/turn` request has `end_session=true`, or explicitly by the agent when the user signals they're wrapping up. |
 
 **`cbt_coach` sub-agent** — walks a **thought record**:
 
@@ -125,19 +126,27 @@ One loop replaces all 4 mode files:
 
 ```python
 def run(initial_hint=None):
-    username = resolve_user_via_face()   # utils.face_naoqi + ask_name if unknown
-    greeting_done = False
+    username = resolve_user_via_face()        # utils.face_naoqi + ask_name if unknown
+    suppress_image = False
+    hint = initial_hint
     while True:
         wav = audio_handler.record_audio(...)
         if not wav: continue
-        img = camera_capture.snap_quick()          # optional
-        resp = post_turn(wav, img, username, initial_hint)
-        initial_hint = None                         # only on first turn
+        img = None if suppress_image else camera_capture.snap_quick()
+        ann = ProcessingAnnouncer(tts); ann.start()
+        try:
+            resp = post_turn(wav, img, username, hint)
+        finally:
+            ann.stop()
+        hint = None                                # only used on first turn
         if resp.get("crisis"): handle_crisis(resp); continue
+        if resp.get("suppress_image"): suppress_image = True
         speak(resp["reply"])
         for action in resp.get("actions", []):
-            nao_execute.run(action)                 # dispatches {name, args}
-        if exit_detection.detect(resp["user_input"]): break
+            nao_execute.run(action)                # dispatches {name, args}
+        if exit_detection.detect(resp["user_input"]):
+            post_turn(None, None, username, hint=None, end_session=True)  # triggers recap
+            break
 ```
 
 `nao_execute.py` is a small dispatcher mapping tool names (`wave_hand`, `nod_head`, `change_eye_color`, `dance`, `spin`, `set_timer`, etc.) to naoqi calls.
@@ -148,10 +157,11 @@ def run(initial_hint=None):
 
 | Field | Type | Required | Purpose |
 |---|---|---|---|
-| `audio` | WAV file | yes | Whisper input |
-| `image` | JPEG file | no | Vision input (therapist always sends) |
+| `audio` | WAV file | conditional | Whisper input; omitted on `end_session=true` final call |
+| `image` | JPEG file | no | Vision input. Therapist defaults to sending unless user has opted out (see Camera Consent). |
 | `username` | string | yes | Session key |
-| `hint` | string | no | `chat` \| `morgan` \| `therapy` \| `skills` |
+| `hint` | string | no | `chat` \| `morgan` \| `therapy` \| `skills`. If set, router is skipped. |
+| `end_session` | bool | no | If true, skip audio/agent, run `recap_session` for therapist, persist, return minimal response. |
 
 **Response JSON:**
 
@@ -164,16 +174,23 @@ def run(initial_hint=None):
   "actions": [
     {"name": "change_eye_color", "args": {"color": "blue"}}
   ],
-  "crisis": false
+  "crisis": false,
+  "suppress_image": false
 }
 ```
+
+`suppress_image` goes to `true` exactly once, on the turn where the therapist agent calls `set_camera_consent(false)`. NAO latches it for the rest of the session.
 
 `actions` is an ordered list — agent can wave *and* change LED in one turn. NAO executes them in order.
 
 ### Safety
 
 - **Pre-dispatch `crisis_check`** (in `server.py`, not an agent tool) runs on the transcript before the agent receives the user message, every turn, every agent. Combines a fast keyword list (hard-fail on any hit) with a small LLM classification (`gpt-4o-mini`) for ambiguous phrasing. Positive → hardcoded response containing the 988 Suicide & Crisis Lifeline, encourages reaching out to a human, skips agent entirely, logs the event. Agent-facing `crisis_check` is intentionally absent — the check is a gate the agent cannot override.
-- Therapist opening line: "I'll use my camera to check in on how you're feeling — is that okay? Say 'no camera' if you'd rather I didn't." If user declines, image is not sent for the rest of the session.
+- **Camera consent flow:**
+  - Therapist opening line: "I'll use my camera to check in on how you're feeling — is that okay? Say 'no camera' if you'd rather I didn't."
+  - If the user declines, the therapist agent calls the `set_camera_consent(false)` tool. The tool (a) writes the consent to the session DB so it survives across handoffs and next visits, and (b) sets `suppress_image=true` on the response.
+  - NAO latches `suppress_image=true` locally and stops attaching images for the rest of the session. Next visit, the first response from the therapist agent reads the persisted consent and includes `suppress_image=true` on the opening turn if it was set to false last time.
+  - User can re-enable by saying "you can use the camera"; `set_camera_consent(true)` clears the flag.
 - System prompts: "Never diagnose. Never claim to be a therapist. Always recommend professional help for serious or ongoing distress."
 - No medication advice, ever.
 
@@ -248,11 +265,14 @@ Roughly **~2600 → ~1200 lines**. Half the codebase gone; features added.
 3. NAO POSTs `/turn` with `audio`, `image`, `username`, `hint`.
 4. Server validates audio, transcribes with Whisper, runs `crisis_check(transcript)`.
 5. If crisis: hardcoded safe response returned; agent skipped.
-6. Else: build multimodal message, resolve session, pick initial agent (hint → direct, else router), run Agents SDK `Runner.run()` with session.
-7. Agents SDK handles handoffs and tool calls internally. Final output is natural-language reply. Tool calls that match NAO action tools are collected into `actions[]` rather than executed server-side.
-8. Server returns JSON.
-9. NAO speaks reply, executes actions in order, loops.
-10. [[Exit Intent Detection|Exit intent]] detected → break back to wake listener.
+6. Else: build multimodal message, resolve session, pick initial agent:
+   - If `hint` is set → bypass the router entirely; `Runner.run(specialist_agent, ...)` with the named specialist (`therapist`, `chatbot`, `chat`, or `skills`).
+   - If `hint` is null → `Runner.run(router_agent, ...)`; router hands off on its first turn.
+7. Agents SDK executes handoffs and tool calls. **NAO action tools** (`wave_hand`, `change_eye_color`, `dance`, etc.) are declared as regular tools whose implementation appends `{name, args}` to a **context-scoped `actions_queue`** passed in via `Runner.run(..., context={"actions_queue": [...], "username": ..., "suppress_image": ...})`. The tool returns `"queued"` so the agent continues. Non-action tools (`pinecone_search`, `observe_face`, `identify_distortion`, etc.) execute normally and return real data.
+8. After `Runner.run()` completes, server reads `actions_queue` from context and builds the response JSON. If the therapist agent called `recap_session` or the turn had `end_session=true`, persist the recap to the user's therapist history.
+9. Server returns JSON (including `suppress_image` flag if camera consent changed this turn).
+10. NAO speaks reply, executes actions in order, loops. If response set `suppress_image`, NAO stops sending images for the rest of this session.
+11. [[Exit Intent Detection|Exit intent]] detected → NAO sends a final POST with `end_session=true` so the server can run `recap_session`, then breaks back to wake listener.
 
 ## Error Handling
 
@@ -290,16 +310,16 @@ Env vars (all with defaults in `config.py`):
 | `SESSION_DB` | `server/nao.db` | SQLiteSession file |
 | `OPENAI_AGENTS_TRACE` | `1` | Enable built-in tracing |
 | `ROUTER_MODEL` | `gpt-4o-mini` | |
-| `THERAPIST_MODEL` | `gpt-4o` | Needed for vision; mini is text-only |
+| `THERAPIST_MODEL` | `gpt-4o` | Full model for nuanced emotional reasoning + vision. `gpt-4o-mini` also supports vision and can be swapped here to cut cost ~10× if quality is acceptable. |
 | `WHISPER_MODEL` | `whisper-1` | |
 
 ## Rollout
 
 1. Branch: `refactor/agents-sdk` off `refactor/openai-upgrade-and-cleanup`.
-2. Build server-side first. Can be tested with `curl` against `/turn` independently of NAO.
-3. Build new `conversation.py` on NAO side; test against dev server.
-4. Cut over in one commit: delete old mode files + ship new ones.
-5. Keep `refactor/openai-upgrade-and-cleanup` tagged as rollback anchor.
+2. Tag commit `7ff21dd` (head of `refactor/openai-upgrade-and-cleanup` before this work begins) as `pre-agents-sdk` so we have a stable rollback anchor — branches move, tags don't.
+3. Build server-side first. Can be tested with `curl` against `/turn` independently of NAO.
+4. Build new `conversation.py` on NAO side; test against dev server.
+5. Cut over in one commit: delete old mode files + ship new ones.
 6. Update Obsidian vault (`~/Documents/Obsidian Vault/Nao-OpenAI-Morgan-Assist/wiki/`) in a follow-up commit after implementation lands.
 
 ## Open Questions
