@@ -25,101 +25,119 @@ A voice-driven assistant that connects the **NAO humanoid robot** to **OpenAI (W
 ---
 
 ## ✨ Features
-- 🗣 **Voice Interaction** – Robust on-device capture with silence/VAD handling  
-- 🧠 **Morgan Chatbot Mode** – Answers from MSU CS knowledge base (Pinecone)  
-- 📚 **Study Mode** – Teaches step-by-step with examples + quick practice  
-- 💬 **General Mode** – Friendly Q&A assistant  
-- 👤 **Face Recognition** – Enroll/recognize users (face encodings)  
-- 💾 **Memory Manager** – Per-user chat history and name recall  
-- 🧩 **Function Hooks** – Simple server “function_call” support for actions  
+- 🧠 **OpenAI Agents SDK** – Multi-agent routing (router + chat, chatbot, skills, therapist with CBT/grounding sub-agents)
+- 🗣 **Voice + Vision** – Whisper STT, GPT-4o multimodal (face emotion read from per-turn JPEG)
+- 📚 **Morgan CS RAG** – Pinecone retrieval for department knowledge
+- 💙 **Therapy Mode** – Empathetic companion with CBT thought records, grounding exercises, per-session emotion logging, cross-session recaps
+- 🛡 **Safety Gate** – Pre-dispatch crisis check (keyword + LLM) with 988 hotline fallback
+- 👤 **Face Recognition** – On-robot naoqi ALFaceDetection for user recall
+- 💾 **SQLiteSession** – SDK-managed conversation history + camera consent + therapy recaps
+- 🤖 **NAO Actions** – 18 tools (pose, gesture, move, dance, LEDs) captured into action queue for in-order execution
 
 ---
 
 ## 🗂 Project Structure
 
+```
 Nao-OpenAI-Morgan-Assist/
-├─ main.py # Entry point – wake flow (chat, mininao, chatbot)
-├─ server.py # Flask backend: Whisper, GPT, Pinecone, Face APIs
-├─ chatbot_mode.py # Morgan chatbot loop (NAO ⇄ Server)
-├─ chat_mode.py # Multi-mode chat with gestures + interrupts
-├─ audio_handler.py # Recording, VAD, trimming, pre-emphasis, AGC
-├─ memory_manager.py # User profiles & chat history
-├─ face_store.py # Face encodings (enroll/list/recognize)
+├─ main.py                       # NAO entry — wake → conversation
+├─ wake_listener.py               # Wake phrase + optional hint extraction
+├─ conversation.py                # ONE loop: record → POST /turn → speak + execute
+├─ audio_handler.py               # VAD + recording
+├─ processing_announcer.py        # Background "please wait"
+├─ config.py                      # IPs, ports
 ├─ utils/
-│ ├─ camera_capture.py # Take photos from NAO camera
-│ └─ face_utils.py # Face detection/mood helpers
-├─ requirements.txt # Python deps for the server (Py3)
-├─ LICENSE # MIT
+│   ├─ camera_capture.py          # snap_quick() for per-turn JPEG
+│   ├─ nao_execute.py             # Dispatches server actions to naoqi
+│   ├─ face_naoqi.py              # Face reco/learning
+│   ├─ ask_name_utils.py          # Name ask flow
+│   ├─ exit_detection.py
+│   ├─ name_utils.py
+│   └─ speech.py                  # Phrase pools + expressive TTS
+├─ server/                        # Python 3.11+ Flask server
+│   ├─ server.py                  # POST /turn + /health
+│   ├─ safety.py                  # Crisis gate
+│   ├─ session.py                 # SQLiteSession + consent + recaps
+│   ├─ config.py
+│   ├─ agents/                    # router, chat, chatbot, skills, therapist, cbt_coach, grounding_coach
+│   ├─ tools/                     # nao_actions, pinecone_search, emotion, skills_tools
+│   ├─ tests/                     # pytest (34 tests)
+│   └─ requirements.txt
+├─ docs/superpowers/              # Design spec + implementation plan
+├─ pytest.ini
 └─ README.md
+```
 
 ---
 
 ## ⚙️ Requirements
-- **Python 2.7** (NAO side scripts; NAOqi SDK)
-- **Python 3.9+** (Flask backend server)
-- **NAOqi SDK**
-- **OpenAI** Python SDK
-- **Flask**
-- **Pinecone** client
-- **face_recognition** (+ dlib dependencies)
+- **Python 2.7** (NAO side, NAOqi SDK only)
+- **Python 3.11+** (server; `openai-agents`, `openai>=1.50`, `flask`, `pinecone-client`)
 
-Install server deps:
+## 🚀 Quick Start
+
+### 1) Server (Python 3.11+)
+```bash
+cd server
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+```
 
-🚀 Quick Start
-1) Clone
-git clone ("My Repo Link"))
-cd Nao-OpenAI-Morgan-Assist
+Create a `.env` at repo root:
+```
+OPENAI_API_KEY=sk-your-key
+PINECONE_API_KEY=pcsk-your-key
+PINECONE_INDEX_NAME=msu-cs-knowledge
+PINECONE_NAMESPACE=docs
+NAO_IP=172.20.95.111
+SERVER_IP=0.0.0.0
+```
 
-2) Configure environment
+Run the server:
+```bash
+python -m server.server        # dev
+# or: gunicorn -w 1 -b 0.0.0.0:5000 server.server:app
+```
 
-Create a .env file (in the server directory or repo root where server.py runs):
+### 2) NAO (Python 2.7)
+```bash
+ssh nao@<nao-ip>
+export SERVER_IP=<server-host>
+python /home/nao/nao_assist/main.py
+```
 
-•	OPENAI_API_KEY = sk-your-key
-•	PINECONE_API_KEY = pcsk-your-key
-•	PINECONE_INDEX_NAME = vectorized-datasource
-•	PINECONE_NAMESPACE = docs
-•	PINECONE_ENV = us-east-1
-•	WHISPER_MODEL = whisper-1
+Wake phrases: "nao", "hey nao", or with hints: "morgan assist", "therapy", "mini nao".
 
-# NAO defaults
-NAO_IP=171.20.95.xxx
-NAO_PORT=9559
+### 3) Run tests
+```bash
+python -m pytest
+# 34 tests pass
+```
 
+## 🔌 API
 
-3) Run the Flask backend (Python 3)
-py server.py
+**POST `/turn`** (multipart):
+- `audio` (WAV), `image` (JPEG, optional), `username`, `hint` (`chat`|`morgan`|`therapy`|`skills`), `end_session` (bool)
 
+**Response JSON:**
+```json
+{ "username": "alice", "user_input": "...", "reply": "...",
+  "active_agent": "therapist",
+  "actions": [{"name":"change_eye_color","args":{"color":"blue"}}],
+  "crisis": false, "suppress_image": false }
+```
 
-4) Run on NAO (Python 2.7)
-python main.py
-# Wake phrases: "nao", "let's chat", "mini nao", "morgan assist"
+`actions[]` is the ordered list NAO executes. Router automatically hands off to the right specialist when `hint` is null.
 
-🔌 API Endpoints (server)
+## 🧭 Agents
 
-POST /upload – multipart audio file → Whisper → { user_input, reply, active_mode, … }
-
-POST /chat_text – JSON {username, text, mode?} → GPT (+ Pinecone when mode == "chatbot")
-
-POST /face/recognize – multipart image → { match, name?, distance }
-
-POST /face/enroll – multipart image + name → { ok, enrolled }
-
-GET /face/list – summary of stored encodings
-
-# 🧭 Modes
-
-General – default concise helper
-
-Study – stepwise explanations + mini practice question
-
-Therapist – warm, validating (non-clinical) support
-
-Broker – neutral market concepts (educational only)
-
-Chatbot – Morgan CS knowledge via Pinecone context + GPT
-
-The server auto-detects “switch to … mode” phrases and keeps your normal sentences intact (e.g., it won’t strip the word study from “I study algorithms”).
+- **router** — triage
+- **chat** — general chat + NAO actions
+- **chatbot** — Morgan CS RAG via Pinecone
+- **skills** — time, weather, timers, todos
+- **therapist** — empathetic + CBT/grounding handoffs + vision-based emotion read
+- **cbt_coach** — thought records, distortion ID, reframes
+- **grounding_coach** — 5-4-3-2-1, box breathing, body scan
 
 ## 🛠 Configuration Tips
 
@@ -154,8 +172,8 @@ Adjust TRAIL_MS, NO_SPEECH_TIMEOUT_S, and thresholds in audio_handler.py.
 
 
 # Server health
-curl http://localhost:5000/test
-# => {"message":"Test route working!"}
+curl http://localhost:5000/health
+# => {"ok":true}
 
 ## 📜 License
 
