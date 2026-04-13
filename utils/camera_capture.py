@@ -70,3 +70,25 @@ def capture_photo(nao_ip="127.0.0.1", port=9559, out_path="/home/nao/face.jpg"):
             pass
 
     return saved_path
+
+
+def snap_quick(nao_ip, port=9559, resolution=1, color_space=11, path=None):
+    """Capture a quick 640x480 JPEG via ALPhotoCapture. Returns local path or None on failure.
+
+    resolution=1 -> kQVGA (640x480); color_space=11 -> kRGBColorSpace.
+    """
+    try:
+        from naoqi import ALProxy
+        import time, os
+        photo = ALProxy("ALPhotoCapture", nao_ip, port)
+        photo.setResolution(resolution)
+        photo.setPictureFormat("jpg")
+        out_dir = "/home/nao/snaps"
+        try: os.makedirs(out_dir)
+        except OSError: pass
+        name = "snap_{0}".format(int(time.time() * 1000))
+        photo.takePicture(out_dir, name)
+        full = os.path.join(out_dir, name + ".jpg")
+        return full if os.path.exists(full) else None
+    except Exception:
+        return None
