@@ -40,32 +40,34 @@ A voice-driven assistant that connects the **NAO humanoid robot** to **OpenAI (W
 
 ```
 Nao-OpenAI-Morgan-Assist/
-├─ main.py                       # NAO entry — wake → conversation
-├─ wake_listener.py               # Wake phrase + optional hint extraction
-├─ conversation.py                # ONE loop: record → POST /turn → speak + execute
-├─ audio_handler.py               # VAD + recording
-├─ processing_announcer.py        # Background "please wait"
-├─ config.py                      # IPs, ports
-├─ utils/
-│   ├─ camera_capture.py          # snap_quick() for per-turn JPEG
-│   ├─ nao_execute.py             # Dispatches server actions to naoqi
-│   ├─ face_naoqi.py              # Face reco/learning
-│   ├─ ask_name_utils.py          # Name ask flow
-│   ├─ exit_detection.py
-│   ├─ name_utils.py
-│   └─ speech.py                  # Phrase pools + expressive TTS
-├─ server/                        # Python 3.11+ Flask server
-│   ├─ server.py                  # POST /turn + /health
-│   ├─ safety.py                  # Crisis gate
+├─ nao/                           # Python 2.7 — deploy this to the robot
+│   ├─ main.py                    # Wake loop entry
+│   ├─ wake_listener.py           # Wake phrase + hint extraction
+│   ├─ conversation.py            # Single loop: record → POST /turn → speak + execute
+│   ├─ audio_handler.py           # VAD + recording
+│   ├─ processing_announcer.py    # Background "please wait"
+│   ├─ config.py                  # IPs, ports
+│   └─ utils/
+│       ├─ camera_capture.py      # snap_quick() for per-turn JPEG
+│       ├─ nao_execute.py         # Dispatches server actions to naoqi
+│       ├─ face_naoqi.py          # Face reco/learning
+│       ├─ ask_name_utils.py      # Name ask flow
+│       ├─ exit_detection.py
+│       ├─ name_utils.py
+│       └─ speech.py              # Phrase pools + expressive TTS
+├─ server/                        # Python 3.11+ Flask + OpenAI Agents SDK
+│   ├─ server.py                  # POST /turn + GET /health
+│   ├─ safety.py                  # Pre-dispatch crisis gate
 │   ├─ session.py                 # SQLiteSession + consent + recaps
 │   ├─ config.py
 │   ├─ agents/                    # router, chat, chatbot, skills, therapist, cbt_coach, grounding_coach
 │   ├─ tools/                     # nao_actions, pinecone_search, emotion, skills_tools
 │   ├─ tests/                     # pytest (34 tests)
 │   └─ requirements.txt
-├─ docs/superpowers/              # Design spec + implementation plan
-├─ pytest.ini
-└─ README.md
+├─ docs/
+│   ├─ superpowers/               # Design specs + implementation plans
+│   └─ reference/                 # HTML reference docs
+├─ CLAUDE.md, README.md, LICENSE, pytest.ini
 ```
 
 ---
@@ -100,7 +102,9 @@ python -m server.server        # dev
 ```
 
 ### 2) NAO (Python 2.7)
+Copy the `nao/` folder to the robot:
 ```bash
+scp -r nao/ nao@<nao-ip>:/home/nao/nao_assist/
 ssh nao@<nao-ip>
 export SERVER_IP=<server-host>
 python /home/nao/nao_assist/main.py
