@@ -42,14 +42,19 @@ def _transcribe(path: str) -> str:
 
 
 def _build_user_message(transcript: str, image_b64: str | None):
+    """Build a Runner input. For text-only, return a string. For multimodal,
+    return the Responses-API shape: a single user message with typed content
+    items (input_text / input_image)."""
     if not image_b64:
         return transcript
-    return [
-        {"type": "text", "text": transcript},
-        {"type": "image_url", "image_url": {
-            "url": f"data:image/jpeg;base64,{image_b64}",
-        }},
-    ]
+    return [{
+        "role": "user",
+        "content": [
+            {"type": "input_text", "text": transcript},
+            {"type": "input_image",
+             "image_url": f"data:image/jpeg;base64,{image_b64}"},
+        ],
+    }]
 
 
 def _run_agent(username: str, hint: str | None, transcript: str,
@@ -246,13 +251,17 @@ def _generate_greeting(username: str, image_bytes: bytes):
         "username": username, "actions_queue": [], "emotion_log": [],
         "latest_image_b64": image_b64, "suppress_image": False,
     }
-    prompt_msg = [
-        {"type": "text",
-         "text": ("The user just walked up. You can see their face. Greet them "
-                  "in ONE short sentence, using their name and any relevant "
-                  "memory from recent sessions. Do not ask a deep question yet.")},
-        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}},
-    ]
+    prompt_msg = [{
+        "role": "user",
+        "content": [
+            {"type": "input_text",
+             "text": ("The user just walked up. You can see their face. Greet them "
+                      "in ONE short sentence, using their name and any relevant "
+                      "memory from recent sessions. Do not ask a deep question yet.")},
+            {"type": "input_image",
+             "image_url": f"data:image/jpeg;base64,{image_b64}"},
+        ],
+    }]
     result = asyncio.run(Runner.run(agent, prompt_msg, context=ctx))
     yield from iter_sentences(iter([result.final_output]))
 
