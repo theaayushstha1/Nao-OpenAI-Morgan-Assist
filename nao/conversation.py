@@ -122,3 +122,76 @@ def run(qi_session, initial_hint=None):
                 pass
             expressive_say(raw_tts, "Take care.")
             break
+
+
+import stream_tts
+
+
+def run_streaming(qi_session, initial_hint=None):
+    """Streaming variant: sentences arrive over SSE and are spoken as generated."""
+    tts = ALProxy("ALAnimatedSpeech", config.NAO_IP, config.NAO_PORT)
+    raw_tts = ALProxy("ALTextToSpeech", config.NAO_IP, config.NAO_PORT)
+    motion = ALProxy("ALMotion", config.NAO_IP, config.NAO_PORT)
+    posture = ALProxy("ALRobotPosture", config.NAO_IP, config.NAO_PORT)
+    leds = ALProxy("ALLeds", config.NAO_IP, config.NAO_PORT)
+    behav_mgr = ALProxy("ALBehaviorManager", config.NAO_IP, config.NAO_PORT)
+
+    username = _resolve_username(qi_session, raw_tts, config.NAO_IP)
+    expressive_say(raw_tts, "{0}, {1}".format(time_of_day_greeting(), username))
+
+    suppress_image = False
+    hint = initial_hint
+
+    while True:
+        wav = audio_handler.record_audio(config.NAO_IP)
+        if not wav:
+            continue
+        img_path = None
+        if not suppress_image:
+            img_path = camera_capture.snap_quick(config.NAO_IP, config.NAO_PORT)
+
+        files = {}
+        if wav:
+            files["audio"] = open(wav, "rb")
+        if img_path:
+            files["image"] = open(img_path, "rb")
+        data = {"username": username}
+        if hint:
+            data["hint"] = hint
+
+        def handle_action(action):
+            nao_execute.run(action, qi_session, motion, posture, leds, behav_mgr, raw_tts)
+
+        def handle_done(info):
+            pass
+
+        url = "http://{0}:5000/stream_turn".format(config.SERVER_IP)
+        info = stream_tts.consume(url, files, data, raw_tts, handle_action, handle_done)
+
+        for f in files.values():
+            f.close()
+        try:
+            if wav and os.path.exists(wav):
+                os.unlink(wav)
+            if img_path and os.path.exists(img_path):
+                os.unlink(img_path)
+        except Exception:
+            pass
+
+        hint = None
+        if info.get("crisis"):
+            break
+        if info.get("suppress_image"):
+            suppress_image = True
+        user_input = info.get("user_input") or ""
+        if exit_detection.detect_exit_intent(user_input):
+            try:
+                requests.post(
+                    "http://{0}:5000/turn".format(config.SERVER_IP),
+                    data={"username": username, "end_session": "true"},
+                    timeout=10,
+                )
+            except Exception:
+                pass
+            expressive_say(raw_tts, "Take care.")
+            break
