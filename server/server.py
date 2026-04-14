@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json as _json
 import os
 import tempfile
 import wave
@@ -137,6 +138,73 @@ def turn():
         active_agent=active, actions=actions, crisis=False,
         suppress_image=suppress,
     )
+
+
+@app.post("/stream_turn")
+def stream_turn():
+    """Same inputs as /turn, responds as Server-Sent Events with per-sentence chunks."""
+    from flask import Response
+    from server.streaming import iter_sentences
+
+    username = request.form.get("username") or "guest"
+    hint = request.form.get("hint") or None
+    audio = request.files.get("audio")
+    image = request.files.get("image")
+
+    if not audio:
+        return jsonify(error="missing_audio"), 400
+
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        audio.save(tmp.name)
+        wav_path = tmp.name
+    try:
+        if not _validate_wav(wav_path):
+            return jsonify(error="invalid_audio"), 503
+        transcript = _transcribe(wav_path)
+    finally:
+        os.unlink(wav_path)
+
+    crisis = safety.crisis_check(transcript)
+    consent = session.get_camera_consent(username)
+    image_b64 = base64.b64encode(image.read()).decode("ascii") if image and consent else None
+
+    def generate():
+        if crisis.positive:
+            yield _sse({"type": "sentence", "text": safety.HOTLINE_REPLY})
+            yield _sse({"type": "action", "action": {"name": "change_eye_color", "args": {"color": "white"}}})
+            yield _sse({"type": "done", "active_agent": "safety", "crisis": True,
+                        "suppress_image": False, "user_input": transcript})
+            return
+
+        # Run the agent synchronously (non-streaming path is simpler + reliable)
+        # and split the final_output into sentences for streaming.
+        # Note: Runner.run_streamed() is available but less battle-tested across
+        # SDK versions. Using Runner.run() + post-hoc sentence splitting via
+        # iter_sentences() is more reliable and still gives NAO sentence-by-sentence
+        # playback, because each SSE event is flushed as the generator yields.
+        agent = pick_initial_agent(username, hint)
+        sess = session.get_or_create_session(username)
+        ctx = {
+            "username": username, "actions_queue": [], "emotion_log": [],
+            "latest_image_b64": image_b64, "suppress_image": False,
+        }
+        message = _build_user_message(transcript, image_b64)
+        result = asyncio.run(Runner.run(agent, message, context=ctx, session=sess))
+
+        for sent in iter_sentences(iter([result.final_output])):
+            yield _sse({"type": "sentence", "text": sent})
+        for action in ctx["actions_queue"]:
+            yield _sse({"type": "action", "action": action})
+        active = getattr(result, "last_agent", agent).name
+        yield _sse({"type": "done", "active_agent": active, "crisis": False,
+                    "suppress_image": bool(ctx["suppress_image"]), "user_input": transcript})
+
+    return Response(generate(), mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+def _sse(obj) -> str:
+    return f"data: {_json.dumps(obj)}\n\n"
 
 
 if __name__ == "__main__":
