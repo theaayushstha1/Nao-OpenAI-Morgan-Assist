@@ -14,10 +14,10 @@ SKILLS_MODEL = os.environ.get("SKILLS_MODEL", "gpt-4o-mini")
 CRISIS_MODEL = os.environ.get("CRISIS_MODEL", "gpt-4o-mini")
 WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "whisper-1")
 
-# Pinecone
-PINECONE_API_KEY = os.environ.get("PINECONE_API_KEY")
-PINECONE_INDEX_NAME = os.environ.get("PINECONE_INDEX_NAME", "msu-cs-knowledge")
-PINECONE_NAMESPACE = os.environ.get("PINECONE_NAMESPACE", "docs")
+# Vertex AI Search (Morgan State CS knowledge base)
+GOOGLE_CLOUD_PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT", "csnavigator-vertex-ai")
+VERTEX_LOCATION = os.environ.get("VERTEX_LOCATION", "us")
+VERTEX_DATASTORE_ID = os.environ.get("VERTEX_DATASTORE_ID", "csnavigator-kb-v7")
 
 # Networking
 NAO_IP = os.environ.get("NAO_IP", "172.20.95.111")

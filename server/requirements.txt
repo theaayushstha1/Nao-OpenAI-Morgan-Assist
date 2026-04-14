@@ -1,6 +1,6 @@
 openai-agents>=0.0.5
 openai>=1.50.0
-pinecone-client==3.2.2
+google-cloud-discoveryengine>=0.13.0
 flask==3.0.3
 werkzeug==3.0.3
 gunicorn==21.2.0
