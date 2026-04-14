@@ -85,3 +85,40 @@ Flask Server (Python 3.11+) — everything under server/
 ## Obsidian Vault
 
 Knowledge vault for this codebase at `~/Documents/Obsidian Vault/Nao-OpenAI-Morgan-Assist/wiki/`. Read `wiki/index.md` first for context. Pattern: `raw/` (immutable) + `wiki/` (LLM-maintained).
+
+## NAO Robot — Connection
+
+- **IP:** `172.20.95.121` (confirmed reachable 2026-04-14 on the CS network; may change if the lease drops — see below for making it static)
+- **Hostname:** `nao.local` (mDNS fallback)
+- **User:** `nao`
+- **Password:** stored in `.env` as `NAO_PASSWORD` (do NOT commit the password; `.env` is gitignored)
+
+### SSH
+
+```bash
+ssh nao@172.20.95.121     # on the CS network
+ssh nao@nao.local         # elsewhere, if mDNS resolves
+```
+
+Recommended: set up passwordless SSH once with `ssh-copy-id nao@172.20.95.121` so you never type the password again. Then add to `~/.ssh/config`:
+
+```
+Host nao
+  HostName 172.20.95.121
+  User nao
+```
+
+VS Code Remote-SSH uses this config automatically — just pick "nao" from the host list.
+
+### Making the IP static
+
+Best path: file a ticket with Morgan IT giving them the NAO's WiFi MAC address (`ifconfig wlan0 | grep ether` on the robot) and request a DHCP reservation for `172.20.95.121`. That survives firmware updates and doesn't require touching the robot.
+
+Fallback: configure a fixed IP via Choregraphe (Settings → Network → "Use a fixed IP address") or via `connmanctl` on the robot directly.
+
+### Deploying code to the robot
+
+```bash
+rsync -avz --delete nao/ nao@172.20.95.121:/home/nao/nao_assist/
+ssh nao@172.20.95.121 "python /home/nao/nao_assist/main.py"
+```
