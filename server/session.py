@@ -29,6 +29,20 @@ def _conn():
         "username TEXT NOT NULL, body TEXT NOT NULL, "
         "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
     )
+    c.execute(
+        "CREATE TABLE IF NOT EXISTS weekly_themes ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL, "
+        "week_start DATE NOT NULL, body TEXT NOT NULL, "
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+        "UNIQUE(username, week_start))"
+    )
+    c.execute(
+        "CREATE TABLE IF NOT EXISTS monthly_personas ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL, "
+        "month DATE NOT NULL, body TEXT NOT NULL, "
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+        "UNIQUE(username, month))"
+    )
     try:
         yield c
         c.commit()

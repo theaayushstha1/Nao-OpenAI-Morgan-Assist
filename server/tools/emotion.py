@@ -168,6 +168,9 @@ def _recap_session_impl(ctx) -> str:
         moods = ", ".join(f"{e['mood']}({e['intensity']})" for e in log[-5:])
         body = f"Emotions: {moods}. Triggers: {'; '.join(e['trigger'] for e in log[-5:])}."
     session.save_recap(username, body)
+    from server import memory_rollup
+    memory_rollup.maybe_rollup_week(username)
+    memory_rollup.maybe_rollup_month(username)
     return body
 
 

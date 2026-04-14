@@ -1,6 +1,6 @@
 """Therapist main agent — empathetic, CBT/grounding handoffs, camera consent."""
 from agents import Agent, handoff
-from server import config, session
+from server import config, session, memory_rollup as mr
 from server.tools.nao_actions import THERAPIST_ACTIONS
 from server.tools.emotion import (
     observe_face, log_emotion, identify_distortion, suggest_reframe,
@@ -33,9 +33,13 @@ def build_therapist_agent(username: str) -> Agent:
         "\n\nRecent sessions:\n" + "\n".join(f"- {r}" for r in recaps)
         if recaps else ""
     )
+    week_themes = mr.load_week_themes(username, n=1)
+    month_personas = mr.load_month_personas(username, n=1)
+    wk = f"\n\nThis week's theme:\n- {week_themes[0]}" if week_themes else ""
+    mo = f"\n\nThis month's persona:\n{month_personas[0]}" if month_personas else ""
     return Agent(
         name="therapist",
-        instructions=_BASE + recap_block,
+        instructions=_BASE + recap_block + wk + mo,
         model=config.THERAPIST_MODEL,
         tools=[observe_face, log_emotion, identify_distortion, suggest_reframe,
                set_camera_consent, recap_session, *THERAPIST_ACTIONS],
