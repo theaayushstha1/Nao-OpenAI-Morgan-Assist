@@ -23,6 +23,10 @@ def _conn():
         "CREATE TABLE IF NOT EXISTS user_prefs ("
         "username TEXT PRIMARY KEY, camera_consent INTEGER NOT NULL DEFAULT 1)"
     )
+    try:
+        c.execute("ALTER TABLE user_prefs ADD COLUMN proactive_enabled INTEGER NOT NULL DEFAULT 1")
+    except sqlite3.OperationalError:
+        pass  # column already exists
     c.execute(
         "CREATE TABLE IF NOT EXISTS recaps ("
         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
@@ -95,6 +99,24 @@ def set_camera_consent(username: str, enabled: bool) -> None:
         c.execute(
             "INSERT INTO user_prefs (username, camera_consent) VALUES (?, ?) "
             "ON CONFLICT(username) DO UPDATE SET camera_consent=excluded.camera_consent",
+            (username, 1 if enabled else 0),
+        )
+
+
+def get_proactive_enabled(username: str) -> bool:
+    with _conn() as c:
+        row = c.execute("SELECT proactive_enabled FROM user_prefs WHERE username = ?", (username,)).fetchone()
+        if row is None:
+            c.execute("INSERT INTO user_prefs (username, camera_consent, proactive_enabled) VALUES (?, 1, 1)", (username,))
+            return True
+        return bool(row[0])
+
+
+def set_proactive_enabled(username: str, enabled: bool) -> None:
+    with _conn() as c:
+        c.execute(
+            "INSERT INTO user_prefs (username, camera_consent, proactive_enabled) VALUES (?, 1, ?) "
+            "ON CONFLICT(username) DO UPDATE SET proactive_enabled=excluded.proactive_enabled",
             (username, 1 if enabled else 0),
         )
 

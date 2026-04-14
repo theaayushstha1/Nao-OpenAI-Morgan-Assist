@@ -207,5 +207,55 @@ def _sse(obj) -> str:
     return f"data: {_json.dumps(obj)}\n\n"
 
 
+@app.post("/greet")
+def greet():
+    from flask import Response
+    image = request.files.get("image")
+    if not image:
+        return jsonify(error="missing_image"), 400
+
+    image_bytes = image.read()
+    # v1: trust the form-provided username; server-side face reco is a follow-up.
+    username = request.form.get("username") or "guest"
+
+    if not session.get_proactive_enabled(username):
+        def skipped():
+            yield _sse({"type": "done", "active_agent": "none",
+                        "username": username, "skipped": True})
+        return Response(skipped(), mimetype="text/event-stream")
+
+    def generate():
+        yield _sse({"type": "recognized", "username": username})
+        for sent in _generate_greeting(username, image_bytes):
+            yield _sse({"type": "sentence", "text": sent})
+        yield _sse({"type": "done", "active_agent": "therapist", "username": username})
+
+    return Response(generate(), mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+def _generate_greeting(username: str, image_bytes: bytes):
+    """Yield 1-2 sentences of personalized greeting for the user."""
+    from server.agents.therapist import build_therapist_agent
+    from server.streaming import iter_sentences
+    import asyncio, base64
+
+    agent = build_therapist_agent(username)
+    image_b64 = base64.b64encode(image_bytes).decode("ascii")
+    ctx = {
+        "username": username, "actions_queue": [], "emotion_log": [],
+        "latest_image_b64": image_b64, "suppress_image": False,
+    }
+    prompt_msg = [
+        {"type": "text",
+         "text": ("The user just walked up. You can see their face. Greet them "
+                  "in ONE short sentence, using their name and any relevant "
+                  "memory from recent sessions. Do not ask a deep question yet.")},
+        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}},
+    ]
+    result = asyncio.run(Runner.run(agent, prompt_msg, context=ctx))
+    yield from iter_sentences(iter([result.final_output]))
+
+
 if __name__ == "__main__":
     app.run(host=config.SERVER_IP, port=config.SERVER_PORT, debug=False)
