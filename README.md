@@ -158,25 +158,96 @@ open logs/pareto.png
 
 `actions[]` is the ordered list NAO executes. Router automatically hands off to the right specialist when `hint` is null.
 
-## 🧭 Agents
+## 🧭 Agent Graph
 
-- **router** — triage
-- **chat** — general chat + NAO actions
-- **chatbot** — Morgan CS RAG via Vertex AI Search
-- **skills** — time, weather, timers, todos
-- **therapist** — empathetic + CBT/grounding handoffs + vision-based emotion read
-- **cbt_coach** — thought records, distortion ID, reframes
-- **grounding_coach** — 5-4-3-2-1, box breathing, body scan
+```mermaid
+flowchart TD
+    classDef entry fill:#0d47a1,stroke:#0d47a1,color:#fff,stroke-width:1px
+    classDef spec fill:#1565c0,stroke:#1565c0,color:#fff
+    classDef sub fill:#7b1fa2,stroke:#7b1fa2,color:#fff
+    classDef tool fill:#2e7d32,stroke:#2e7d32,color:#fff
+    classDef gate fill:#b71c1c,stroke:#b71c1c,color:#fff
 
-### SAGE-CBT research layer (optional)
+    U([user turn + JPEG]) --> C{crisis_check<br/>pre-dispatch gate}:::gate
+    C -- positive --> H[988 hotline script]:::gate
+    C -- clean --> R[router]:::entry
 
-When `SAGE_TOPOLOGY` is set, the therapist subgraph is wrapped by one of three orchestration topologies:
+    R -->|handoff| CH[chat]:::spec
+    R -->|handoff| CB[chatbot]:::spec
+    R -->|handoff| SK[skills]:::spec
+    R -->|handoff| TH[therapist]:::spec
 
-- **supervisor_veto** — SafetyAgent gates every proposed reply before it is emitted. Structurally guarantees the safety invariant in [PRD §7.5](PRD.md#75-runtime-monitorable-safety-invariant-rq2).
-- **debate** — therapist and cbt_coach each draft a reply; a judge picks one. SafetyAgent observes but cannot block. (Baseline.)
-- **shared_pool** — therapist, cbt_coach, grounding_coach all write candidates to a shared scratchpad; therapist synthesizes. (Baseline.)
+    TH -->|handoff| CBT[cbt_coach]:::sub
+    TH -->|handoff| GR[grounding_coach]:::sub
 
-The SafetyAgent provider is swappable: `SAGE_SAFETY_PROVIDER=openai` (default, `gpt-4o`) or `claude` (`claude-opus-4-7`, optional ablation). The runtime invariant monitor at `server/invariant.py` logs every turn to SQLite and flags violations regardless of topology.
+    CH & TH & CBT -.tool.-> NA[(nao_actions<br/>18 tools)]:::tool
+    CB -.tool.-> VS[(vertex_search)]:::tool
+    SK -.tool.-> SKT[(skills_tools)]:::tool
+    TH & CBT -.tool.-> EM[(emotion<br/>observe_face, log,<br/>identify_distortion,<br/>suggest_reframe)]:::tool
+```
+
+| Agent | Role | Model |
+|---|---|---|
+| **router** | triage + handoff | `gpt-4o-mini` |
+| **chat** | general chat + NAO actions | `gpt-4o-mini` |
+| **chatbot** | Morgan CS RAG via Vertex AI Search | `gpt-4o-mini` |
+| **skills** | time, weather, timers, todos | `gpt-4o-mini` |
+| **therapist** | empathy + CBT/grounding handoffs + vision | `gpt-4o` |
+| **cbt_coach** | Beck 7-column thought record | `gpt-4o` |
+| **grounding_coach** | 5-4-3-2-1, box breathing, body scan | `gpt-4o` |
+
+---
+
+## 🧪 SAGE-CBT Research Layer (optional, feature-flagged)
+
+When `SAGE_TOPOLOGY != "passthrough"`, the therapist subgraph is wrapped by a pluggable orchestration topology. The research thesis ([PRD.md](PRD.md)) compares three on a 70-prompt red-team. The SafetyAgent provider is swappable at runtime.
+
+```mermaid
+flowchart LR
+    classDef flag fill:#ef6c00,stroke:#ef6c00,color:#fff
+    classDef topo fill:#6a1b9a,stroke:#6a1b9a,color:#fff
+    classDef safe fill:#b71c1c,stroke:#b71c1c,color:#fff
+    classDef mon fill:#00695c,stroke:#00695c,color:#fff
+
+    IN[/turn<br/>request/] --> D{SAGE_TOPOLOGY}:::flag
+    D -->|passthrough<br/>default| P[Runner.run → reply]:::topo
+    D -->|supervisor_veto| SV[Runner.run<br/>proposed_reply]:::topo
+    D -->|debate| DB[therapist ‖ cbt_coach<br/>→ judge picks]:::topo
+    D -->|shared_pool| SP[3-agent scratchpad<br/>→ therapist synthesizes]:::topo
+
+    SV --> G{{SafetyAgent<br/>verdict}}:::safe
+    G -->|allow| OUT1[emit reply]
+    G -->|revise| OUT2[emit rewrite]
+    G -->|escalate| OUT3[HOTLINE_REPLY<br/>+ crisis_lockout]
+
+    DB --> OBS1[(SafetyAgent<br/>observe only)]:::safe
+    SP --> OBS2[(SafetyAgent<br/>observe only)]:::safe
+
+    P & OUT1 & OUT2 & OUT3 & OBS1 & OBS2 --> IV[[invariant.record_turn]]:::mon
+    IV --> SQL[(safety_events<br/>topology_trace)]
+```
+
+**Topologies**
+
+| Name | Intervention | Role in paper |
+|---|---|---|
+| `passthrough` | none — existing behavior | legacy default |
+| `supervisor_veto` | SafetyAgent **gates** every reply pre-emit | proposed contribution |
+| `debate` | therapist + cbt_coach draft; judge picks; Safety observes | baseline |
+| `shared_pool` | three agents draft into scratchpad; therapist synthesizes | baseline |
+
+**SafetyAgent provider**
+
+| `SAGE_SAFETY_PROVIDER` | Model | Notes |
+|---|---|---|
+| `openai` *(default)* | `gpt-4o` | Always available |
+| `claude` | `claude-opus-4-7` | Requires `ANTHROPIC_API_KEY`; treated as ablation |
+
+**Runtime safety invariant** (see [PRD §7.5](PRD.md)):
+
+> ∀ t, `proposed_reply(t)` contains risk ⇒ `final_reply(t) ≠ proposed_reply(t)` ∧ crisis_lockout within 1 turn.
+
+The monitor at `server/invariant.py` evaluates this over a sliding 5-turn window per user and logs violations to SQLite regardless of which topology is active. Supervisor-Veto *structurally* satisfies it; Debate and SharedPool observe-only — the gap is the experimental contrast.
 
 ## 🛠 Configuration Tips
 
@@ -202,27 +273,183 @@ Adjust TRAIL_MS, NO_SPEECH_TIMEOUT_S, and thresholds in audio_handler.py.
 **What is SAGE-CBT?**
 It's the active research thesis on this repo — a Supervisor-Veto multi-agent architecture for CBT dialogue with a runtime-monitorable safety invariant, benchmarked against Debate and SharedPool baselines. Full spec in [PRD.md](PRD.md). When `SAGE_TOPOLOGY` is unset, the server behaves exactly as before; the research layer is strictly additive.
 
-# 🖼 System Diagram
+---
 
-<img width="673" height="416" alt="Screenshot 2025-09-24 at 6 46 12 PM" src="https://github.com/user-attachments/assets/cd670690-4899-46f9-a2f5-666549661cb3" />
+## 🏗 System Architecture (C4 Container View)
 
+```mermaid
+flowchart LR
+    classDef person fill:#08427b,stroke:#073b6f,color:#fff
+    classDef robot fill:#1168bd,stroke:#0d5aa5,color:#fff
+    classDef server fill:#2e7d32,stroke:#2e7d32,color:#fff
+    classDef db fill:#6a1b9a,stroke:#6a1b9a,color:#fff
+    classDef ext fill:#ef6c00,stroke:#ef6c00,color:#fff
+    classDef opt stroke-dasharray: 5 5,fill:#b71c1c,color:#fff
 
-# Technology Stack
+    USER([👤 User<br/>Morgan CS community]):::person
 
-<img width="642" height="422" alt="Screenshot 2025-09-24 at 6 46 37 PM" src="https://github.com/user-attachments/assets/465c83b4-ebcc-461c-bea0-0fe9b5ad7b14" />
+    subgraph NAO[NAO Robot — Python 2.7 / naoqi]
+        WAKE[wake_listener]:::robot
+        CONV[conversation loop<br/>record + snap + POST]:::robot
+        EXEC[nao_execute<br/>action dispatcher]:::robot
+    end
 
+    subgraph SRV[Flask Server — Python 3.11+]
+        API["POST /turn · /stream_turn"]:::server
+        GATE[safety.crisis_check]:::server
+        TOPO[topology dispatcher<br/>SAGE-CBT]:::server
+        RUN[Agents SDK Runner]:::server
+        SESS[(SQLiteSession<br/>nao.db)]:::db
+        INV[invariant monitor]:::server
+    end
 
+    OAI[(OpenAI<br/>Whisper + GPT-4o)]:::ext
+    VAI[(Vertex AI Search<br/>csnavigator-kb-v7)]:::ext
+    ANT[(Anthropic<br/>claude-opus-4-7)]:::opt
 
-# Server health
+    USER -- voice --> WAKE
+    WAKE --> CONV
+    CONV -- multipart/form-data --> API
+    API --> GATE --> TOPO --> RUN
+    RUN --> SESS
+    RUN --> OAI
+    RUN --> VAI
+    TOPO -. SAGE_SAFETY_PROVIDER=claude .-> ANT
+    TOPO --> INV --> SESS
+    API -- JSON reply + actions[] --> CONV
+    CONV --> EXEC -- naoqi calls --> USER
+```
+
+## 🧱 Technology Stack
+
+```mermaid
+flowchart TB
+    classDef ui fill:#1565c0,stroke:#0d47a1,color:#fff
+    classDef orch fill:#2e7d32,stroke:#1b5e20,color:#fff
+    classDef llm fill:#6a1b9a,stroke:#4a148c,color:#fff
+    classDef data fill:#ef6c00,stroke:#e65100,color:#fff
+    classDef infra fill:#455a64,stroke:#263238,color:#fff
+
+    subgraph L1[Embodiment layer]
+        direction LR
+        N1[NAO H25<br/>naoqi 2.8]:::ui
+        N2[Python 2.7<br/>NAO scripts]:::ui
+        N3[ALFaceDetection<br/>ALTextToSpeech]:::ui
+    end
+
+    subgraph L2[Orchestration layer]
+        direction LR
+        O1[Flask 3.0]:::orch
+        O2[openai-agents 0.13.6<br/>Runner + handoffs]:::orch
+        O3[SQLiteSession]:::orch
+        O4[SAGE-CBT topologies<br/>+ invariant monitor]:::orch
+    end
+
+    subgraph L3[Model layer]
+        direction LR
+        M1[Whisper-1<br/>STT]:::llm
+        M2[GPT-4o<br/>chat + vision]:::llm
+        M3[GPT-4o-mini<br/>router + workers]:::llm
+        M4[Claude Opus 4.7<br/>optional ablation]:::llm
+    end
+
+    subgraph L4[Data layer]
+        direction LR
+        D1[Vertex AI Search<br/>Morgan CS KB]:::data
+        D2[SQLite<br/>sessions + consent<br/>+ safety_events]:::data
+    end
+
+    subgraph L5[Tooling & eval]
+        direction LR
+        T1[pytest<br/>60+ tests]:::infra
+        T2[red-team harness<br/>70 prompts]:::infra
+        T3[matplotlib<br/>Pareto plot]:::infra
+    end
+
+    L1 --> L2 --> L3
+    L2 --> L4
+    L2 --> L5
+```
+
+## 🔁 Request Lifecycle — `/turn`
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as User
+    participant N as NAO (naoqi)
+    participant F as Flask /turn
+    participant G as crisis_check
+    participant T as topology dispatcher
+    participant R as Runner (Agents SDK)
+    participant S as SafetyAgent
+    participant I as invariant monitor
+    participant DB as SQLiteSession
+
+    U->>N: utterance + face visible
+    N->>N: VAD record WAV + snap_quick JPEG
+    N->>F: POST /turn (audio, image, username, hint)
+    F->>F: Whisper transcribe
+    F->>G: crisis_check(user_text)
+    alt risk keywords or LLM positive
+        G-->>F: HOTLINE_REPLY + crisis=true
+        F-->>N: reply + suppress_image=true
+        N->>U: 988 hotline TTS
+    else clean
+        G-->>F: ok
+        F->>T: run_topology(agent, msg, ctx, sess)
+        alt SAGE_TOPOLOGY=supervisor_veto
+            T->>R: draft proposed_reply
+            R-->>T: proposed_reply + tool calls
+            T->>S: verdict(proposed_reply)
+            alt allow
+                S-->>T: allow
+            else revise
+                S-->>T: rewrite
+            else escalate
+                S-->>T: HOTLINE_REPLY + crisis_lockout
+            end
+        else passthrough / debate / shared_pool
+            T->>R: Runner.run
+            R-->>T: reply
+        end
+        T->>I: record_turn(turn_tuple)
+        I->>DB: append safety_events + topology_trace
+        T-->>F: reply + verdict + metadata
+        F->>DB: session.append(history)
+        F-->>N: JSON {reply, actions[], active_agent}
+        N->>U: TTS + execute actions[] in order
+    end
+```
+
+## 🧠 CBT Thought-Record State Machine
+
+Beck's 7-column thought record as walked by `cbt_coach`. State persists on `SQLiteSession` so users can resume across turns.
+
+```mermaid
+stateDiagram-v2
+    [*] --> situation : therapist handoff
+    situation --> automatic_thought : describe event
+    automatic_thought --> distortion_tag : identify_distortion
+    distortion_tag --> emotion_rating : Burns taxonomy
+    emotion_rating --> evidence_for : 0–100 intensity
+    evidence_for --> evidence_against
+    evidence_against --> balanced_thought : suggest_reframe
+    balanced_thought --> re_rating
+    re_rating --> [*] : log_emotion + recap
+    re_rating --> situation : next record
+```
+
+## 🩺 Health Check
+
+```bash
 curl http://localhost:5000/health
 # => {"ok":true}
+```
 
 ## 📜 License
 
-**Released under the MIT License. See LICENSE**
-.
-
-.
+Released under the **MIT License**. See [LICENSE](LICENSE).
 
 ## 👨‍💻 Authors
 
