@@ -47,6 +47,21 @@ def _conn():
         "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
         "UNIQUE(username, month))"
     )
+    # SAGE-CBT: invariant violation log (RQ2).
+    c.execute(
+        "CREATE TABLE IF NOT EXISTS safety_events ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "username TEXT, turn_index INTEGER, clause TEXT, severity TEXT, "
+        "payload TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    # SAGE-CBT: one row per topology turn (for Pareto / post-hoc analysis).
+    c.execute(
+        "CREATE TABLE IF NOT EXISTS topology_trace ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "username TEXT, topology TEXT, user_text TEXT, "
+        "proposed_reply TEXT, final_reply TEXT, verdict TEXT, affect TEXT, "
+        "invariant_holds INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
     try:
         yield c
         c.commit()
@@ -135,3 +150,61 @@ def load_recent_recaps(username: str, n: int = 3) -> list[str]:
             (username, n),
         ).fetchall()
         return [r[0] for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# SAGE-CBT helpers (RQ2 runtime invariant + topology comparison).
+# ---------------------------------------------------------------------------
+
+def append_safety_event(
+    username: str,
+    turn_index: int,
+    clause: str,
+    severity: str,
+    payload: str,
+) -> None:
+    """Record a single invariant violation. Never raises on bad input."""
+    try:
+        with _conn() as c:
+            c.execute(
+                "INSERT INTO safety_events "
+                "(username, turn_index, clause, severity, payload) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (username, int(turn_index), clause, severity, payload),
+            )
+    except Exception:
+        # Invariant logging is best-effort; never break the response path.
+        pass
+
+
+def append_topology_trace(
+    username: str,
+    topology: str,
+    user_text: str,
+    proposed_reply: str,
+    final_reply: str,
+    verdict: str,
+    affect: str,
+    invariant_holds: bool,
+) -> None:
+    """Record one turn tuple per topology run. Never raises on bad input."""
+    try:
+        with _conn() as c:
+            c.execute(
+                "INSERT INTO topology_trace "
+                "(username, topology, user_text, proposed_reply, final_reply, "
+                "verdict, affect, invariant_holds) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    username,
+                    topology,
+                    user_text,
+                    proposed_reply,
+                    final_reply,
+                    verdict,
+                    affect,
+                    1 if invariant_holds else 0,
+                ),
+            )
+    except Exception:
+        pass

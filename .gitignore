@@ -21,3 +21,11 @@ server/.venv/
 
 # Temp
 *.bak
+
+# Local SQLite databases (created at runtime)
+server/nao.db
+*.sqlite
+*.sqlite3
+
+# Red-team / session logs
+logs/

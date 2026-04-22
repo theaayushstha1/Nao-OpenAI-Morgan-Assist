@@ -15,6 +15,7 @@ from agents import Runner
 
 from server import config, safety, session
 from server.agents import pick_initial_agent
+from server.topologies import run_topology
 
 app = Flask(__name__)
 _client = OpenAI(api_key=config.OPENAI_API_KEY)
@@ -69,10 +70,13 @@ def _run_agent(username: str, hint: str | None, transcript: str,
         "suppress_image": False,
     }
     message = _build_user_message(transcript, image_b64)
-    result = asyncio.run(Runner.run(agent, message, context=ctx, session=sess))
-    active = getattr(result, "last_agent", agent).name
+    # SAGE-CBT topology layer. When SAGE_TOPOLOGY=passthrough (default) this
+    # is functionally identical to the old direct Runner.run(...) call.
+    reply, active, _verdict, _metadata = run_topology(
+        agent, message, context=ctx, session=sess
+    )
     return (
-        result.final_output,
+        reply,
         active,
         list(ctx["actions_queue"]),
         bool(ctx["suppress_image"]),
@@ -194,13 +198,17 @@ def stream_turn():
             "latest_image_b64": image_b64, "suppress_image": False,
         }
         message = _build_user_message(transcript, image_b64)
-        result = asyncio.run(Runner.run(agent, message, context=ctx, session=sess))
+        # Route through the SAGE-CBT topology layer. The dispatcher still runs
+        # synchronously end-to-end; we then split its reply into sentences below
+        # to preserve the existing SSE-per-sentence behavior NAO depends on.
+        reply, active, _verdict, _metadata = run_topology(
+            agent, message, context=ctx, session=sess
+        )
 
-        for sent in iter_sentences(iter([result.final_output])):
+        for sent in iter_sentences(iter([reply])):
             yield _sse({"type": "sentence", "text": sent})
         for action in ctx["actions_queue"]:
             yield _sse({"type": "action", "action": action})
-        active = getattr(result, "last_agent", agent).name
         yield _sse({"type": "done", "active_agent": active, "crisis": False,
                     "suppress_image": bool(ctx["suppress_image"]), "user_input": transcript})
 

@@ -30,3 +30,21 @@ SESSION_DB = os.environ.get("SESSION_DB", "server/nao.db")
 
 # Tracing (SDK reads OPENAI_AGENTS_DISABLE_TRACING; we keep it on by default)
 OPENAI_AGENTS_TRACE = os.environ.get("OPENAI_AGENTS_TRACE", "1") == "1"
+
+# ───────── SAGE-CBT research layer ─────────
+# Topology dispatcher. "passthrough" = existing router behavior, unchanged.
+# Other values activate the SAGE-CBT topology layer for the therapist subgraph.
+SAGE_TOPOLOGY = os.environ.get("SAGE_TOPOLOGY", "passthrough")  # passthrough|supervisor_veto|debate|shared_pool
+
+# SafetyAgent provider. Only used when SAGE_TOPOLOGY != "passthrough".
+SAGE_SAFETY_PROVIDER = os.environ.get("SAGE_SAFETY_PROVIDER", "openai")  # openai|claude
+
+# Models for the SafetyAgent (each provider picks the right key).
+SAFETY_MODEL_OPENAI = os.environ.get("SAFETY_MODEL_OPENAI", "gpt-4o")
+SAFETY_MODEL_CLAUDE = os.environ.get("SAFETY_MODEL_CLAUDE", "claude-opus-4-7")
+
+# Anthropic key — optional. If SAGE_SAFETY_PROVIDER=claude, this MUST be set.
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+
+# Per-session log directory for topology traces (written as JSONL).
+SAGE_LOG_DIR = os.environ.get("SAGE_LOG_DIR", "logs")
