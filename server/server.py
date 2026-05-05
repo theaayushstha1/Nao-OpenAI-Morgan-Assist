@@ -348,6 +348,26 @@ def health():
     return jsonify(ok=True)
 
 
+@app.post("/tts")
+def tts_clone():
+    """Synthesize arbitrary text with the configured ElevenLabs voice clone.
+    NAO uses this for system speech (greetings, prompts, confirmations) so
+    everything sounds like the user, not the onboard robot voice.
+    Returns MP3 bytes; 503 if ElevenLabs isn't configured / synth fails.
+    """
+    text = (request.form.get("text") or request.json and request.json.get("text") or "").strip() if request.is_json else (request.form.get("text") or "").strip()
+    if not text:
+        return jsonify(error="missing_text"), 400
+    if not config.USE_ELEVENLABS:
+        return jsonify(error="elevenlabs_not_configured"), 503
+    from server.elevenlabs_tts import synthesize as _el_synth
+    mp3 = _el_synth(text)
+    if not mp3:
+        return jsonify(error="synth_failed"), 503
+    from flask import Response as _FResp
+    return _FResp(mp3, mimetype="audio/mpeg")
+
+
 @app.post("/turn")
 def turn():
     username = request.form.get("username") or "guest"

@@ -12,6 +12,7 @@ import config
 import audio_handler
 from processing_announcer import ProcessingAnnouncer
 from utils import face_naoqi, ask_name_utils, nao_execute, camera_capture, exit_detection, intent as _intent
+from utils.voice_clone import clone_say
 from utils.speech import expressive_say, time_of_day_greeting
 
 
@@ -166,13 +167,9 @@ def run_streaming(qi_session, initial_hint=None):
 
     username, recognized = _resolve_username(qi_session, raw_tts, config.NAO_IP)
     if recognized and username != "guest":
-        expressive_say(raw_tts, "Welcome back, {0}. What can I help with?".format(username))
+        clone_say(raw_tts, "Welcome back, {0}. What can I help with?".format(username))
     elif username == "guest":
-        # Either ask_name failed or face-learn flow ran with its own confirm
-        # ("Got it, X. Nice to meet you. What can I help with?"). For pure
-        # guest fallback, give an explicit listening cue so the user knows
-        # NAO is ready.
-        expressive_say(raw_tts, "I'm listening.")
+        clone_say(raw_tts, "I'm listening.")
 
     # Audible "go" + green eyes so the user always knows when to start.
     try:
@@ -203,7 +200,7 @@ def run_streaming(qi_session, initial_hint=None):
             # After 2 consecutive silent windows, prompt the user so they
             # know NAO is still alive and waiting.
             if silent_streak == 2:
-                expressive_say(raw_tts, "I'm here when you're ready.")
+                clone_say(raw_tts, "I'm here when you're ready.")
                 try:
                     leds.fadeRGB("FaceLeds", 0.0, 1.0, 0.0, 0.1)
                 except Exception:

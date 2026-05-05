@@ -80,10 +80,18 @@ def learn_new_face_naoqi(qi_session, tts, name, subscriber_name="FaceLearn"):
             print("[Learning face as]: {}".format(name))
             face_detection.learnFace(name)
             time.sleep(0.8)
-            tts.say("Got it, {0}. Nice to meet you. What can I help with?".format(name))
+            try:
+                from voice_clone import clone_say
+            except Exception:
+                from utils.voice_clone import clone_say
+            clone_say(tts, "Got it, {0}. Nice to meet you. What can I help with?".format(name))
             return True
         else:
-            tts.say("I couldn't see you clearly, {0}, but let's keep going.".format(name))
+            try:
+                from voice_clone import clone_say
+            except Exception:
+                from utils.voice_clone import clone_say
+            clone_say(tts, "I couldn't see you clearly, {0}, but let's keep going.".format(name))
             return False
     except Exception as e:
         print("[Learn face error]:", e)
