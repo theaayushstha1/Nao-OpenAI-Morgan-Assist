@@ -2,6 +2,7 @@
 from __future__ import print_function
 import os
 import time
+import requests
 
 from utils.name_utils import extract_name
 from utils.speech import random_phrase, expressive_say
@@ -30,7 +31,7 @@ def ask_name(tts, nao_ip, server_url, session, record_audio_func):
             continue
         try:
             with open(wav, 'rb') as f:
-                r = session.post(server_url, files={"file": f}, data={"username": "guest"}, timeout=30)
+                r = requests.post(server_url + "/turn", files={"audio": f}, data={"username": "guest"}, timeout=30)
             spoken = (r.json() or {}).get("user_input", "")
             print("[Heard]: '{}'".format(spoken))
             name = extract_name(spoken)

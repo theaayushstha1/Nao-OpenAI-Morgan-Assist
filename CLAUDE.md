@@ -88,7 +88,7 @@ Knowledge vault for this codebase at `~/Documents/Obsidian Vault/Nao-OpenAI-Morg
 
 ## NAO Robot — Connection
 
-- **IP:** `172.20.95.121` (confirmed reachable 2026-04-14 on the CS network; may change if the lease drops — see below for making it static)
+- **IP:** `172.20.95.127` (confirmed reachable 2026-04-14 on the CS network; may change if the lease drops — see below for making it static)
 - **Hostname:** `nao.local` (mDNS fallback)
 - **User:** `nao`
 - **Password:** stored in `.env` as `NAO_PASSWORD` (do NOT commit the password; `.env` is gitignored)
@@ -96,15 +96,15 @@ Knowledge vault for this codebase at `~/Documents/Obsidian Vault/Nao-OpenAI-Morg
 ### SSH
 
 ```bash
-ssh nao@172.20.95.121     # on the CS network
+ssh nao@172.20.95.127     # on the CS network
 ssh nao@nao.local         # elsewhere, if mDNS resolves
 ```
 
-Recommended: set up passwordless SSH once with `ssh-copy-id nao@172.20.95.121` so you never type the password again. Then add to `~/.ssh/config`:
+Recommended: set up passwordless SSH once with `ssh-copy-id nao@172.20.95.127` so you never type the password again. Then add to `~/.ssh/config`:
 
 ```
 Host nao
-  HostName 172.20.95.121
+  HostName 172.20.95.127
   User nao
 ```
 
@@ -112,13 +112,13 @@ VS Code Remote-SSH uses this config automatically — just pick "nao" from the h
 
 ### Making the IP static
 
-Best path: file a ticket with Morgan IT giving them the NAO's WiFi MAC address (`ifconfig wlan0 | grep ether` on the robot) and request a DHCP reservation for `172.20.95.121`. That survives firmware updates and doesn't require touching the robot.
+Best path: file a ticket with Morgan IT giving them the NAO's WiFi MAC address (`ifconfig wlan0 | grep ether` on the robot) and request a DHCP reservation for `172.20.95.127`. That survives firmware updates and doesn't require touching the robot.
 
 Fallback: configure a fixed IP via Choregraphe (Settings → Network → "Use a fixed IP address") or via `connmanctl` on the robot directly.
 
 ### Deploying code to the robot
 
 ```bash
-rsync -avz --delete nao/ nao@172.20.95.121:/home/nao/nao_assist/
-ssh nao@172.20.95.121 "python /home/nao/nao_assist/main.py"
+rsync -avz --delete nao/ nao@172.20.95.127:/home/nao/nao_assist/
+ssh nao@172.20.95.127 "python /home/nao/nao_assist/main.py"
 ```

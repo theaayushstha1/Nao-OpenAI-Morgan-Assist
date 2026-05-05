@@ -15,14 +15,27 @@ from utils.speech import random_phrase, time_of_day_greeting, format_expressive
 _MODE_HINT_MAP = {
     "chat": "chat",
     "let's chat": "chat",
-    "chatbot": "morgan",
+    "chat mode": "chat",
+    "let's talk": "chat",
+    "talk mode": "chat",
+    "start chat": "chat",
+    "chatbot": "chat",
+    "chatbot mode": "chat",
     "morgan": "morgan",
     "morgan assist": "morgan",
+    "morgan chat": "morgan",
+    "morgan chatbot": "morgan",
     "therapist": "therapy",
     "therapist mode": "therapy",
     "therapy": "therapy",
+    "therapy mode": "therapy",
+    "talk to someone": "therapy",
+    "i need help": "therapy",
     "mini nao": "skills",
     "mini": "skills",
+    "mininao": "skills",
+    "mini-nao": "skills",
+    "skills": "skills",
 }
 
 
@@ -36,7 +49,8 @@ def extract_hint(phrase):
 
 DEBOUNCE_SECONDS    = 2.0
 SAME_WORD_COOLDOWN  = 3.0
-MIN_CONF            = 0.45
+MIN_CONF            = 0.50
+NAO_WAKE_MIN_CONF   = 0.55
 
 YESNO_TIMEOUT_S     = 6.0
 YESNO_MIN_CONF      = 0.40
@@ -49,14 +63,7 @@ MAX_VALID_DIST      = 3.00
 YES_WORDS = ["yes","yeah","yep","sure","ok","okay","please"]
 NO_WORDS  = ["no","nope","nah","not now","later","maybe later","no thanks"]
 
-ASSIST_LINE = (
-    "How may I assist you today? \\pau=400\\ "
-    "Say 'let's chat' to start a conversation. \\pau=300\\ "
-    "Say 'morgan assist' for Morgan State University support. \\pau=300\\ "
-    "Say 'mini nao' for quick tools and utilities. \\pau=300\\ "
-    "Say 'therapist mode' if you'd like someone to talk to. \\pau=300\\ "
-    "You can also ask me to dance or follow you at any time. "
-)
+ASSIST_LINE = "Say chat, therapy, morgan, or skills."
 
 
 # --- small utils ---
@@ -116,6 +123,12 @@ def _set_vocab(asr, vocab, spotting=False):
         asr.pause(False)
     except:
         pass
+
+def _accept_word(word, conf, vocab):
+    if not word or word not in vocab:
+        return False
+    threshold = NAO_WAKE_MIN_CONF if word == "nao" else MIN_CONF
+    return conf > threshold
 
 # --- head tracking  ---
 
@@ -490,55 +503,27 @@ def listen_for_command(nao_ip, port=9559):
     asr     = ALProxy("ALSpeechRecognition", nao_ip, port)
     memory  = ALProxy("ALMemory",            nao_ip, port)
 
+    # Vocab is intentionally tight — only mode triggers. Random ambient noise
+    # used to match "sit down" / "dance" / "sleep" and made NAO act on its own.
     MAIN_VOCAB = [
         "nao",
-        "stand up",
-        "sit down",
-        # Chat triggers
+        "chat",
         "let's chat",
         "let's talk",
-        "talk mode",
-        "start a conversation",
         "chat mode",
+        "talk mode",
+        "start chat",
+        "morgan",
         "morgan assist",
-        "morgan chatbot",
         "morgan chat",
+        "morgan chatbot",
         "chatbot",
         "chatbot mode",
-        "university chatbot",
-        # mini nao mode
+        "skills",
         "mini nao",
-        "mini-nao",
-        "mininao",
-        "mini nao mode",
-        # dance triggers
-        "dance",
-        "can you dance",
-        "dance for me",
-        "do a dance",
-        # follow-me triggers
-        "follow me",
-        "let's go",
-        "come with me",
-        "give me your hand",
-        "let's go nao",
-        # ✅ SHUTDOWN/SLEEP TRIGGERS
-        "shutdown",
-        "shut down",
-        "nao shutdown",
-        "nao shut down",
-        "power off",
-        "turn off",
-        "sleep",
-        "go to sleep",
-        "nao sleep",
-        "good night",
-        "therapist",
-        "therapist mode",
         "therapy",
+        "therapist",
         "therapy mode",
-        "counseling",
-        "counseling mode",
         "talk to someone",
         "i need help",
     ]
@@ -554,8 +539,7 @@ def listen_for_command(nao_ip, port=9559):
     head_flag = {"stop": False}
     _run_bg(_head_track_guard, nao_ip, port, head_flag)
 
-    _say_paused(tts, asr, format_expressive(
-        "{} All systems are online. Say 'Nao' whenever you would like to begin.".format(time_of_day_greeting()), "warm"))
+    _say_paused(tts, asr, "Ready. Say nao to begin.")
 
     last_trigger = 0.0
     last_word    = ""
@@ -568,7 +552,7 @@ def listen_for_command(nao_ip, port=9559):
                 continue
 
             now = time.time()
-            if conf <= MIN_CONF or word not in MAIN_VOCAB:
+            if not _accept_word(word, conf, MAIN_VOCAB):
                 time.sleep(0.05)
                 continue
 
@@ -602,8 +586,7 @@ def listen_for_command(nao_ip, port=9559):
                 _flush_word(memory)
                 return result  # Returns "exit"
             
-            elif word in ["therapist", "therapist mode", "therapy", "therapy mode", 
-                        "counseling", "counseling mode", "talk to someone", "i need help"]:
+            elif word in ["therapy", "therapist", "therapy mode", "i need help"]:
                 _stop_move_now(nao_ip, port)
                 head_flag["stop"] = True
                 _tracker_stop_now(nao_ip, port)
@@ -613,24 +596,12 @@ def listen_for_command(nao_ip, port=9559):
 
 
             elif word == "nao":
-                d = _estimate_user_distance(memory)
-
-                if d is not None and d <= NEAR_SHAKE_DIST:
-                    ans = _ask_and_listen_yes_no(nao_ip, port, tts, asr, memory, timeout_s=YESNO_TIMEOUT_S)
-                    _set_vocab(asr, MAIN_VOCAB, spotting=False)
-                    if ans is True:
-                        _extend_hand_for_shake_hold(nao_ip, port, tts, asr, hold_s=5.0)
-                    else:
-                        _say_nowait(tts, asr, ASSIST_LINE)
-                else:
-                    _wave_any_posture_bg(nao_ip, port)
-                    _say_nowait(tts, asr, format_expressive(
-                        "{} My name is NAO. It is truly a pleasure to meet you. ".format(time_of_day_greeting()), "warm") + ASSIST_LINE)
-                
+                _say_nowait(tts, asr, ASSIST_LINE)
                 _flush_word(memory)
 
             # ALL CHAT TRIGGERS NOW RETURN "chat" 
-            elif word in ["let's chat", "let's talk", "talk mode", "start a conversation", "chat mode"]:
+            elif word in ["chat", "let's chat", "let's talk", "chat mode", "talk mode",
+                          "start chat", "chatbot", "chatbot mode"]:
                 _stop_move_now(nao_ip, port)
                 head_flag["stop"] = True
                 _tracker_stop_now(nao_ip, port)
@@ -638,17 +609,16 @@ def listen_for_command(nao_ip, port=9559):
                 _flush_word(memory)
                 return "chat"
             
-            # MORGAN/CHATBOT TRIGGERS ALSO RETURN "chat"
-            elif word in ["morgan assist", "morgan chatbot", "morgan chat", 
-                         "chatbot", "chatbot mode", "university chatbot"]:
+            # Morgan triggers route to Realtime with Morgan-specific instructions.
+            elif word in ["morgan", "morgan assist", "morgan chat", "morgan chatbot"]:
                 _stop_move_now(nao_ip, port)
                 head_flag["stop"] = True
                 _tracker_stop_now(nao_ip, port)
                 _say_paused(tts, asr, format_expressive(random_phrase("entering_chatbot"), "warm"))
                 _flush_word(memory)
-                return "chat"
+                return "morgan"
             
-            elif word in ["mini nao", "mini-nao", "mininao", "mini nao mode"]:
+            elif word in ["mini nao", "mininao", "skills"]:
                 _stop_move_now(nao_ip, port)
                 head_flag["stop"] = True
                 _tracker_stop_now(nao_ip, port) 

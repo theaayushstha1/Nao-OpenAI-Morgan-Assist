@@ -29,3 +29,7 @@ server/nao.db
 
 # Red-team / session logs
 logs/
+
+# SQLite scratch files (never commit these)
+server/nao.db-shm
+server/nao.db-wal

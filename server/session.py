@@ -24,7 +24,7 @@ def _conn():
         "username TEXT PRIMARY KEY, camera_consent INTEGER NOT NULL DEFAULT 1)"
     )
     try:
-        c.execute("ALTER TABLE user_prefs ADD COLUMN proactive_enabled INTEGER NOT NULL DEFAULT 1")
+        c.execute("ALTER TABLE user_prefs ADD COLUMN proactive_enabled INTEGER NOT NULL DEFAULT 0")
     except sqlite3.OperationalError:
         pass  # column already exists
     c.execute(
@@ -122,8 +122,8 @@ def get_proactive_enabled(username: str) -> bool:
     with _conn() as c:
         row = c.execute("SELECT proactive_enabled FROM user_prefs WHERE username = ?", (username,)).fetchone()
         if row is None:
-            c.execute("INSERT INTO user_prefs (username, camera_consent, proactive_enabled) VALUES (?, 1, 1)", (username,))
-            return True
+            c.execute("INSERT INTO user_prefs (username, camera_consent, proactive_enabled) VALUES (?, 1, 0)", (username,))
+            return False
         return bool(row[0])
 
 

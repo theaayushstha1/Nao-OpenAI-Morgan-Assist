@@ -33,7 +33,8 @@ def streaming_client():
 
 def test_stream_turn_crisis_path(streaming_client):
     fake_wav = open("server/tests/fixtures/sample.wav", "rb").read()
-    with patch("server.server._transcribe", return_value="i want to kill myself"):
+    with patch("server.server._validate_wav", return_value=True), \
+         patch("server.server._transcribe", return_value="i want to kill myself"):
         r = streaming_client.post("/stream_turn", data={
             "audio": (io.BytesIO(fake_wav), "sample.wav"),
             "username": "test",
@@ -43,3 +44,22 @@ def test_stream_turn_crisis_path(streaming_client):
     body = r.get_data(as_text=True)
     assert "\"crisis\": true" in body
     assert "988" in body
+
+
+def test_stream_turn_rejects_asr_noise_fragment(streaming_client):
+    fake_wav = open("server/tests/fixtures/sample.wav", "rb").read()
+    with patch("server.server._validate_wav", return_value=True), \
+         patch("server.server._has_voice", return_value=True), \
+         patch("server.server._transcribe", return_value="world right now"), \
+         patch("server.server.pick_initial_agent") as pick_agent:
+        r = streaming_client.post("/stream_turn", data={
+            "audio": (io.BytesIO(fake_wav), "sample.wav"),
+            "username": "test",
+            "hint": "chat",
+        }, content_type="multipart/form-data")
+
+    assert r.status_code == 200
+    body = r.get_data(as_text=True)
+    assert "\"active_agent\": \"silence\"" in body
+    assert "\"user_input\": \"\"" in body
+    assert not pick_agent.called

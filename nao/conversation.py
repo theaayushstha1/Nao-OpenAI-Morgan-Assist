@@ -11,7 +11,7 @@ from naoqi import ALProxy
 import config
 import audio_handler
 from processing_announcer import ProcessingAnnouncer
-from utils import face_naoqi, ask_name_utils, nao_execute, camera_capture, exit_detection
+from utils import face_naoqi, ask_name_utils, nao_execute, camera_capture, exit_detection, intent as _intent
 from utils.speech import expressive_say, time_of_day_greeting
 
 
@@ -19,7 +19,7 @@ _DEFAULT_TIMEOUT = 45
 
 
 def _post(wav_path, img_path, username, hint, end_session=False):
-    url = "http://{0}:5000/turn".format(config.SERVER_IP)
+    url = "http://{0}:{1}/turn".format(config.SERVER_IP, config.SERVER_PORT)
     files = {}
     if wav_path:
         files["audio"] = open(wav_path, "rb")
@@ -39,12 +39,12 @@ def _post(wav_path, img_path, username, hint, end_session=False):
 
 
 def _resolve_username(qi_session, tts, nao_ip):
-    """Recognize face or ask for a name. Returns a string username."""
+    """Recognize face or ask for a name. Returns (username, was_recognized)."""
     name = face_naoqi.recognize_face_naoqi(qi_session, tts, timeout=4)
     if name:
-        return name.lower()
+        return name.lower(), True
     asked = ask_name_utils.ask_name(
-        tts, nao_ip, "http://{0}:5000".format(config.SERVER_IP),
+        tts, nao_ip, "http://{0}:{1}".format(config.SERVER_IP, config.SERVER_PORT),
         qi_session, audio_handler.record_audio,
     )
     if asked and asked != "Guest":
@@ -52,8 +52,8 @@ def _resolve_username(qi_session, tts, nao_ip):
             face_naoqi.learn_new_face_naoqi(qi_session, tts, asked)
         except Exception:
             pass
-        return asked.lower()
-    return "guest"
+        return asked.lower(), False
+    return "guest", False
 
 
 def run(qi_session, initial_hint=None):
@@ -64,8 +64,9 @@ def run(qi_session, initial_hint=None):
     leds = ALProxy("ALLeds", config.NAO_IP, config.NAO_PORT)
     behav_mgr = ALProxy("ALBehaviorManager", config.NAO_IP, config.NAO_PORT)
 
-    username = _resolve_username(qi_session, raw_tts, config.NAO_IP)
-    expressive_say(raw_tts, "{0}, {1}".format(time_of_day_greeting(), username))
+    username, recognized = _resolve_username(qi_session, raw_tts, config.NAO_IP)
+    if recognized and username != "guest":
+        expressive_say(raw_tts, "Welcome back, {0}.".format(username))
 
     suppress_image = False
     hint = initial_hint
@@ -127,27 +128,60 @@ def run(qi_session, initial_hint=None):
 import stream_tts
 
 
+def _wait_tts_idle(memory, settle_s=0.2, timeout=3.0):
+    """Block until ALTextToSpeech reports done/stopped, then a short settle."""
+    t0 = time.time()
+    while time.time() - t0 < timeout:
+        try:
+            status = memory.getData("ALTextToSpeech/Status")
+            if isinstance(status, list) and len(status) >= 2 and status[1] in ("done", "stopped"):
+                break
+        except Exception:
+            break
+        time.sleep(0.05)
+    time.sleep(settle_s)
+
+
 def run_streaming(qi_session, initial_hint=None):
     """Streaming variant: sentences arrive over SSE and are spoken as generated."""
     tts = ALProxy("ALAnimatedSpeech", config.NAO_IP, config.NAO_PORT)
     raw_tts = ALProxy("ALTextToSpeech", config.NAO_IP, config.NAO_PORT)
+    memory = ALProxy("ALMemory", config.NAO_IP, config.NAO_PORT)
+    audio_device = ALProxy("ALAudioDevice", config.NAO_IP, config.NAO_PORT)
     motion = ALProxy("ALMotion", config.NAO_IP, config.NAO_PORT)
     posture = ALProxy("ALRobotPosture", config.NAO_IP, config.NAO_PORT)
     leds = ALProxy("ALLeds", config.NAO_IP, config.NAO_PORT)
     behav_mgr = ALProxy("ALBehaviorManager", config.NAO_IP, config.NAO_PORT)
 
-    username = _resolve_username(qi_session, raw_tts, config.NAO_IP)
-    expressive_say(raw_tts, "{0}, {1}".format(time_of_day_greeting(), username))
+    username, recognized = _resolve_username(qi_session, raw_tts, config.NAO_IP)
+    if recognized and username != "guest":
+        expressive_say(raw_tts, "Welcome back, {0}.".format(username))
 
     suppress_image = False
     hint = initial_hint
+    skip_tts_wait = False
+    barge_config = {
+        "enabled": config.BARGE_ENABLED,
+        "threshold": config.BARGE_THRESHOLD,
+        "sustain_ms": config.BARGE_SUSTAIN_MS,
+        "deadzone_ms": config.BARGE_DEADZONE_MS,
+        "poll_ms": config.BARGE_POLL_MS,
+    }
 
     while True:
+        if skip_tts_wait:
+            skip_tts_wait = False
+        else:
+            _wait_tts_idle(memory)
         wav = audio_handler.record_audio(config.NAO_IP)
+        if wav is None:
+            continue
         if not wav:
             continue
+        # Camera snap is opt-in (saves ~500ms per turn). Therapist agent can
+        # call observe_face tool when it actually needs vision.
         img_path = None
-        if not suppress_image:
+        if config.IMAGE_PER_TURN and not suppress_image:
             img_path = camera_capture.snap_quick(config.NAO_IP, config.NAO_PORT)
 
         files = {}
@@ -165,8 +199,12 @@ def run_streaming(qi_session, initial_hint=None):
         def handle_done(info):
             pass
 
-        url = "http://{0}:5000/stream_turn".format(config.SERVER_IP)
-        info = stream_tts.consume(url, files, data, raw_tts, handle_action, handle_done)
+        url = "http://{0}:{1}/stream_turn".format(config.SERVER_IP, config.SERVER_PORT)
+        info = stream_tts.consume(
+            url, files, data, raw_tts, handle_action, handle_done,
+            audio_device=audio_device, barge_config=barge_config,
+            memory=memory,
+        )
 
         for f in files.values():
             f.close()
@@ -178,20 +216,46 @@ def run_streaming(qi_session, initial_hint=None):
         except Exception:
             pass
 
-        hint = None
+        # Preserve hint until we get an actual agent turn. Otherwise the very
+        # first audio (often a partial echo or VAD false-trigger) consumes the
+        # mode hint and the next turn falls back to router triage.
+        active = info.get("active_agent", "")
+        if active and active not in ("silence", "barge"):
+            hint = None
+        print("[stream_turn done] info={0}".format(info))
+        if info.get("barge_in"):
+            print("[barge-in] user interrupted NAO speech; listening now")
+            # Visual confirmation: hold yellow for ~400ms so the user actually
+            # sees the acknowledgement before record_audio paints the eyes
+            # green for listening.
+            try:
+                leds.fadeRGB("FaceLeds", 1.0, 0.5, 0.0, 0.08)  # 80ms fade-in
+                time.sleep(0.4)                                 # hold
+            except Exception:
+                pass
+            skip_tts_wait = True
+            continue
         if info.get("crisis"):
+            print("[exit reason] crisis flag")
             break
         if info.get("suppress_image"):
             suppress_image = True
         user_input = info.get("user_input") or ""
-        if exit_detection.detect_exit_intent(user_input):
+        action = _intent.detect(user_input, current_mode=initial_hint or "")
+        if action == "exit":
+            print("[exit reason] exit_intent on: {0!r}".format(user_input))
             try:
                 requests.post(
-                    "http://{0}:5000/turn".format(config.SERVER_IP),
+                    "http://{0}:{1}/turn".format(config.SERVER_IP, config.SERVER_PORT),
                     data={"username": username, "end_session": "true"},
                     timeout=10,
                 )
             except Exception:
                 pass
-            expressive_say(raw_tts, "Take care.")
-            break
+            expressive_say(raw_tts, "Goodbye, {0}. See you next time.".format(username))
+            return None
+        if action and action.startswith("switch:"):
+            target = action.split(":", 1)[1]
+            print("[switch] {0} -> {1}".format(initial_hint, target))
+            expressive_say(raw_tts, "Switching to {0} mode.".format(target))
+            return target

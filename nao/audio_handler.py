@@ -5,8 +5,47 @@ Front-mic capture with long-silence VAD stop, trimming, pre-emphasis, AGC.
 Returns final WAV path.
 """
 from __future__ import print_function
-import os, time, wave, audioop, struct
+import os, time, wave, struct
 from naoqi import ALProxy
+
+try:
+    import audioop
+except ModuleNotFoundError:
+    class _AudioOpCompat(object):
+        @staticmethod
+        def _samples(fragment, width):
+            if width != 2:
+                raise ValueError("audioop fallback only supports 16-bit samples")
+            count = len(fragment) // 2
+            if count <= 0:
+                return ()
+            return struct.unpack("<{}h".format(count), fragment[:count * 2])
+
+        @classmethod
+        def rms(cls, fragment, width):
+            samples = cls._samples(fragment, width)
+            if not samples:
+                return 0
+            return int((sum(s * s for s in samples) / float(len(samples))) ** 0.5)
+
+        @classmethod
+        def max(cls, fragment, width):
+            samples = cls._samples(fragment, width)
+            return max(abs(s) for s in samples) if samples else 0
+
+        @classmethod
+        def mul(cls, fragment, width, factor):
+            out = []
+            for sample in cls._samples(fragment, width):
+                value = int(sample * factor)
+                if value > 32767:
+                    value = 32767
+                if value < -32768:
+                    value = -32768
+                out.append(value)
+            return struct.pack("<{}h".format(len(out)), *out) if out else b""
+
+    audioop = _AudioOpCompat()
 
 # Paths / format
 SAVE_DIR        = "/home/nao/recordings"
@@ -15,23 +54,24 @@ CHANNELS_MASK   = (0, 0, 1, 0)   # front mic mono
 SAMPLE_WIDTH    = 2              # S16_LE
 
 # Timing
-CALIBRATION_MS      = 240
+CALIBRATION_MS      = 120        # halved: faster start
 POLL_MS             = 30
-NO_SPEECH_TIMEOUT_S = 10.0       # more time to begin speaking
-MIN_CLIP_SEC        = 0.25
+NO_SPEECH_TIMEOUT_S = 8.0        # quit if no speech in this window
+MIN_CLIP_SEC        = 0.4        # clips shorter than this dropped client-side
 
 # Stop behavior (single long-silence gate)
-TRAIL_MS            = 600      # stop after 0.6s of silence
+TRAIL_MS            = 350        # stop after 0.35s of silence — quicker turn end
 
 # Durations
-DEFAULT_MAX_SEC     = 300.0      # allow up to 5 min per turn
-ABS_HARD_CAP_SEC    = 600.0
+DEFAULT_MAX_SEC     = 15.0       # cap per turn — long captures usually = noise
+ABS_HARD_CAP_SEC    = 30.0
 
-# Energy thresholds
-ENERGY_MIN_START    = 1200
-ENERGY_MIN_KEEP     = 800
+# Energy thresholds — tuned for normal speaking voice ~50cm from NAO's front mic.
+# Lower these if user's voice is quiet; raise if room noise triggers false starts.
+ENERGY_MIN_START    = 1500
+ENERGY_MIN_KEEP     = 900
 START_BONUS         = 800
-KEEP_MARGIN         = 0.60
+KEEP_MARGIN         = 0.55
 
 # Trimming
 TRIM_FRACTION       = 0.40
@@ -75,6 +115,14 @@ def _robot_noise_restore(almoves):
         try: almoves.setBackgroundStrategy("backToNeutral")
         except: pass
 
+def _delete_if_exists(path):
+    if path and os.path.exists(path):
+        try: os.unlink(path)
+        except: pass
+
+_CALIBRATE_CAP = 3000   # never let calibration push start_th above this
+
+
 def _calibrate_energy(ip):
     try: audio_dev = ALProxy("ALAudioDevice", ip, 9559)
     except: return ENERGY_MIN_START, ENERGY_MIN_KEEP
@@ -88,7 +136,7 @@ def _calibrate_energy(ip):
         return ENERGY_MIN_START, ENERGY_MIN_KEEP
     vals.sort()
     base = vals[len(vals)//2]
-    start_th = max(ENERGY_MIN_START, base + START_BONUS)
+    start_th = min(_CALIBRATE_CAP, max(ENERGY_MIN_START, base + START_BONUS))
     keep_th  = max(ENERGY_MIN_KEEP, start_th * KEEP_MARGIN)
     return start_th, keep_th
 
@@ -121,10 +169,13 @@ def record_audio(nao_ip, max_duration=None):
 
     start_th, keep_th = _calibrate_energy(nao_ip)
     trim_rms = max(400, int(start_th * TRIM_FRACTION))
+    print("[VAD] listening start_th={0:.0f} keep_th={1:.0f} timeout={2:.1f}s".format(
+        start_th, keep_th, NO_SPEECH_TIMEOUT_S))
 
     t0 = time.time()
     heard = False
     last_voice_t = None
+    peak_e = 0.0
 
     time.sleep(0.05)
 
@@ -140,9 +191,12 @@ def record_audio(nao_ip, max_duration=None):
             if audio_dev is not None:
                 try: e = float(audio_dev.getFrontMicEnergy())
                 except: e = 0.0
+            if e > peak_e:
+                peak_e = e
             if e >= start_th:
                 heard = True
                 last_voice_t = now
+                print("[VAD] onset e={0:.0f} after {1:.2f}s".format(e, now - t0))
                 break
             time.sleep(POLL_MS/1000.0)
 
@@ -168,9 +222,17 @@ def record_audio(nao_ip, max_duration=None):
         _fade_leds(nao_ip, 1.0, 1.0, 1.0)  # done
         _robot_noise_restore(almoves)
 
+    if not heard:
+        print("[VAD] no speech detected (peak_e={0:.0f} < {1:.0f})".format(peak_e, start_th))
+        _delete_if_exists(out_path)
+        return None
+
     dur = time.time() - t0
     if dur < MIN_CLIP_SEC:
-        time.sleep(max(0.0, MIN_CLIP_SEC - dur))
+        print("[VAD] clip too short {0:.2f}s".format(dur))
+        _delete_if_exists(out_path)
+        return None
+    print("[VAD] captured {0:.2f}s".format(dur))
 
     trimmed = _trim_silence(out_path, trim_rms, TRIM_CHUNK_BYTES) or out_path
     if PREEMPH_ENABLED:

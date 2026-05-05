@@ -27,6 +27,14 @@ def test_camera_consent_defaults_true_and_persists(tmp_path, monkeypatch):
     assert s.get_camera_consent("bob") is False
 
 
+def test_proactive_greeting_defaults_false_and_persists(tmp_path, monkeypatch):
+    db = tmp_path / "nao.db"
+    monkeypatch.setattr(s, "_DB_PATH", str(db))
+    assert s.get_proactive_enabled("bob") is False
+    s.set_proactive_enabled("bob", True)
+    assert s.get_proactive_enabled("bob") is True
+
+
 def test_recap_save_and_load(tmp_path, monkeypatch):
     db = tmp_path / "nao.db"
     monkeypatch.setattr(s, "_DB_PATH", str(db))
