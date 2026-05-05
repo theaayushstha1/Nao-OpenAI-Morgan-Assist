@@ -54,24 +54,27 @@ CHANNELS_MASK   = (0, 0, 1, 0)   # front mic mono
 SAMPLE_WIDTH    = 2              # S16_LE
 
 # Timing
-CALIBRATION_MS      = 120        # halved: faster start
+CALIBRATION_MS      = 80
 POLL_MS             = 30
-NO_SPEECH_TIMEOUT_S = 8.0        # quit if no speech in this window
+NO_SPEECH_TIMEOUT_S = 4.5
 MIN_CLIP_SEC        = 0.4        # clips shorter than this dropped client-side
 
 # Stop behavior (single long-silence gate)
-TRAIL_MS            = 350        # stop after 0.35s of silence — quicker turn end
+TRAIL_MS            = 650
 
 # Durations
-DEFAULT_MAX_SEC     = 15.0       # cap per turn — long captures usually = noise
+DEFAULT_MAX_SEC     = 10.0       # cap per turn — long captures usually = noise
 ABS_HARD_CAP_SEC    = 30.0
 
 # Energy thresholds — tuned for normal speaking voice ~50cm from NAO's front mic.
 # Lower these if user's voice is quiet; raise if room noise triggers false starts.
-ENERGY_MIN_START    = 1500
-ENERGY_MIN_KEEP     = 900
-START_BONUS         = 800
-KEEP_MARGIN         = 0.55
+ENERGY_MIN_START    = 550
+ENERGY_MIN_KEEP     = 320
+START_BONUS         = 220
+KEEP_MARGIN         = 0.50
+SOFT_START_FLOOR    = 420
+SOFT_START_RATIO    = 0.45
+SOFT_START_MS       = 180
 
 # Trimming
 TRIM_FRACTION       = 0.40
@@ -120,7 +123,11 @@ def _delete_if_exists(path):
         try: os.unlink(path)
         except: pass
 
-_CALIBRATE_CAP = 3000   # never let calibration push start_th above this
+_CALIBRATE_CAP = 1800   # never let calibration push start_th above this
+
+
+def _soft_start_threshold(start_th):
+    return max(SOFT_START_FLOOR, int(float(start_th) * SOFT_START_RATIO))
 
 
 def _calibrate_energy(ip):
@@ -168,14 +175,16 @@ def record_audio(nao_ip, max_duration=None):
         audio_dev = None
 
     start_th, keep_th = _calibrate_energy(nao_ip)
+    soft_th = _soft_start_threshold(start_th)
     trim_rms = max(400, int(start_th * TRIM_FRACTION))
-    print("[VAD] listening start_th={0:.0f} keep_th={1:.0f} timeout={2:.1f}s".format(
-        start_th, keep_th, NO_SPEECH_TIMEOUT_S))
+    print("[VAD] listening start_th={0:.0f} soft_th={1:.0f} keep_th={2:.0f} timeout={3:.1f}s".format(
+        start_th, soft_th, keep_th, NO_SPEECH_TIMEOUT_S))
 
     t0 = time.time()
     heard = False
     last_voice_t = None
     peak_e = 0.0
+    soft_since = None
 
     time.sleep(0.05)
 
@@ -198,6 +207,16 @@ def record_audio(nao_ip, max_duration=None):
                 last_voice_t = now
                 print("[VAD] onset e={0:.0f} after {1:.2f}s".format(e, now - t0))
                 break
+            if e >= soft_th:
+                if soft_since is None:
+                    soft_since = now
+                if (now - soft_since) * 1000.0 >= SOFT_START_MS:
+                    heard = True
+                    last_voice_t = now
+                    print("[VAD] soft onset e={0:.0f} after {1:.2f}s".format(e, now - t0))
+                    break
+            else:
+                soft_since = None
             time.sleep(POLL_MS/1000.0)
 
         # track until long trailing silence
@@ -223,7 +242,7 @@ def record_audio(nao_ip, max_duration=None):
         _robot_noise_restore(almoves)
 
     if not heard:
-        print("[VAD] no speech detected (peak_e={0:.0f} < {1:.0f})".format(peak_e, start_th))
+        print("[VAD] no speech detected (peak_e={0:.0f} < soft_th={1:.0f})".format(peak_e, soft_th))
         _delete_if_exists(out_path)
         return None
 

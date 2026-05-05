@@ -60,6 +60,12 @@ def test_wake_word_requires_stronger_confidence(monkeypatch):
     assert wake_listener._accept_word("nao", wake_listener.NAO_WAKE_MIN_CONF + 0.01, ["nao"])
     assert not wake_listener._accept_word("chat", wake_listener.MIN_CONF, ["chat"])
     assert wake_listener._accept_word("chat", wake_listener.MIN_CONF + 0.01, ["chat"])
+    assert not wake_listener._accept_word(
+        "morgan assist", wake_listener.MORGAN_MIN_CONF, ["morgan assist"]
+    )
+    assert wake_listener._accept_word(
+        "morgan assist", wake_listener.MORGAN_MIN_CONF + 0.01, ["morgan assist"]
+    )
 
 
 def test_mininao_maps_to_skills(monkeypatch):
@@ -77,8 +83,21 @@ def test_wake_listener_maps_common_mode_phrases(monkeypatch):
     assert wake_listener.extract_hint("chat mode") == "chat"
     assert wake_listener.extract_hint("let's talk") == "chat"
     assert wake_listener.extract_hint("chatbot mode") == "chat"
+    assert wake_listener.extract_hint("morgan") is None
+    assert wake_listener.extract_hint("morgan assist") == "morgan"
     assert wake_listener.extract_hint("morgan chatbot") == "morgan"
+    assert wake_listener.extract_hint("morgan state mode") == "morgan"
     assert wake_listener.extract_hint("talk to someone") == "therapy"
+
+
+def test_mode_gate_requires_recent_wake(monkeypatch):
+    _install_fake_nao_modules(monkeypatch)
+    wake_listener = _reload("wake_listener")
+
+    assert wake_listener._mode_gate_allows("nao", 100.0, 0.0, 0.0)
+    assert not wake_listener._mode_gate_allows("morgan assist", 100.0, 90.0, 0.0)
+    assert not wake_listener._mode_gate_allows("chat", 100.0, 110.0, 101.0)
+    assert wake_listener._mode_gate_allows("chat", 100.0, 108.0, 99.0)
 
 
 def test_record_audio_returns_none_when_no_voice(monkeypatch, tmp_path):
@@ -130,6 +149,14 @@ def test_record_audio_returns_none_when_no_voice(monkeypatch, tmp_path):
 
     assert audio_handler.record_audio("127.0.0.1", max_duration=0.05) is None
     assert list(tmp_path.glob("*.wav")) == []
+
+
+def test_audio_soft_start_threshold_accepts_quiet_voice(monkeypatch):
+    _install_fake_nao_modules(monkeypatch)
+    audio_handler = _reload("audio_handler")
+
+    assert audio_handler._soft_start_threshold(1569) <= 754
+    assert audio_handler._soft_start_threshold(1500) > 650
 
 
 class _FakeSseResponse(object):
