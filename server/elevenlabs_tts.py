@@ -21,13 +21,22 @@ _URL_TEMPLATE = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
 
 
 def synthesize(text: str, *, output_format: str = "mp3_22050_32") -> bytes | None:
-    """Generate a voice-cloned MP3 for `text`. Returns None on failure."""
+    """Generate a voice-cloned MP3 for `text`. Returns None on failure.
+
+    Tuned for low latency: flash_v2_5 model + 22 kHz / 32 kbps output is
+    typically 300-500 ms per short sentence end-to-end.
+    """
     if not text or not text.strip():
         return None
     if not config.USE_ELEVENLABS:
         return None
 
     url = _URL_TEMPLATE.format(voice_id=config.ELEVENLABS_VOICE_ID)
+    # `optimize_streaming_latency=4` aggressively cuts time-to-first-byte
+    # at the cost of small quality drops — fine for short conversational
+    # replies. Pair with output_format on the URL so we get back smaller
+    # chunks faster.
+    url += "?optimize_streaming_latency=4&output_format=" + output_format
     headers = {
         "xi-api-key": config.ELEVENLABS_API_KEY,
         "Accept": "audio/mpeg",
@@ -36,9 +45,8 @@ def synthesize(text: str, *, output_format: str = "mp3_22050_32") -> bytes | Non
     payload = {
         "text": text,
         "model_id": config.ELEVENLABS_MODEL_ID,
-        "output_format": output_format,
         "voice_settings": {
-            "stability": 0.45,
+            "stability": 0.40,         # lower = more dynamic/faster, less consistent
             "similarity_boost": 0.85,
             "style": 0.0,
             "use_speaker_boost": True,
