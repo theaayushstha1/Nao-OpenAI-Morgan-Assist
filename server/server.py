@@ -576,7 +576,17 @@ def _stream_passthrough(agent, message, ctx, sess, transcript, username):
     for sent in iter_sentences(chunks()):
         sent_count += 1
         print("[stream sentence] username={0!r} text={1!r}".format(username, sent), flush=True)
-        yield _sse({"type": "sentence", "text": sent})
+        mp3 = None
+        if config.USE_ELEVENLABS:
+            from server.elevenlabs_tts import synthesize as _el_synth
+            mp3 = _el_synth(sent)
+        if mp3:
+            yield _sse({
+                "type": "audio", "format": "mp3", "text": sent,
+                "b64": base64.b64encode(mp3).decode("ascii"),
+            })
+        else:
+            yield _sse({"type": "sentence", "text": sent})
 
     t.join(timeout=2.0)
     final = state["final_text"]
@@ -598,7 +608,17 @@ def _stream_passthrough(agent, message, ctx, sess, transcript, username):
         if final:
             for sent in iter_sentences(iter([final])):
                 print("[stream fallback sentence] username={0!r} text={1!r}".format(username, sent), flush=True)
-                yield _sse({"type": "sentence", "text": sent})
+                mp3 = None
+                if config.USE_ELEVENLABS:
+                    from server.elevenlabs_tts import synthesize as _el_synth
+                    mp3 = _el_synth(sent)
+                if mp3:
+                    yield _sse({
+                        "type": "audio", "format": "mp3", "text": sent,
+                        "b64": base64.b64encode(mp3).decode("ascii"),
+                    })
+                else:
+                    yield _sse({"type": "sentence", "text": sent})
     for action in ctx["actions_queue"]:
         yield _sse({"type": "action", "action": action})
     yield _sse({"type": "done", "active_agent": state["active_agent"], "crisis": False,
