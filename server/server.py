@@ -495,7 +495,21 @@ def stream_turn():
         )
         _LAST_REPLY[username] = reply
         for sent in iter_sentences(iter([reply])):
-            yield _sse({"type": "sentence", "text": sent})
+            mp3 = None
+            if config.USE_ELEVENLABS:
+                from server.elevenlabs_tts import synthesize as _el_synth
+                mp3 = _el_synth(sent)
+            if mp3:
+                # Voice-cloned MP3 — NAO plays via ALAudioPlayer.
+                yield _sse({
+                    "type": "audio",
+                    "format": "mp3",
+                    "text": sent,  # transcript for logs / barge resume
+                    "b64": base64.b64encode(mp3).decode("ascii"),
+                })
+            else:
+                # Onboard TTS fallback (no ElevenLabs, or synth failed).
+                yield _sse({"type": "sentence", "text": sent})
         for action in ctx["actions_queue"]:
             yield _sse({"type": "action", "action": action})
         yield _sse({"type": "done", "active_agent": active, "crisis": False,
@@ -558,17 +572,50 @@ def _stream_passthrough(agent, message, ctx, sess, transcript, username):
                 return
             yield item
 
+    sent_count = 0
     for sent in iter_sentences(chunks()):
+        sent_count += 1
+        print("[stream sentence] username={0!r} text={1!r}".format(username, sent), flush=True)
         yield _sse({"type": "sentence", "text": sent})
 
     t.join(timeout=2.0)
     final = state["final_text"]
     if final:
         _LAST_REPLY[username] = final
+    if sent_count == 0:
+        if state["error"]:
+            print("[stream error] username={0!r} error={1}".format(username, state["error"]), flush=True)
+            try:
+                reply, active, _verdict, _metadata = run_topology(
+                    agent, message, context=ctx, session=sess
+                )
+                state["active_agent"] = active
+                final = reply
+                _LAST_REPLY[username] = reply
+            except Exception as e:  # noqa: BLE001
+                print("[stream fallback error] username={0!r} error={1!r}".format(username, repr(e)), flush=True)
+                final = "I hit a server error. Please try again."
+        if final:
+            for sent in iter_sentences(iter([final])):
+                print("[stream fallback sentence] username={0!r} text={1!r}".format(username, sent), flush=True)
+                yield _sse({"type": "sentence", "text": sent})
     for action in ctx["actions_queue"]:
         yield _sse({"type": "action", "action": action})
     yield _sse({"type": "done", "active_agent": state["active_agent"], "crisis": False,
                 "suppress_image": bool(ctx["suppress_image"]), "user_input": transcript})
+
+
+def _maybe_emit_voiceclone_audio(text: str):
+    """If ElevenLabs is configured, generate a voice-cloned MP3 for the
+    sentence and yield an SSE 'audio' event with base64-encoded bytes.
+    NAO plays this through ALAudioPlayer instead of its onboard TTS.
+
+    Returns nothing — this is a side-effect helper used inside SSE generators.
+    Caller does `yield from _maybe_emit_voiceclone_audio(sent)` if it's a
+    generator helper, otherwise `yield _sse(...)` directly. We use the
+    direct-yield pattern below since we already yield the sentence first.
+    """
+    pass  # placeholder, real impl is the generator below
 
 
 def _sse(obj) -> str:

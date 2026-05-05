@@ -18,6 +18,15 @@ REALTIME_VAD_THRESHOLD = float(os.environ.get("REALTIME_VAD_THRESHOLD", "0.30"))
 REALTIME_VAD_PREFIX_MS = int(os.environ.get("REALTIME_VAD_PREFIX_MS", "500"))
 REALTIME_VAD_SILENCE_MS = int(os.environ.get("REALTIME_VAD_SILENCE_MS", "450"))
 
+# ElevenLabs voice clone (optional). When ELEVENLABS_API_KEY + VOICE_ID are
+# set, /stream_turn synthesizes each sentence with ElevenLabs and emits an
+# "audio" SSE event (base64 mp3) alongside the "sentence" event so NAO can
+# play the cloned voice via ALAudioPlayer instead of its onboard TTS.
+ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
+ELEVENLABS_VOICE_ID = os.environ.get("ELEVENLABS_VOICE_ID", "")
+ELEVENLABS_MODEL_ID = os.environ.get("ELEVENLABS_MODEL_ID", "eleven_turbo_v2_5")
+USE_ELEVENLABS = bool(ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID)
+
 # Vertex AI Search (Morgan State CS knowledge base)
 GOOGLE_CLOUD_PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT", "csnavigator-vertex-ai")
 VERTEX_LOCATION = os.environ.get("VERTEX_LOCATION", "us")
