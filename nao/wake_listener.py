@@ -111,6 +111,12 @@ def _read_word(memory):
         return "", 0.0
     if isinstance(data, list) and len(data) >= 2:
         w = (data[0] or "")
+        # NAOqi's ALSpeechRecognition wraps recognized vocab tokens in "<...>"
+        # silence markers when spotting mode is off (e.g., "<...> nao <...>"
+        # or "<...> let's chat <...>"). Strip those so vocab lookup works.
+        import re
+        w = re.sub(r"<[^>]*>", " ", w)
+        w = re.sub(r"\s+", " ", w).strip()
         try: c = float(data[1] or 0.0)
         except: c = 0.0
         return w.lower(), c
@@ -143,6 +149,12 @@ def _accept_word(word, conf, vocab):
         return False
     threshold = _word_threshold(word)
     return conf > threshold
+
+def _mode_gate_allows(word, now, mode_armed_until, mode_ignore_until):
+    """Idle only accepts the wake word; modes require a recent wake prompt."""
+    if word == "nao":
+        return True
+    return now <= mode_armed_until and now >= mode_ignore_until
 
 # --- head tracking  ---
 
@@ -563,11 +575,6 @@ def listen_for_command(nao_ip, port=9559):
     last_word    = ""
     mode_armed_until = 0.0
     mode_ignore_until = 0.0
-    last_nao_at  = 0.0   # mode words require a recent "nao" wake to be valid
-
-    # How long after "nao" we still accept a mode word. After this, the user
-    # has to say "nao" again — stops random ambient noise from firing modes.
-    NAO_GATE_S = 30.0
 
     try:
         while True:
@@ -582,41 +589,22 @@ def listen_for_command(nao_ip, port=9559):
                 continue
 
             if word != "nao":
-                if now > mode_armed_until:
-                    print("[Heard ignored outside wake gate]: {} (conf {:.2f})".format(word, conf))
-                    _flush_word(memory)
-                    time.sleep(0.05)
-                    continue
-                if now < mode_ignore_until:
-                    print("[Heard ignored during prompt deadzone]: {} (conf {:.2f})".format(word, conf))
+                if not _mode_gate_allows(word, now, mode_armed_until, mode_ignore_until):
+                    if now < mode_ignore_until:
+                        print("[Heard ignored during prompt deadzone]: {} (conf {:.2f})".format(word, conf))
+                    else:
+                        print("[Heard ignored outside wake gate]: {} (conf {:.2f})".format(word, conf))
                     _flush_word(memory)
                     time.sleep(0.05)
                     continue
 
-            if (now - last_trigger) < DEBOUNCE_SECONDS:
+            allow_fast_mode_after_wake = (last_word == "nao" and word != "nao")
+            if not allow_fast_mode_after_wake and (now - last_trigger) < DEBOUNCE_SECONDS:
                 time.sleep(0.05)
                 continue
             if word == last_word and (now - last_trigger) < SAME_WORD_COOLDOWN:
                 time.sleep(0.05)
                 continue
-
-            # Gate: mode words only count if "nao" was heard recently. The
-            # only words exempt from this are "nao" itself and the safety
-            # words (shutdown/sleep) that should always work.
-            is_nao = (word == "nao")
-            is_safety = word in (
-                "shutdown", "shut down", "nao shutdown", "nao shut down",
-                "power off", "turn off", "sleep", "go to sleep",
-                "nao sleep", "good night",
-            )
-            if not is_nao and not is_safety:
-                if (now - last_nao_at) > NAO_GATE_S:
-                    print("[gate] ignoring '{0}' — say 'nao' first".format(word))
-                    time.sleep(0.05)
-                    continue
-
-            if is_nao:
-                last_nao_at = now
 
             last_trigger = now
             last_word    = word
@@ -675,7 +663,7 @@ def listen_for_command(nao_ip, port=9559):
                 _tracker_stop_now(nao_ip, port)
                 _say_paused(tts, asr, format_expressive(random_phrase("entering_chatbot"), "warm"))
                 _flush_word(memory)
-                return "morgan"
+                return "morgan assist"
             
             elif word in ["mini nao", "mininao", "skills"]:
                 _stop_move_now(nao_ip, port)
