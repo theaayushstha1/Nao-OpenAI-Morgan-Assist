@@ -77,15 +77,13 @@ def learn_new_face_naoqi(qi_session, tts, name, subscriber_name="FaceLearn"):
                 pass
             time.sleep(0.3)
         if face_found:
-            tts.say("Perfect. Please hold still for just a moment.")
-            time.sleep(1)
             print("[Learning face as]: {}".format(name))
             face_detection.learnFace(name)
-            time.sleep(3)
-            tts.say("Wonderful! I'll remember you, {}.".format(name))
+            time.sleep(0.8)
+            tts.say("Got it, {0}. Nice to meet you. What can I help with?".format(name))
             return True
         else:
-            tts.say("I wasn't able to get a clear view, but let's continue.")
+            tts.say("I couldn't see you clearly, {0}, but let's keep going.".format(name))
             return False
     except Exception as e:
         print("[Learn face error]:", e)
