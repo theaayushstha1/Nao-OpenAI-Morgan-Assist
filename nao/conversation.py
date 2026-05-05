@@ -39,18 +39,31 @@ def _post(wav_path, img_path, username, hint, end_session=False):
 
 
 def _resolve_username(qi_session, tts, nao_ip):
-    """Recognize face or fall back to 'guest'. Returns (username, was_recognized).
+    """Recognize known face, otherwise ask once for a name.
 
-    Skips the ask-name + face-learn flow for demo reliability — that path adds
-    ~13s of onboarding and breaks if the server bounces during the call. If
-    face recognition succeeds, we still personalise the greeting.
+    Face recognition is silent (2s scan, no voice prompt) so the user isn't
+    left wondering why the robot is asking them to look at it. If unknown,
+    we ask once and fall back to 'guest' on server failure.
     """
     try:
-        name = face_naoqi.recognize_face_naoqi(qi_session, tts, timeout=4)
+        name = face_naoqi.recognize_face_naoqi(qi_session, tts, timeout=2)
         if name:
             return name.lower(), True
     except Exception as e:
         print("[face recognize error]:", e)
+    try:
+        asked = ask_name_utils.ask_name(
+            tts, nao_ip, "http://{0}:{1}".format(config.SERVER_IP, config.SERVER_PORT),
+            qi_session, audio_handler.record_audio,
+        )
+        if asked and asked != "Guest":
+            try:
+                face_naoqi.learn_new_face_naoqi(qi_session, tts, asked)
+            except Exception:
+                pass
+            return asked.lower(), False
+    except Exception as e:
+        print("[ask_name error]:", e)
     return "guest", False
 
 
