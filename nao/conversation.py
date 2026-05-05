@@ -166,11 +166,24 @@ def run_streaming(qi_session, initial_hint=None):
 
     username, recognized = _resolve_username(qi_session, raw_tts, config.NAO_IP)
     if recognized and username != "guest":
-        expressive_say(raw_tts, "Welcome back, {0}.".format(username))
+        expressive_say(raw_tts, "Welcome back, {0}. What can I help with?".format(username))
+    elif username == "guest":
+        # Either ask_name failed or face-learn flow ran with its own confirm
+        # ("Got it, X. Nice to meet you. What can I help with?"). For pure
+        # guest fallback, give an explicit listening cue so the user knows
+        # NAO is ready.
+        expressive_say(raw_tts, "I'm listening.")
+
+    # Audible "go" + green eyes so the user always knows when to start.
+    try:
+        leds.fadeRGB("FaceLeds", 0.0, 1.0, 0.0, 0.1)  # green = listening
+    except Exception:
+        pass
 
     suppress_image = False
     hint = initial_hint
     skip_tts_wait = False
+    silent_streak = 0  # count consecutive no-speech turns to re-prompt
     barge_config = {
         "enabled": config.BARGE_ENABLED,
         "threshold": config.BARGE_THRESHOLD,
@@ -185,10 +198,18 @@ def run_streaming(qi_session, initial_hint=None):
         else:
             _wait_tts_idle(memory)
         wav = audio_handler.record_audio(config.NAO_IP)
-        if wav is None:
+        if wav is None or not wav:
+            silent_streak += 1
+            # After 2 consecutive silent windows, prompt the user so they
+            # know NAO is still alive and waiting.
+            if silent_streak == 2:
+                expressive_say(raw_tts, "I'm here when you're ready.")
+                try:
+                    leds.fadeRGB("FaceLeds", 0.0, 1.0, 0.0, 0.1)
+                except Exception:
+                    pass
             continue
-        if not wav:
-            continue
+        silent_streak = 0
         # Camera snap is opt-in (saves ~500ms per turn). Therapist agent can
         # call observe_face tool when it actually needs vision.
         img_path = None
