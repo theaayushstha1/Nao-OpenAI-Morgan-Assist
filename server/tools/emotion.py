@@ -178,3 +178,36 @@ def _recap_session_impl(ctx) -> str:
 def recap_session(ctx: RunContextWrapper) -> str:
     """Summarize this therapy session and persist it to the user's history."""
     return _recap_session_impl(ctx)
+
+
+# ────────── per-user memory tools (used by therapist + cbt + grounding) ──────────
+
+@function_tool
+def recall_recent_topics(ctx: RunContextWrapper) -> str:
+    """Return the user's last 3 session summaries as plain text.
+
+    Use sparingly — only when you want to surface a thread from prior
+    sessions. Returns an empty string for new users.
+    """
+    store = _unwrap(ctx)
+    face_id = store.get("username", "guest")
+    rows = memory.recent_sessions(face_id, n=3)
+    if not rows:
+        return ""
+    return "\n".join(f"- {r['summary']}" for r in rows if r.get("summary"))
+
+
+@function_tool
+def update_user_note(ctx: RunContextWrapper, key: str, value: str) -> str:
+    """Save or overwrite a single note on the user's profile (e.g.
+    update_user_note("recurring_concern", "exam stress around midterms")).
+
+    Keys are free-form snake_case. Use this when you learn something
+    durable about the user that future sessions should know.
+    """
+    store = _unwrap(ctx)
+    face_id = store.get("username", "guest")
+    if not key or not isinstance(key, str):
+        return "error: empty key"
+    memory.update_profile(face_id, {key: value})
+    return f"saved {key}"

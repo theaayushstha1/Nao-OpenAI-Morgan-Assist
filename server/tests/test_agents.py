@@ -25,4 +25,6 @@ def test_therapist_injects_recaps(monkeypatch):
     from server.agents import therapist as t
     monkeypatch.setattr(t.session, "load_recent_recaps", lambda u, n=3: ["past talk"])
     a = t.build_therapist_agent("alice")
-    assert "past talk" in a.instructions
+    # Instructions are now a callable so memory updates land per turn.
+    rendered = a.instructions(None, a) if callable(a.instructions) else a.instructions
+    assert "past talk" in rendered
