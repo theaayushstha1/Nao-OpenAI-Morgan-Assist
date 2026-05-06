@@ -1,5 +1,5 @@
 """CBT coach — walks a thought record when the therapist hands off."""
-from agents import Agent
+from agents import Agent, ModelSettings
 from server import config
 from server.tools.emotion import identify_distortion, suggest_reframe, log_emotion
 
@@ -21,6 +21,7 @@ SYSTEM = (
 cbt_coach_agent = Agent(
     name="cbt_coach",
     instructions=SYSTEM,
-    model=config.THERAPIST_MODEL,
+    model=config.CBT_MODEL,
+    model_settings=ModelSettings(max_tokens=config.MINI_MAX_TOKENS),
     tools=[identify_distortion, suggest_reframe, log_emotion],
 )

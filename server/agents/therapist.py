@@ -1,5 +1,5 @@
 """Therapist main agent — empathetic, CBT/grounding handoffs, camera consent."""
-from agents import Agent, handoff
+from agents import Agent, ModelSettings, handoff
 from server import config, session, memory_rollup as mr
 from server.tools.nao_actions import THERAPIST_ACTIONS
 from server.tools.emotion import (
@@ -41,6 +41,7 @@ def build_therapist_agent(username: str) -> Agent:
         name="therapist",
         instructions=_BASE + recap_block + wk + mo,
         model=config.THERAPIST_MODEL,
+        model_settings=ModelSettings(max_tokens=config.MINI_MAX_TOKENS),
         tools=[observe_face, log_emotion, identify_distortion, suggest_reframe,
                set_camera_consent, recap_session, *THERAPIST_ACTIONS],
         handoffs=[
