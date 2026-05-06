@@ -204,6 +204,12 @@ def consume(sse_url, files, data, tts, on_action, on_done, timeout=120,
                 on_action(ev.get("action") or {})
             except Exception as e:
                 print("[stream_tts] action error:", e)
+        elif etype == "wait":
+            # Server's semantic endpoint thinks the user trailed off. Surface
+            # the partial transcript for logs; the next "done" event with
+            # active_agent="wait" lets conversation.py loop back to listen
+            # without speaking, clearing the hint, or treating this as a turn.
+            print("[stream_tts] wait (incomplete thought):", ev.get("user_input", ""))
         elif etype == "done":
             final = ev
             break
