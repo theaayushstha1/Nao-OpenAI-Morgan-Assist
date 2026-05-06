@@ -247,11 +247,21 @@ def run_streaming(qi_session, initial_hint=None):
 
         # Preserve hint until we get an actual agent turn. Otherwise the very
         # first audio (often a partial echo or VAD false-trigger) consumes the
-        # mode hint and the next turn falls back to router triage.
+        # mode hint and the next turn falls back to router triage. "wait" is
+        # the server's semantic-endpoint signal that the user trailed off mid
+        # sentence; we keep the hint and loop back to listen for the rest.
         active = info.get("active_agent", "")
-        if active and active not in ("silence", "barge"):
+        if active and active not in ("silence", "barge", "wait"):
             hint = None
         print("[stream_turn done] info={0}".format(info))
+        if active == "wait":
+            # Brief green pulse so the user sees we're still listening.
+            try:
+                leds.fadeRGB("FaceLeds", 0.0, 1.0, 0.0, 0.08)
+            except Exception:
+                pass
+            skip_tts_wait = True
+            continue
         if info.get("barge_in"):
             print("[barge-in] user interrupted NAO speech; listening now")
             # Visual confirmation: hold yellow for ~400ms so the user actually

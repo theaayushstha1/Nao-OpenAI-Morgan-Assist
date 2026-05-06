@@ -1,6 +1,7 @@
 """Chat specialist — open conversation with NAO action tools."""
 from agents import Agent, ModelSettings
 from server import config
+from server.agents._memory_inject import with_memory_preamble
 from server.tools.nao_actions import CHAT_ACTIONS
 
 SYSTEM = (
@@ -12,7 +13,7 @@ SYSTEM = (
 
 chat_agent = Agent(
     name="chat",
-    instructions=SYSTEM,
+    instructions=with_memory_preamble(SYSTEM),
     model=config.CHAT_MODEL,
     model_settings=ModelSettings(max_tokens=config.NANO_MAX_TOKENS),
     tools=CHAT_ACTIONS,

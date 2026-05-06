@@ -1,6 +1,7 @@
 """Router — triage agent that picks a specialist."""
 from agents import Agent, ModelSettings, handoff
 from server import config
+from server.agents._memory_inject import with_memory_preamble
 from server.agents.chat import chat_agent
 from server.agents.chatbot import chatbot_agent
 from server.agents.skills import skills_agent
@@ -20,7 +21,7 @@ SYSTEM = (
 def build_router(username: str) -> Agent:
     return Agent(
         name="router",
-        instructions=SYSTEM,
+        instructions=with_memory_preamble(SYSTEM),
         model=config.ROUTER_MODEL,
         model_settings=ModelSettings(max_tokens=config.NANO_MAX_TOKENS),
         handoffs=[
