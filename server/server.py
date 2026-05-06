@@ -14,9 +14,59 @@ from openai import OpenAI
 
 from agents import Runner
 
-from server import config, safety, session
+from server import config, memory, safety, session
 from server.agents import pick_initial_agent
 from server.topologies import run_topology
+
+# Active session id per user (face_id). Created lazily on the first /turn or
+# /stream_turn after wake; closed on end_session=true or exit intent.
+_ACTIVE_SESSIONS: dict[str, int] = {}
+
+
+def _ensure_active_session(username: str, hint: str | None) -> int:
+    fid = (username or "").strip().lower()
+    if not fid:
+        return 0
+    sid = _ACTIVE_SESSIONS.get(fid)
+    if sid:
+        return sid
+    memory.ensure_user(fid, display_name=username)
+    sid = memory.start_session(fid, mode=hint)
+    _ACTIVE_SESSIONS[fid] = sid
+    return sid
+
+
+def _close_active_session(username: str) -> None:
+    """End the active session and kick off async summarization."""
+    fid = (username or "").strip().lower()
+    sid = _ACTIVE_SESSIONS.pop(fid, None)
+    if not sid:
+        return
+    # Pull transcript from the SQLiteSession (Agents SDK) for summarization.
+    lines: list[str] = []
+    try:
+        sess = session.get_or_create_session(fid)
+        items = asyncio.run(sess.get_items())
+        for it in items or []:
+            role = it.get("role") if isinstance(it, dict) else None
+            content = it.get("content") if isinstance(it, dict) else None
+            if isinstance(content, list):
+                # Responses-API shape: list of typed parts.
+                txt = " ".join(
+                    p.get("text", "") for p in content
+                    if isinstance(p, dict) and p.get("type") in ("input_text", "output_text", "text")
+                ).strip()
+            elif isinstance(content, str):
+                txt = content
+            else:
+                txt = ""
+            if txt and role:
+                lines.append("{0}: {1}".format(role, txt))
+    except Exception:
+        pass
+    memory.end_session(sid, summary=None)
+    if lines:
+        memory.summarize_session_async(sid, lines)
 
 app = Flask(__name__)
 _client = OpenAI(api_key=config.OPENAI_API_KEY)
@@ -376,11 +426,14 @@ def turn():
 
     if end_session:
         body = _run_recap(username)
+        _close_active_session(username)
         return jsonify(
             username=username, user_input="", reply=body,
             active_agent="therapist", actions=[], crisis=False,
             suppress_image=False,
         )
+
+    _ensure_active_session(username, hint)
 
     audio = request.files.get("audio")
     image = request.files.get("image")
@@ -451,6 +504,8 @@ def stream_turn():
 
     if not audio:
         return jsonify(error="missing_audio"), 400
+
+    _ensure_active_session(username, hint)
 
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
         audio.save(tmp.name)
