@@ -33,14 +33,12 @@ REALTIME_VAD_THRESHOLD = float(os.environ.get("REALTIME_VAD_THRESHOLD", "0.30"))
 REALTIME_VAD_PREFIX_MS = int(os.environ.get("REALTIME_VAD_PREFIX_MS", "500"))
 REALTIME_VAD_SILENCE_MS = int(os.environ.get("REALTIME_VAD_SILENCE_MS", "450"))
 
-# ElevenLabs voice clone (optional). When ELEVENLABS_API_KEY + VOICE_ID are
-# set, /stream_turn synthesizes each sentence with ElevenLabs and emits an
-# "audio" SSE event (base64 mp3) alongside the "sentence" event so NAO can
-# play the cloned voice via ALAudioPlayer instead of its onboard TTS.
-ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
-ELEVENLABS_VOICE_ID = os.environ.get("ELEVENLABS_VOICE_ID", "")
-ELEVENLABS_MODEL_ID = os.environ.get("ELEVENLABS_MODEL_ID", "eleven_turbo_v2_5")
-USE_ELEVENLABS = bool(ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID)
+# OpenAI TTS. /stream_turn synthesizes each sentence and emits an "audio"
+# SSE event (base64 mp3) so NAO plays it via ALAudioPlayer.
+# Female voices: nova (warm), shimmer (soft), coral, sage.
+OPENAI_TTS_VOICE = os.environ.get("OPENAI_TTS_VOICE", "nova")
+OPENAI_TTS_MODEL = os.environ.get("OPENAI_TTS_MODEL", "tts-1")
+USE_OPENAI_TTS = os.environ.get("USE_OPENAI_TTS", "1") == "1"
 
 # Shared secret required on every HTTP/WS request (X-NAO-Secret header, or
 # {"secret": "..."} in the realtime WebSocket handshake). Empty string =

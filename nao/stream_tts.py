@@ -140,6 +140,7 @@ def consume(sse_url, files, data, tts, on_action, on_done, timeout=120,
 
     final = {}
     barge_config = barge_config or {}
+    got_audio = False  # True once any OpenAI TTS audio event arrives this turn
     for raw in resp.iter_lines(decode_unicode=True):
         if not raw or not raw.startswith("data: "):
             continue
@@ -149,6 +150,9 @@ def consume(sse_url, files, data, tts, on_action, on_done, timeout=120,
             continue
         etype = ev.get("type")
         if etype == "sentence":
+            # Skip onboard-TTS fallback if OpenAI TTS already played this turn.
+            if got_audio:
+                continue
             monitor = None
             try:
                 print("[stream_tts] sentence:", ev.get("text", ""))
@@ -182,8 +186,8 @@ def consume(sse_url, files, data, tts, on_action, on_done, timeout=120,
                             pass
                         break
         elif etype == "audio":
-            # Voice-cloned MP3 from ElevenLabs. Same barge semantics as a
-            # sentence event — head-touch interrupt + tail window.
+            # OpenAI TTS MP3. Same barge semantics as a sentence event.
+            got_audio = True
             monitor = None
             try:
                 print("[stream_tts] audio:", ev.get("text", "")[:60])

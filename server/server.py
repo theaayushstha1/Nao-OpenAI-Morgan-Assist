@@ -315,11 +315,14 @@ _LAST_REPLY: dict[str, str] = {}
 # prepended with this so the agent eventually sees the complete thought.
 # Cleared once a complete-thought turn runs or on session end.
 _PARTIAL_BUFFER: dict[str, str] = {}
-_PARTIAL_MAX_CHARS = 600  # ~5 sentences; cap to bound prompt size + costs
+_PARTIAL_WAIT_COUNT: dict[str, int] = {}  # consecutive wait turns per user
+_PARTIAL_MAX_CHARS = 500   # ~4 sentences
+_PARTIAL_MAX_WAIT  = 3     # fire the agent after this many consecutive waits
 
 
 def _consume_partial(username: str, current: str) -> str:
     """Prepend any buffered partial to the current transcript and clear it."""
+    _PARTIAL_WAIT_COUNT.pop(username, None)
     head = _PARTIAL_BUFFER.pop(username, "")
     if not head:
         return current
@@ -331,7 +334,13 @@ def _stash_partial(username: str, text: str) -> None:
     """Stash a partial transcript so the next turn can resume it."""
     if not text or not text.strip():
         return
+    _PARTIAL_WAIT_COUNT[username] = _PARTIAL_WAIT_COUNT.get(username, 0) + 1
     _PARTIAL_BUFFER[username] = text.strip()[-_PARTIAL_MAX_CHARS:]
+
+
+def _partial_wait_limit_hit(username: str) -> bool:
+    """True once we've waited _PARTIAL_MAX_WAIT turns — fire the agent anyway."""
+    return _PARTIAL_WAIT_COUNT.get(username, 0) >= _PARTIAL_MAX_WAIT
 
 
 def _norm(text: str) -> str:
@@ -479,19 +488,16 @@ def health():
 
 
 @app.post("/tts")
-def tts_clone():
-    """Synthesize arbitrary text with the configured ElevenLabs voice clone.
-    NAO uses this for system speech (greetings, prompts, confirmations) so
-    everything sounds like the user, not the onboard robot voice.
-    Returns MP3 bytes; 503 if ElevenLabs isn't configured / synth fails.
+def tts_endpoint():
+    """Synthesize text with OpenAI TTS (nova voice).
+    NAO uses this for system speech (greetings, prompts, confirmations).
+    Returns MP3 bytes; 503 if synthesis fails.
     """
     text = (request.form.get("text") or request.json and request.json.get("text") or "").strip() if request.is_json else (request.form.get("text") or "").strip()
     if not text:
         return jsonify(error="missing_text"), 400
-    if not config.USE_ELEVENLABS:
-        return jsonify(error="elevenlabs_not_configured"), 503
-    from server.elevenlabs_tts import synthesize as _el_synth
-    mp3 = _el_synth(text)
+    from server.openai_tts import synthesize as _tts_synth
+    mp3 = _tts_synth(text)
     if not mp3:
         return jsonify(error="synth_failed"), 503
     from flask import Response as _FResp
@@ -536,20 +542,15 @@ def turn():
     finally:
         os.unlink(wav_path)
 
-    # Stitch any buffered partial from a prior wait turn so the agent
-    # eventually sees the complete thought.
-    transcript = _consume_partial(username, transcript)
-
     reason = _transcript_reject_reason(username, transcript)
     if reason:
         return _reject_silence_json(username, reason, transcript)
 
-    # Crisis check FIRST — before semantic endpointing — so a partial like
-    # "I keep thinking about" can't be quietly waited-on and split apart
-    # to bypass safety on the second half. Hard keywords match cheaply on
-    # partial input; LLM probe runs on the partial too.
+    # Crisis check FIRST — on the raw clip — so a partial like
+    # "I keep thinking about" can't be quietly waited-on.
     crisis = safety.crisis_check(transcript)
     if crisis.positive:
+        _consume_partial(username, transcript)
         return jsonify(
             username=username, user_input=transcript,
             reply=safety.HOTLINE_REPLY, active_agent="safety",
@@ -557,9 +558,11 @@ def turn():
             crisis=True, suppress_image=False,
         )
 
-    # Semantic endpointing — if the user trailed off mid-sentence, ask NAO
-    # to record more audio and resend instead of running the agent.
-    if semantic_endpoint.USE_SEMANTIC_ENDPOINT and not semantic_endpoint.is_complete_thought(transcript):
+    # Semantic endpointing — check the raw clip only, not the accumulated buffer.
+    # After _PARTIAL_MAX_WAIT consecutive waits, fire the agent regardless.
+    if (semantic_endpoint.USE_SEMANTIC_ENDPOINT
+            and not semantic_endpoint.is_complete_thought(transcript)
+            and not _partial_wait_limit_hit(username)):
         _stash_partial(username, transcript)
         print(
             "[transcript wait] username={0!r} text={1!r}".format(username, transcript),
@@ -571,6 +574,9 @@ def turn():
             reply="", active_agent="wait",
             actions=[], crisis=False, suppress_image=False,
         )
+
+    # Thought is complete — stitch buffered partials before sending to agent.
+    transcript = _consume_partial(username, transcript)
 
     print(
         "[transcript accepted] username={0!r} hint={1!r} text={2!r}".format(
@@ -626,17 +632,14 @@ def stream_turn():
     finally:
         os.unlink(wav_path)
 
-    transcript = _consume_partial(username, transcript)
-
     reason = _transcript_reject_reason(username, transcript)
     if reason:
         return _reject_silence_sse(username, reason, transcript)
 
-    # Crisis check FIRST — before semantic endpointing — so a partial
-    # utterance can't be quietly buffered away to dodge the gate when a
-    # second turn alone wouldn't trip keywords.
+    # Crisis check FIRST — on the raw clip.
     crisis = safety.crisis_check(transcript)
     if crisis.positive:
+        _consume_partial(username, transcript)
         def crisis_gen():
             yield _sse({"type": "sentence", "text": safety.HOTLINE_REPLY})
             yield _sse({"type": "action", "action": {"name": "change_eye_color", "args": {"color": "white"}}})
@@ -645,9 +648,11 @@ def stream_turn():
         return Response(crisis_gen(), mimetype="text/event-stream",
                         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
-    # Semantic endpointing — wait for more audio if the transcript looks
-    # incomplete. NAO listens for `{"type": "wait"}` and re-records.
-    if semantic_endpoint.USE_SEMANTIC_ENDPOINT and not semantic_endpoint.is_complete_thought(transcript):
+    # Semantic endpointing — check the raw clip only, not the accumulated buffer.
+    # After _PARTIAL_MAX_WAIT consecutive waits, fire the agent regardless.
+    if (semantic_endpoint.USE_SEMANTIC_ENDPOINT
+            and not semantic_endpoint.is_complete_thought(transcript)
+            and not _partial_wait_limit_hit(username)):
         _stash_partial(username, transcript)
         print(
             "[transcript wait] username={0!r} text={1!r}".format(username, transcript),
@@ -661,6 +666,9 @@ def stream_turn():
 
         return Response(wait_gen(), mimetype="text/event-stream",
                         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    # Thought is complete — stitch buffered partials before sending to agent.
+    transcript = _consume_partial(username, transcript)
 
     print(
         "[transcript accepted] username={0!r} hint={1!r} text={2!r}".format(
@@ -698,21 +706,15 @@ def stream_turn():
             agent, message, context=ctx, session=sess
         )
         _LAST_REPLY[username] = reply
+        from server.openai_tts import synthesize as _tts_synth
         for sent in iter_sentences(iter([reply])):
-            mp3 = None
-            if config.USE_ELEVENLABS:
-                from server.elevenlabs_tts import synthesize as _el_synth
-                mp3 = _el_synth(sent)
+            mp3 = _tts_synth(sent)
             if mp3:
-                # Voice-cloned MP3 — NAO plays via ALAudioPlayer.
                 yield _sse({
-                    "type": "audio",
-                    "format": "mp3",
-                    "text": sent,  # transcript for logs / barge resume
+                    "type": "audio", "format": "mp3", "text": sent,
                     "b64": base64.b64encode(mp3).decode("ascii"),
                 })
             else:
-                # Onboard TTS fallback (no ElevenLabs, or synth failed).
                 yield _sse({"type": "sentence", "text": sent})
         for action in ctx["actions_queue"]:
             yield _sse({"type": "action", "action": action})
@@ -776,14 +778,12 @@ def _stream_passthrough(agent, message, ctx, sess, transcript, username):
                 return
             yield item
 
+    from server.openai_tts import synthesize as _tts_synth
     sent_count = 0
     for sent in iter_sentences(chunks()):
         sent_count += 1
         print("[stream sentence] username={0!r} text={1!r}".format(username, sent), flush=True)
-        mp3 = None
-        if config.USE_ELEVENLABS:
-            from server.elevenlabs_tts import synthesize as _el_synth
-            mp3 = _el_synth(sent)
+        mp3 = _tts_synth(sent)
         if mp3:
             yield _sse({
                 "type": "audio", "format": "mp3", "text": sent,
@@ -812,10 +812,7 @@ def _stream_passthrough(agent, message, ctx, sess, transcript, username):
         if final:
             for sent in iter_sentences(iter([final])):
                 print("[stream fallback sentence] username={0!r} text={1!r}".format(username, sent), flush=True)
-                mp3 = None
-                if config.USE_ELEVENLABS:
-                    from server.elevenlabs_tts import synthesize as _el_synth
-                    mp3 = _el_synth(sent)
+                mp3 = _tts_synth(sent)
                 if mp3:
                     yield _sse({
                         "type": "audio", "format": "mp3", "text": sent,

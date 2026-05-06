@@ -169,6 +169,7 @@ def record_audio(nao_ip, max_duration=None):
 
     try: rec.stopMicrophonesRecording()
     except: pass
+    time.sleep(0.15)  # let recorder fully stop before restarting
 
     rec.startMicrophonesRecording(out_path, "wav", SAMPLE_RATE, CHANNELS_MASK)
 

@@ -199,7 +199,7 @@ def run_streaming(qi_session, initial_hint=None):
         if skip_tts_wait:
             skip_tts_wait = False
         else:
-            _wait_tts_idle(memory)
+            _wait_tts_idle(memory, settle_s=0.7)
         wav = audio_handler.record_audio(config.NAO_IP)
         if wav is None or not wav:
             silent_streak += 1

@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Cloned-voice say() for NAO.
+"""OpenAI TTS say() for NAO.
 
-Routes ALL NAO speech (greetings, prompts, confirmations) through the
-server's /tts endpoint, which returns ElevenLabs-cloned voice MP3.
-Plays via ALAudioPlayer.
+Routes all NAO speech (greetings, prompts, confirmations) through the
+server's /tts endpoint, which returns an MP3 synthesized with OpenAI TTS
+(nova voice). Plays via ALAudioPlayer.
 
 Falls back to the provided ALTextToSpeech proxy on any failure so the
 robot is never silent because of a network blip.
@@ -19,7 +19,7 @@ from naoqi import ALProxy
 import config
 
 
-_SCRATCH = "/tmp/nao_voice_clone"
+_SCRATCH = "/tmp/nao_tts"
 _counter = [0]
 _player = [None]
 
@@ -39,12 +39,10 @@ def _ensure_dir():
 
 
 def clone_say(tts_proxy, text, fallback_voice=True):
-    """Speak `text` in the user's cloned voice via the server's /tts endpoint.
+    """Speak `text` via the server's /tts endpoint (OpenAI TTS, nova voice).
 
-    `tts_proxy` is the ALTextToSpeech proxy used as the fallback if the
-    cloned-voice path fails. Pass None to skip fallback.
-
-    Blocks until playback finishes (matching tts.say() semantics).
+    `tts_proxy` is the ALTextToSpeech proxy used as fallback if the request
+    fails. Pass None to skip fallback. Blocks until playback finishes.
     """
     if not text or not text.strip():
         return
@@ -61,11 +59,11 @@ def clone_say(tts_proxy, text, fallback_voice=True):
                 f.write(r.content)
             _ensure_player().playFile(path)
             return
-        print("[clone_say] HTTP {0}, falling back".format(r.status_code))
+        print("[tts_say] HTTP {0}, falling back".format(r.status_code))
     except Exception as e:
-        print("[clone_say] error, falling back:", e)
+        print("[tts_say] error, falling back:", e)
     if fallback_voice and tts_proxy is not None:
         try:
             tts_proxy.say(text)
         except Exception as e:
-            print("[clone_say] fallback also failed:", e)
+            print("[tts_say] fallback also failed:", e)

@@ -4,6 +4,7 @@ from __future__ import print_function
 
 import threading
 import traceback
+import time
 import qi
 
 import config
@@ -151,11 +152,17 @@ def main():
             except Exception as e:
                 print("Conversation loop error:", e)
                 traceback.print_exc()
+                # Stop any lingering recorder so the next session can start clean.
                 try:
-                    raw_tts = ALProxy("ALTextToSpeech", config.NAO_IP, config.NAO_PORT)
-                    raw_tts.say("Chat mode hit an error. Returning to menu.")
+                    ALProxy("ALAudioRecorder", config.NAO_IP, config.NAO_PORT).stopMicrophonesRecording()
                 except Exception:
                     pass
+                try:
+                    ALProxy("ALAudioPlayer", config.NAO_IP, config.NAO_PORT).stopAll()
+                except Exception:
+                    pass
+                # Let reverb and mic settle before re-arming the wake listener.
+                time.sleep(2.0)
             finally:
                 _engaged.clear()
     finally:
