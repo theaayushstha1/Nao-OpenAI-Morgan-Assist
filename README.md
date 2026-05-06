@@ -19,7 +19,7 @@
 
 <br/>
 
-<img src="https://github.com/user-attachments/assets/826d4b7b-7c11-4712-8d5c-7a1b1829ccff" width="640" alt="NAO robot">
+<img src="docs/img/nao.jpg" width="420" alt="NAO H25 robot used for the project">
 
 </div>
 
