@@ -114,7 +114,9 @@ def spin(ctx: RunContextWrapper, degrees: float = 360.0) -> str:
 
 @function_tool
 def dance(ctx: RunContextWrapper, style: str = "robot") -> str:
-    """Run a dance behavior. `style`: 'robot', 'hiphop', or 'salsa'."""
+    """Run a dance. `style` options: 'robot' (default funny dance),
+    'taichi' (full Tai Chi routine, ~30s), 'slide' (a smooth slide).
+    Aliases like 'hiphop'/'salsa'/'funny' map to the default funny dance."""
     return _enqueue(ctx, "dance", {"style": style})
 
 
@@ -132,8 +134,38 @@ def set_led_color(ctx: RunContextWrapper, color: str = "white") -> str:
 
 @function_tool
 def follow_movement(ctx: RunContextWrapper) -> str:
-    """NAO mirrors the user's upper-body motions."""
+    """Start the follow-me behavior — NAO tracks and mirrors the user's
+    movements. Runs until stop_follow is called or the user moves out of
+    sight. Call this when the user says 'follow me', 'come with me', etc."""
     return _enqueue(ctx, "follow_movement", {})
+
+
+@function_tool
+def stop_follow(ctx: RunContextWrapper) -> str:
+    """Stop the follow-me behavior. Call when the user says 'stop following',
+    'stay there', 'enough following', etc."""
+    return _enqueue(ctx, "stop_follow", {})
+
+
+@function_tool
+def play_animation(ctx: RunContextWrapper, animation: str) -> str:
+    """Play a named animation. Use this for any motion request that isn't
+    covered by the specific tools (wave/nod/dance/follow). The robot maps
+    the name to an installed behavior and falls back gracefully if missing.
+
+    Common values the LLM should pick from based on user phrasing:
+      Animals/dances: elephant, monkey, dragon, kungfu, taichi, slide, robot
+      Emotions:       happy, sad, angry, surprised, proud, shy, winner,
+                      laugh, bored, anxious, disappointed, embarrassed,
+                      hurt, frustrated, mocker
+      Body talk:      explain, show_sky, show_floor, look_around, stretch,
+                      rest, drink, yawn, sneeze, hungry
+      Strength:       show_muscle, bow
+
+    If the user says 'do an elephant' you'd call this with animation='elephant'.
+    Pass the literal noun the user used; the robot does fuzzy mapping.
+    """
+    return _enqueue(ctx, "play_animation", {"animation": (animation or "").strip().lower()})
 
 
 # ───────── Bundles ─────────
@@ -142,7 +174,8 @@ CHAT_ACTIONS = [
     stand_up, sit_down, kneel,
     wave_hand, wave_both_hands, nod_head, shake_head, clap_hands,
     move_forward, move_backward, turn_left, turn_right, spin,
-    dance, change_eye_color, follow_movement,
+    dance, change_eye_color, follow_movement, stop_follow,
+    play_animation,
 ]
 
 # Therapy mode keeps grounding/empathy gestures plus a few playful actions
@@ -152,8 +185,9 @@ CHAT_ACTIONS = [
 THERAPIST_ACTIONS = [
     set_led_color, nod_head, shake_head,
     wave_hand, wave_both_hands, clap_hands,
-    dance, follow_movement,
+    dance, follow_movement, stop_follow,
     stand_up, sit_down,
+    play_animation,
 ]
 
 ALL_TOOL_NAMES = {t.name for t in CHAT_ACTIONS} | {"set_led_color"}

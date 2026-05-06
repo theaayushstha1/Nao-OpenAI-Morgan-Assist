@@ -59,12 +59,46 @@ POLL_MS             = 30
 NO_SPEECH_TIMEOUT_S = 3.0
 MIN_CLIP_SEC        = 0.5        # match server-side 0.3s min — anything shorter 503s
 
-# Stop behavior. 800 ms trailing silence balances snappy turn-taking against
-# brief mid-sentence pauses. Tighter than this and "uh" pauses cut you off.
-TRAIL_MS            = 800
+# Stop behavior — three-tier energy classification, not binary.
+#
+# Real speech isn't constant amplitude. Vowels are loud, consonants/fricatives
+# (s, f, th) are quiet, and there are brief sub-100ms gaps between words. The
+# old binary "above keep_th = speech, below = silence" model was firing the
+# trail timer on every quiet syllable, which is why mid-sentence cutoffs
+# happened during continuous speech. We now classify each poll into:
+#
+#   SPEECH (e >= keep_th)   → reset trail, this is confident voice
+#   QUIET  (e >= silent_th) → freeze trail, soft voice / breath / mouth noise
+#                             still counts as "user is doing something"
+#   SILENT (e <  silent_th) → advance trail toward cutoff
+#
+# silent_th is derived from the calibrated room-noise floor (base + small
+# margin), so it adapts to the room rather than being a hard global value.
+#
+# Because the trail now only advances on TRUE silence (not on any sub-keep_th
+# energy like before), we can be aggressive on TRAIL_MS without re-introducing
+# mid-sentence cutoffs. The QUIET band catches consonants/breath/soft words
+# that used to false-trigger the timer. Net post-speech delay is ~1.2s.
+TRAIL_MS            = 500        # true silence required to start cutoff
+GRACE_MS            = 300        # peek window before final cut
+SILENT_MARGIN       = 120        # silent_th = base + this; tunes per room
+SILENT_FLOOR        = 260        # absolute floor for silent_th, even in dead-quiet rooms
+SILENT_RATIO        = 0.70       # silent_th will be at LEAST keep_th * this
 
-DEFAULT_MAX_SEC     = 7.0
-ABS_HARD_CAP_SEC    = 18.0
+# Backstop for the QUIET band: if we've been "quiet" (no SPEECH-level energy)
+# for this long without a single keep_th crossing, the QUIET readings are
+# probably room noise rather than ongoing speech. Switch to treating QUIET
+# as silent so the trail can finally fire. Tighter (0.5s) so brief pauses
+# between sentences ("Hey. ... Can you hear me?") don't extend the recording.
+MAX_QUIET_AFTER_SPEECH_S = 0.5
+
+# Speech-time budget AFTER onset. Cap at 10s — long enough for a thoughtful
+# answer, short enough that ambient room noise can never drag a single
+# capture out to 20+ seconds (which felt like NAO ignoring the user).
+# Reset on every speech tick — actual continuous monologue still works.
+SPEECH_MAX_SEC      = 10.0
+DEFAULT_MAX_SEC     = 12.0       # wall-clock backstop including pre-onset wait
+ABS_HARD_CAP_SEC    = 75.0
 
 # Energy thresholds — tuned for the user speaking ~50cm from NAO's front mic.
 # 700 catches speech-volume voices reliably without false-triggering on
@@ -133,8 +167,16 @@ def _soft_start_threshold(start_th):
 
 
 def _calibrate_energy(ip):
+    """Return (start_th, keep_th, silent_th).
+
+    silent_th is the room-noise-aware floor below which energy is treated as
+    real silence. Anything between silent_th and keep_th is "quiet" — the
+    speaker is producing soft sound (breath, fricatives, soft syllables) and
+    we should NOT advance the trail timer. This prevents the old behavior
+    where consonants in continuous speech triggered cutoffs.
+    """
     try: audio_dev = ALProxy("ALAudioDevice", ip, 9559)
-    except: return ENERGY_MIN_START, ENERGY_MIN_KEEP
+    except: return ENERGY_MIN_START, ENERGY_MIN_KEEP, SILENT_FLOOR
     vals = []
     t0 = time.time()
     while (time.time() - t0)*1000.0 < CALIBRATION_MS:
@@ -142,12 +184,21 @@ def _calibrate_energy(ip):
         except: vals.append(0.0)
         time.sleep(POLL_MS/1000.0)
     if not vals:
-        return ENERGY_MIN_START, ENERGY_MIN_KEEP
+        return ENERGY_MIN_START, ENERGY_MIN_KEEP, SILENT_FLOOR
     vals.sort()
     base = vals[len(vals)//2]
     start_th = min(_CALIBRATE_CAP, max(ENERGY_MIN_START, base + START_BONUS))
     keep_th  = max(ENERGY_MIN_KEEP, start_th * KEEP_MARGIN)
-    return start_th, keep_th
+    # silent_th must be HIGH ENOUGH that ambient room noise reads as silent.
+    # In a noisy room the calibration base will be elevated and base+margin
+    # is enough; in a quiet room base is small but we still want the silence
+    # bar to be a meaningful fraction of keep_th, otherwise post-speech room
+    # noise lives forever in the QUIET band and the trail never fires.
+    silent_th = max(SILENT_FLOOR, base + SILENT_MARGIN, int(keep_th * SILENT_RATIO))
+    # Cap silent_th so it never reaches keep_th — the QUIET band must exist.
+    if silent_th >= keep_th:
+        silent_th = max(SILENT_FLOOR, int(keep_th * 0.85))
+    return start_th, keep_th, silent_th
 
 # ── Core ──────────────────────────────────────────────────────────────────────
 def record_audio(nao_ip, max_duration=None):
@@ -177,15 +228,16 @@ def record_audio(nao_ip, max_duration=None):
     except:
         audio_dev = None
 
-    start_th, keep_th = _calibrate_energy(nao_ip)
+    start_th, keep_th, silent_th = _calibrate_energy(nao_ip)
     soft_th = _soft_start_threshold(start_th)
     trim_rms = max(400, int(start_th * TRIM_FRACTION))
-    print("[VAD] listening start_th={0:.0f} soft_th={1:.0f} keep_th={2:.0f} timeout={3:.1f}s".format(
-        start_th, soft_th, keep_th, NO_SPEECH_TIMEOUT_S))
+    print("[VAD] listening start_th={0:.0f} soft_th={1:.0f} keep_th={2:.0f} silent_th={3:.0f} timeout={4:.1f}s".format(
+        start_th, soft_th, keep_th, silent_th, NO_SPEECH_TIMEOUT_S))
 
     t0 = time.time()
     heard = False
     last_voice_t = None
+    speech_t0 = None              # set when onset detected; basis for SPEECH_MAX_SEC
     peak_e = 0.0
     soft_since = None
 
@@ -208,6 +260,7 @@ def record_audio(nao_ip, max_duration=None):
             if e >= start_th:
                 heard = True
                 last_voice_t = now
+                speech_t0 = now
                 print("[VAD] onset e={0:.0f} after {1:.2f}s".format(e, now - t0))
                 break
             if e >= soft_th:
@@ -216,26 +269,95 @@ def record_audio(nao_ip, max_duration=None):
                 if (now - soft_since) * 1000.0 >= SOFT_START_MS:
                     heard = True
                     last_voice_t = now
+                    speech_t0 = now
                     print("[VAD] soft onset e={0:.0f} after {1:.2f}s".format(e, now - t0))
                     break
             else:
                 soft_since = None
             time.sleep(POLL_MS/1000.0)
 
-        # track until long trailing silence
+        # Three-tier post-onset tracking. We separately track:
+        #   last_voice_t       — last poll where energy was clearly SPEECH
+        #   silence_streak_t0  — start of the current contiguous SILENT run
+        #
+        # Trail fires only when the SILENT streak (not "anything below keep_th")
+        # exceeds TRAIL_MS. QUIET energy (between silent_th and keep_th) means
+        # the user is making soft sound — breath, fricatives, "uhh" — and we
+        # treat that as continuation: silence streak resets, trail does not
+        # fire. This is what eliminates mid-sentence cutoffs on consonants.
+        # BUT if QUIET persists for >MAX_QUIET_AFTER_SPEECH_S without any
+        # keep_th hit, those readings are probably ambient room noise rather
+        # than continuing speech — at that point QUIET starts counting toward
+        # the silence streak so the trail can eventually fire.
+        silence_streak_t0 = None
         while heard:
             now = time.time()
+            if speech_t0 is not None and (now - speech_t0) >= SPEECH_MAX_SEC:
+                print("[VAD] speech_max reached ({0:.1f}s)".format(now - speech_t0))
+                break
             if (now - t0) >= max_duration:
+                print("[VAD] hard cap reached ({0:.1f}s)".format(now - t0))
                 break
             e = 0.0
             if audio_dev is not None:
                 try: e = float(audio_dev.getFrontMicEnergy())
                 except: e = 0.0
             if e >= keep_th:
+                # SPEECH — confident voice. Reset everything.
                 last_voice_t = now
+                silence_streak_t0 = None
+            elif e >= silent_th:
+                # QUIET. Could be soft speech (consonant, breath) OR room
+                # noise. Distinguish by time-since-last-real-speech: if we
+                # heard a clear SPEECH-band reading recently (< MAX_QUIET_*),
+                # treat as continuation. Otherwise, treat as silence so the
+                # trail timer can advance and we can finally cut.
+                if last_voice_t and (now - last_voice_t) < MAX_QUIET_AFTER_SPEECH_S:
+                    silence_streak_t0 = None
+                else:
+                    if silence_streak_t0 is None:
+                        silence_streak_t0 = now
+                    if (now - silence_streak_t0) * 1000.0 >= TRAIL_MS:
+                        total_silence_ms = (now - silence_streak_t0) * 1000.0
+                        print("[VAD] cut on extended quiet ({0:.0f}ms after last SPEECH)".format(
+                            (now - last_voice_t) * 1000.0))
+                        # Re-use the same grace block via fall-through. The
+                        # else-branch below handles SILENT → grace; we keep
+                        # the structure simple by setting silence_streak_t0
+                        # appropriately and letting the next iter's true-
+                        # silent branch handle grace. Easier: just break.
+                        # No grace — extended quiet means user is done.
+                        break
             else:
-                if last_voice_t and (now - last_voice_t)*1000.0 >= TRAIL_MS:
-                    break
+                # SILENT — true quiet. Begin/continue the silence streak.
+                if silence_streak_t0 is None:
+                    silence_streak_t0 = now
+                if (now - silence_streak_t0) * 1000.0 >= TRAIL_MS:
+                    # Trail elapsed. Take a grace peek — generous now (1.5s)
+                    # because the user might just be thinking with closed lips
+                    # (sub-silent). We accept ANY rebound to QUIET or higher
+                    # as a continuation signal, not just SPEECH.
+                    grace_until = now + GRACE_MS / 1000.0
+                    recovered = False
+                    while time.time() < grace_until:
+                        ge = 0.0
+                        if audio_dev is not None:
+                            try: ge = float(audio_dev.getFrontMicEnergy())
+                            except: ge = 0.0
+                        if ge >= silent_th:
+                            # Any rebound above the silence floor is a sign
+                            # the user is still doing something. Resume.
+                            last_voice_t = time.time()
+                            silence_streak_t0 = None
+                            recovered = True
+                            print("[VAD] trail recovered (e={0:.0f}, threshold>={1:.0f})".format(ge, silent_th))
+                            break
+                        time.sleep(POLL_MS/1000.0)
+                    if not recovered:
+                        total_silence_ms = (time.time() - silence_streak_t0) * 1000.0
+                        print("[VAD] trail final cut after {0:.0f}ms total silence (TRAIL={1}ms + GRACE={2}ms)".format(
+                            total_silence_ms, TRAIL_MS, GRACE_MS))
+                        break
             time.sleep(POLL_MS/1000.0)
 
     finally:

@@ -24,6 +24,12 @@ _EXIT_PATTERNS = [
     r"^(talk to you later|catch you later|see you later)\.?$",
     r"^(gotta go|i gotta go|i have to go|i need to go)\.?$",
     r"^(all done|we are good|we'?re good|i'?m good)\.?$",
+    # Sleep / shutdown — let the user terminate the loop and return to wake-only
+    # listening. Phrased so a user can say them mid-speech (post-barge) too.
+    r"^(go to sleep|sleep now|nap time|go nap|take a nap)\.?$",
+    r"^(shut down|shutdown|power down|power off|turn off)\.?$",
+    r"^(shut up|nao stop|stop nao|stop it|enough)\.?$",
+    r"^(be quiet|silence)\.?$",
 ]
 
 _EXIT_KEYWORDS = ("goodbye", "bye")

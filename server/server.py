@@ -14,7 +14,7 @@ from openai import OpenAI
 
 from agents import Runner
 
-from server import config, memory, safety, semantic_endpoint, session, vad_silero
+from server import config, memory, motion_trigger, safety, semantic_endpoint, session, vad_silero
 from server.agents import pick_initial_agent
 from server.topologies import run_topology
 
@@ -317,7 +317,7 @@ _LAST_REPLY: dict[str, str] = {}
 _PARTIAL_BUFFER: dict[str, str] = {}
 _PARTIAL_WAIT_COUNT: dict[str, int] = {}  # consecutive wait turns per user
 _PARTIAL_MAX_CHARS = 500   # ~4 sentences
-_PARTIAL_MAX_WAIT  = 3     # fire the agent after this many consecutive waits
+_PARTIAL_MAX_WAIT  = 4     # fire the agent after this many consecutive waits
 
 
 def _consume_partial(username: str, current: str) -> str:
@@ -372,7 +372,15 @@ def _is_self_echo(username: str, transcript: str) -> bool:
     return (inter / union) >= 0.6
 
 
-def _transcript_reject_reason(username: str, transcript: str) -> str | None:
+def _transcript_reject_reason(username: str, transcript: str, asking_name: bool = False) -> str | None:
+    # Skip the short-token rejection when we're in the name-onboarding flow:
+    # names like "Max", "Eve", "Joe" trip the <=4 char heuristic and the user
+    # gets stuck in an unending "what's your name?" retry loop.
+    if asking_name:
+        t = (transcript or "").strip()
+        if not t:
+            return "hallucination_or_noise"
+        return None
     if _looks_like_hallucination(transcript):
         return "hallucination_or_noise"
     if _is_self_echo(username, transcript):
@@ -509,6 +517,7 @@ def turn():
     username = request.form.get("username") or "guest"
     hint = request.form.get("hint") or None
     end_session = request.form.get("end_session", "").lower() == "true"
+    asking_name = request.form.get("asking_name", "").lower() == "true"
 
     if end_session:
         body = _run_recap(username)
@@ -542,7 +551,7 @@ def turn():
     finally:
         os.unlink(wav_path)
 
-    reason = _transcript_reject_reason(username, transcript)
+    reason = _transcript_reject_reason(username, transcript, asking_name=asking_name)
     if reason:
         return _reject_silence_json(username, reason, transcript)
 
@@ -676,6 +685,32 @@ def stream_turn():
         ),
         flush=True,
     )
+
+    # Pattern-match motion intents BEFORE the LLM. The router was unreliable
+    # at picking body-action tools — it would sometimes reply "I'm a virtual
+    # assistant, I can't stand up" instead of calling stand_up. This bypass
+    # guarantees body actions fire for clear commands like "stand up", "wave
+    # at me", "do a dance", "eyes red".
+    motion = motion_trigger.detect(transcript)
+    if motion is not None:
+        print("[motion-trigger] {0!r} -> {1} {2}".format(
+            transcript, motion.action, motion.args), flush=True)
+        from server.openai_tts import synthesize as _tts_synth
+        ack_mp3 = _tts_synth(motion.ack)
+        def motion_gen():
+            if ack_mp3:
+                yield _sse({"type": "audio", "format": "mp3",
+                            "text": motion.ack,
+                            "b64": base64.b64encode(ack_mp3).decode("ascii")})
+            else:
+                yield _sse({"type": "sentence", "text": motion.ack})
+            yield _sse({"type": "action", "action": {
+                "name": motion.action, "args": motion.args}})
+            yield _sse({"type": "done", "active_agent": "motion",
+                        "crisis": False, "suppress_image": False,
+                        "user_input": transcript})
+        return Response(motion_gen(), mimetype="text/event-stream",
+                        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     consent = session.get_camera_consent(username)
     image_b64 = base64.b64encode(image.read()).decode("ascii") if image and consent else None

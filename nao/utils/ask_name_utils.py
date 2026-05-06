@@ -8,7 +8,7 @@ from utils.name_utils import extract_name
 from utils.speech import random_phrase, expressive_say
 
 
-def ask_name(tts, nao_ip, server_url, session, record_audio_func):
+def ask_name(tts, nao_ip, server_url, session, record_audio_func, should_abort=None):
     """Ask the user their name via audio, transcribe, and extract.
 
     Args:
@@ -24,7 +24,19 @@ def ask_name(tts, nao_ip, server_url, session, record_audio_func):
     expressive_say(tts, random_phrase("ask_name"), "warm")
     time.sleep(0.5)
     for attempt in range(2):
+        if should_abort is not None:
+            try:
+                if should_abort():
+                    return None
+            except Exception:
+                pass
         wav = record_audio_func(nao_ip)
+        if should_abort is not None:
+            try:
+                if should_abort():
+                    return None
+            except Exception:
+                pass
         if not wav or not os.path.exists(wav):
             if attempt == 0:
                 expressive_say(tts, random_phrase("ask_name_retry"), "warm")
@@ -36,7 +48,9 @@ def ask_name(tts, nao_ip, server_url, session, record_audio_func):
             except Exception:
                 _hdr = {}
             with open(wav, 'rb') as f:
-                r = requests.post(server_url + "/turn", files={"audio": f}, data={"username": "guest"}, headers=_hdr, timeout=30)
+                r = requests.post(server_url + "/turn", files={"audio": f},
+                                  data={"username": "guest", "asking_name": "true"},
+                                  headers=_hdr, timeout=30)
             spoken = (r.json() or {}).get("user_input", "")
             print("[Heard]: '{}'".format(spoken))
             name = extract_name(spoken)

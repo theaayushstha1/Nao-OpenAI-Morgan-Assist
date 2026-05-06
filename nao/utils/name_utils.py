@@ -3,6 +3,23 @@ from __future__ import print_function
 import re
 
 
+_NON_NAMES = set([
+    "the", "a", "an", "my", "is", "am", "i", "im", "i'm",
+    "hey", "hi", "hello", "there", "before", "quick", "intro",
+    "what", "should", "call", "you", "me", "look", "face", "name",
+    "just", "this", "that", "it", "guest", "nao",
+])
+
+
+def _clean_token(token):
+    return re.sub(r"[^A-Za-z]", "", token or "")
+
+
+def _valid_name(token):
+    token = _clean_token(token)
+    return bool(token and len(token) > 1 and token.lower() not in _NON_NAMES)
+
+
 def extract_name(text):
     """Extract a person's name from transcribed speech.
 
@@ -11,19 +28,21 @@ def extract_name(text):
     """
     if not text:
         return None
+    text = text.strip()
     patterns = [
-        r"(?:my name is|i am|i'm|call me|this is)\s+([A-Za-z]+)",
-        r"^([A-Za-z]+)$",
+        # Includes bare "name is X" because users often drop the "my" when
+        # answering NAO's prompt — "Name is Ayush" was being thrown out.
+        r"(?:my name is|the name is|name'?s|name is|i am|i'?m|call me|this is|i'?m called|i go by|just call me|it'?s)\s+([A-Za-z]+)",
+        r"^([A-Za-z]+)[\s.!?]*$",
     ]
     for pattern in patterns:
-        m = re.search(pattern, text.strip(), re.IGNORECASE)
+        m = re.search(pattern, text, re.IGNORECASE)
         if m:
-            name = m.group(1).capitalize()
-            if name.lower() not in ["the", "a", "an", "my", "is", "am"]:
-                return name
-    words = text.strip().split()
-    if words:
-        first_word = words[0].capitalize()
-        if len(first_word) > 1 and first_word.isalpha():
-            return first_word
+            token = _clean_token(m.group(1))
+            if _valid_name(token):
+                return token.capitalize()
+    # Do not fall back to the first word of an arbitrary sentence. NAO's own
+    # prompt echo often starts with "Hey there..." and was being learned as
+    # the user's face name. Standalone one-word names are already accepted by
+    # the anchored pattern above.
     return None

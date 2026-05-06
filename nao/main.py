@@ -138,11 +138,13 @@ def main():
         watcher.start(config.NAO_IP, config.NAO_PORT)
 
     pending_hint = None
+    is_mode_switch = False
     try:
         while True:
             if pending_hint:
                 hint = pending_hint
                 pending_hint = None
+                is_mode_switch = True
                 print("[main] resuming with switched hint={0}".format(hint))
             else:
                 phrase = _get_phrase()
@@ -152,13 +154,16 @@ def main():
                 if not hint:
                     print("[main] ignoring non-conversation phrase: {0!r}".format(phrase))
                     continue
+                is_mode_switch = False
             _engaged.set()
             try:
                 if hint in _REALTIME_HINTS:
                     print("[main] entering realtime mode (hint={0})".format(hint))
                     next_hint = realtime_chat.run(session, initial_hint=hint)
                 else:
-                    next_hint = conversation.run_streaming(session, initial_hint=hint)
+                    next_hint = conversation.run_streaming(
+                        session, initial_hint=hint, is_mode_switch=is_mode_switch,
+                    )
                 if next_hint:
                     pending_hint = next_hint
             except KeyboardInterrupt:

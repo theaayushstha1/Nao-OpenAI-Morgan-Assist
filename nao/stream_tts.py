@@ -118,12 +118,16 @@ class BargeMonitor(object):
 
 
 def consume(sse_url, files, data, tts, on_action, on_done, timeout=120,
-            audio_device=None, barge_config=None, memory=None):
+            audio_device=None, barge_config=None, memory=None,
+            on_first_speech=None):
     """POST to sse_url, stream SSE events, speak sentences, execute actions.
 
     tts: ALTextToSpeech proxy.
     on_action(action_dict): called per action event.
     on_done(info_dict): called once with final info.
+    on_first_speech(): called the moment the first sentence/audio event
+        arrives, BEFORE we play it. Used to silence the "thinking" filler so
+        it doesn't overlap the actual reply.
     Returns the final info dict (also passed to on_done).
     """
     headers = {"Accept": "text/event-stream"}
@@ -141,6 +145,7 @@ def consume(sse_url, files, data, tts, on_action, on_done, timeout=120,
     final = {}
     barge_config = barge_config or {}
     got_audio = False  # True once any OpenAI TTS audio event arrives this turn
+    first_speech_fired = False
     for raw in resp.iter_lines(decode_unicode=True):
         if not raw or not raw.startswith("data: "):
             continue
@@ -149,6 +154,14 @@ def consume(sse_url, files, data, tts, on_action, on_done, timeout=120,
         except Exception:
             continue
         etype = ev.get("type")
+        # Cut the "thinking" filler the moment we have something real to say.
+        if not first_speech_fired and etype in ("sentence", "audio"):
+            first_speech_fired = True
+            if on_first_speech is not None:
+                try:
+                    on_first_speech()
+                except Exception:
+                    pass
         if etype == "sentence":
             # Skip onboard-TTS fallback if OpenAI TTS already played this turn.
             if got_audio:
@@ -230,6 +243,16 @@ def consume(sse_url, files, data, tts, on_action, on_done, timeout=120,
             # without speaking, clearing the hint, or treating this as a turn.
             print("[stream_tts] wait (incomplete thought):", ev.get("user_input", ""))
         elif etype == "done":
+            # Stop the announcer even if we got here without ever firing a
+            # sentence/audio event (silence/wait/rejected responses). Without
+            # this, a fast silence frame would let the second filler utterance
+            # fire ~2.5s later for nothing.
+            if not first_speech_fired and on_first_speech is not None:
+                first_speech_fired = True
+                try:
+                    on_first_speech()
+                except Exception:
+                    pass
             final = ev
             break
         elif etype == "recognized":

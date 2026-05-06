@@ -398,3 +398,35 @@ def test_intent_does_not_exit_on_long_stop_complaint(monkeypatch):
 
     assert intent.detect(text, current_mode="chat") is None
     assert exit_detection.detect_exit_intent(text) is False
+
+
+def test_name_extraction_rejects_prompt_echo(monkeypatch):
+    _install_fake_nao_modules(monkeypatch)
+    name_utils = _reload("utils.name_utils")
+
+    assert name_utils.extract_name("Hey there. Before we get going") is None
+    assert name_utils.extract_name("my name is Aayush") == "Aayush"
+    assert name_utils.extract_name("Aayush") == "Aayush"
+
+
+def test_ask_name_aborts_when_face_recognized(monkeypatch):
+    _install_fake_nao_modules(monkeypatch)
+    ask_name_utils = _reload("utils.ask_name_utils")
+
+    class FakeTts(object):
+        def say(self, _text):
+            pass
+
+    calls = []
+
+    def record_audio(_ip):
+        calls.append("record")
+        return None
+
+    out = ask_name_utils.ask_name(
+        FakeTts(), "127.0.0.1", "http://server", None, record_audio,
+        should_abort=lambda: True,
+    )
+
+    assert out is None
+    assert calls == []

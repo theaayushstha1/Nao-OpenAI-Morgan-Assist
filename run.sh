@@ -64,12 +64,27 @@ LOCAL_IP="$(detect_local_ip)"
 ok "local IP for NAO callback: $LOCAL_IP"
 
 # ─────────── stop everything cleanly ───────────
+# Each run.sh used to spawn fresh `tail -f` + awk processes for log mirroring
+# without killing the old ones. Hitting Ctrl+C only killed the ssh tail in the
+# foreground; the local server tail in `&` background and any prior runs'
+# tails just kept living. After 4 invocations every log line was printed 4
+# times. We now sweep them up explicitly.
+kill_local_tails() {
+    ps -ef \
+        | grep -iE "tail -f $PROJECT_ROOT/logs/(server|nao)\.log|tail -f $ROBOT_LOG_REMOTE|awk -v p .*\[server\]|awk -v p .*\[robot\]" \
+        | grep -v grep \
+        | awk '{print $2}' \
+        | xargs -r kill -9 2>/dev/null || true
+}
+
 do_stop() {
     log "stopping local Flask on :$SERVER_PORT"
     lsof -ti ":$SERVER_PORT" 2>/dev/null | xargs -r kill -9 2>/dev/null || true
     log "stopping main.py on robot"
     sshpass -p "$NAO_PASSWORD" ssh -o ConnectTimeout=8 -o StrictHostKeyChecking=no \
         "nao@$NAO_IP" 'pkill -f "python.*main.py" 2>/dev/null; true' || true
+    log "killing any stale local log tails"
+    kill_local_tails
     ok "stopped"
 }
 
@@ -78,6 +93,7 @@ do_deploy() {
     log "deploying nao/ to nao@$NAO_IP:/home/nao/nao_assist/"
     sshpass -p "$NAO_PASSWORD" rsync -az --delete \
         --exclude='*.pyc' --exclude='__pycache__' --exclude='nao.log' \
+        --exclude='.last_user.json' \
         -e "ssh -o ConnectTimeout=8 -o StrictHostKeyChecking=no" \
         "$PROJECT_ROOT/nao/" "nao@$NAO_IP:/home/nao/nao_assist/"
     # Wipe any stale .pyc on the robot — Python 2 prefers cached bytecode
@@ -147,16 +163,36 @@ nohup python -u /home/nao/nao_assist/main.py \
 }
 
 # ─────────── tail both logs side by side ───────────
+# macOS BSD sed crashes on some multi-byte / unicode input ("Assertion failed:
+# (advance > 0)"). Robot replies contain smart quotes, em-dashes, and
+# transcripts in other languages (Nepali, Spanish), all of which trip BSD
+# sed. We use awk instead — POSIX byte-safe, ships everywhere — and fall back
+# to plain `cat` if even awk hiccups so a colorize bug never tears down the
+# whole session and leaves orphaned server/robot processes.
 do_tail() {
+    log "killing any stale local log tails"
+    kill_local_tails
     log "tailing logs (Ctrl-C to stop, server keeps running)"
     echo
-    # local server log + remote robot log via SSH
-    (tail -f "$SERVER_LOG" | sed -e "s/^/${CYAN}[server]${NC} /") &
-    TAIL_PID=$!
-    trap "kill $TAIL_PID 2>/dev/null; exit 0" INT
+    local server_prefix="${CYAN}[server]${NC} "
+    local robot_prefix="${YELLOW}[robot]${NC}  "
+    (tail -f "$SERVER_LOG" 2>/dev/null \
+        | awk -v p="$server_prefix" '{ print p $0; fflush(); }' \
+        || cat "$SERVER_LOG") &
+    SERVER_TAIL_PID=$!
     sshpass -p "$NAO_PASSWORD" ssh -o ConnectTimeout=8 -o StrictHostKeyChecking=no \
         "nao@$NAO_IP" "tail -f $ROBOT_LOG_REMOTE" 2>/dev/null \
-        | sed -e "s/^/${YELLOW}[robot]${NC}  /"
+        | awk -v p="$robot_prefix" '{ print p $0; fflush(); }' &
+    ROBOT_TAIL_PID=$!
+    # Trap Ctrl+C: kill BOTH tail pipelines and any awk children. Without
+    # this, hitting Ctrl+C dropped the foreground awk but left `tail -f` and
+    # ssh-tail orphaned, accumulating across runs.
+    trap '
+        kill $SERVER_TAIL_PID $ROBOT_TAIL_PID 2>/dev/null
+        kill_local_tails
+        exit 0
+    ' INT
+    wait $SERVER_TAIL_PID $ROBOT_TAIL_PID 2>/dev/null || true
 }
 
 # ─────────── dispatch ───────────
