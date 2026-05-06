@@ -21,7 +21,9 @@ def test_turn_happy_path_general(client):
     with open("server/tests/fixtures/sample.wav", "rb") as f:
         audio_bytes = f.read()
     with patch("server.server._validate_wav", return_value=True), \
+         patch("server.server._has_voice", return_value=True), \
          patch("server.server._transcribe", return_value="tell me a fun fact"), \
+         patch("server.server.semantic_endpoint.is_complete_thought", return_value=True), \
          patch("server.server.safety.crisis_check") as crisis, \
          patch("server.server._run_agent") as runner:
         crisis.return_value = MagicMock(positive=False, source="clean")
@@ -45,6 +47,7 @@ def test_turn_crisis_bypasses_agent(client):
     with open("server/tests/fixtures/sample.wav", "rb") as f:
         audio_bytes = f.read()
     with patch("server.server._validate_wav", return_value=True), \
+         patch("server.server._has_voice", return_value=True), \
          patch("server.server._transcribe", return_value="i want to kill myself"), \
          patch("server.server._run_agent") as runner:
         r = client.post("/turn", data={

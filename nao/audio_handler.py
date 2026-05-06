@@ -57,10 +57,13 @@ SAMPLE_WIDTH    = 2              # S16_LE
 CALIBRATION_MS      = 80
 POLL_MS             = 30
 NO_SPEECH_TIMEOUT_S = 4.5
-MIN_CLIP_SEC        = 0.4        # clips shorter than this dropped client-side
+# Loosened: server-side Silero VAD + semantic endpointing now do the final
+# filtering, so we can afford to capture more aggressively here.
+MIN_CLIP_SEC        = 0.3        # clips shorter than this dropped client-side
 
-# Stop behavior (single long-silence gate)
-TRAIL_MS            = 650
+# Stop behavior (single long-silence gate). Bumped up because users pause mid-
+# thought; server semantic endpointing will ask for more audio if needed.
+TRAIL_MS            = 1200
 
 # Durations
 DEFAULT_MAX_SEC     = 10.0       # cap per turn — long captures usually = noise
@@ -68,7 +71,7 @@ ABS_HARD_CAP_SEC    = 30.0
 
 # Energy thresholds — tuned for normal speaking voice ~50cm from NAO's front mic.
 # Lower these if user's voice is quiet; raise if room noise triggers false starts.
-ENERGY_MIN_START    = 550
+ENERGY_MIN_START    = 600
 ENERGY_MIN_KEEP     = 320
 START_BONUS         = 220
 KEEP_MARGIN         = 0.50

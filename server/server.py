@@ -14,7 +14,7 @@ from openai import OpenAI
 
 from agents import Runner
 
-from server import config, safety, session
+from server import config, safety, semantic_endpoint, session, vad_silero
 from server.agents import pick_initial_agent
 from server.topologies import run_topology
 
@@ -59,7 +59,20 @@ except Exception:
 
 
 def _has_voice(path: str, aggressiveness: int = 2, voiced_ratio_min: float = 0.18) -> bool:
-    """True if at least `voiced_ratio_min` of 30ms frames are detected as speech."""
+    """True if at least `voiced_ratio_min` of 30ms frames are detected as speech.
+
+    Layered: Silero VAD is the authoritative gate when it loads. webrtcvad
+    is the fallback. Either one rejecting drops the clip — but both are
+    permissive on internal errors (return True) so we never block traffic
+    on a VAD bug.
+    """
+    # Server-side Silero is the strongest signal — runs on the trimmed clip
+    # and uses a learned model rather than energy heuristics.
+    try:
+        if not vad_silero.has_voice(path):
+            return False
+    except Exception:
+        pass
     if not _VAD_AVAILABLE:
         return True  # Fall back to other filters; don't block traffic.
     try:
@@ -407,6 +420,20 @@ def turn():
     if reason:
         return _reject_silence_json(username, reason, transcript)
 
+    # Semantic endpointing — if the user trailed off mid-sentence, ask NAO
+    # to record more audio and resend instead of running the agent.
+    if semantic_endpoint.USE_SEMANTIC_ENDPOINT and not semantic_endpoint.is_complete_thought(transcript):
+        print(
+            "[transcript wait] username={0!r} text={1!r}".format(username, transcript),
+            flush=True,
+        )
+        return jsonify(
+            type="wait",
+            username=username, user_input=transcript,
+            reply="", active_agent="wait",
+            actions=[], crisis=False, suppress_image=False,
+        )
+
     print(
         "[transcript accepted] username={0!r} hint={1!r} text={2!r}".format(
             username, hint, transcript,
@@ -471,6 +498,22 @@ def stream_turn():
     reason = _transcript_reject_reason(username, transcript)
     if reason:
         return _reject_silence_sse(username, reason, transcript)
+
+    # Semantic endpointing — wait for more audio if the transcript looks
+    # incomplete. NAO listens for `{"type": "wait"}` and re-records.
+    if semantic_endpoint.USE_SEMANTIC_ENDPOINT and not semantic_endpoint.is_complete_thought(transcript):
+        print(
+            "[transcript wait] username={0!r} text={1!r}".format(username, transcript),
+            flush=True,
+        )
+
+        def wait_gen():
+            yield _sse({"type": "wait", "user_input": transcript})
+            yield _sse({"type": "done", "active_agent": "wait", "crisis": False,
+                        "suppress_image": False, "user_input": transcript})
+
+        return Response(wait_gen(), mimetype="text/event-stream",
+                        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     print(
         "[transcript accepted] username={0!r} hint={1!r} text={2!r}".format(
