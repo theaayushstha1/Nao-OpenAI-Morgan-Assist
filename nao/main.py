@@ -70,6 +70,20 @@ def _get_phrase():
         return None
 
 
+def _set_volume(ip, port, level=95):
+    """Pin NAO's master speaker output high so the OpenAI TTS MP3 is audible
+    in a noisy room. ALAudioDevice.setOutputVolume takes 0-100.
+    """
+    try:
+        ALProxy("ALAudioDevice", ip, port).setOutputVolume(int(level))
+    except Exception as e:
+        print("[volume] setOutputVolume failed:", e)
+    try:
+        ALProxy("ALTextToSpeech", ip, port).setVolume(min(1.0, level / 100.0))
+    except Exception:
+        pass
+
+
 def _disable_autonomous(ip, port):
     """Kill NAO's built-in autonomous life so it doesn't talk over us.
     setAutonomousAbilityEnabled persists across reboots; setState is per-session.
@@ -114,6 +128,7 @@ def _conversation_hint_for_phrase(phrase):
 
 def main():
     _disable_autonomous(config.NAO_IP, config.NAO_PORT)
+    _set_volume(config.NAO_IP, config.NAO_PORT, level=95)
     session = qi.Session()
     session.connect("tcp://{0}:{1}".format(config.NAO_IP, config.NAO_PORT))
 

@@ -56,28 +56,28 @@ SAMPLE_WIDTH    = 2              # S16_LE
 # Timing
 CALIBRATION_MS      = 80
 POLL_MS             = 30
-NO_SPEECH_TIMEOUT_S = 4.5
-# Loosened: server-side Silero VAD + semantic endpointing now do the final
-# filtering, so we can afford to capture more aggressively here.
+NO_SPEECH_TIMEOUT_S = 4.0
 MIN_CLIP_SEC        = 0.3        # clips shorter than this dropped client-side
 
-# Stop behavior (single long-silence gate). Bumped up because users pause mid-
-# thought; server semantic endpointing will ask for more audio if needed.
-TRAIL_MS            = 1200
+# Stop behavior. Tightened: 700ms trailing silence is enough to mark
+# end-of-utterance; longer windows let background room voices keep the
+# recording rolling past when the user actually finished speaking.
+TRAIL_MS            = 700
 
-# Durations
-DEFAULT_MAX_SEC     = 10.0       # cap per turn — long captures usually = noise
-ABS_HARD_CAP_SEC    = 30.0
+# Durations — keep clips short; semantic endpoint stitches partials.
+DEFAULT_MAX_SEC     = 6.0
+ABS_HARD_CAP_SEC    = 20.0
 
-# Energy thresholds — tuned for normal speaking voice ~50cm from NAO's front mic.
-# Lower these if user's voice is quiet; raise if room noise triggers false starts.
-ENERGY_MIN_START    = 600
-ENERGY_MIN_KEEP     = 320
-START_BONUS         = 220
-KEEP_MARGIN         = 0.50
-SOFT_START_FLOOR    = 420
-SOFT_START_RATIO    = 0.45
-SOFT_START_MS       = 180
+# Energy thresholds — tuned for the user speaking ~50cm from NAO's front mic.
+# Raised vs defaults to reject background-room conversation that was bleeding
+# into transcripts. If user's voice gets cut off, lower START_BONUS first.
+ENERGY_MIN_START    = 800
+ENERGY_MIN_KEEP     = 480
+START_BONUS         = 320
+KEEP_MARGIN         = 0.55
+SOFT_START_FLOOR    = 560
+SOFT_START_RATIO    = 0.50
+SOFT_START_MS       = 220
 
 # Trimming
 TRIM_FRACTION       = 0.40

@@ -238,14 +238,19 @@ def consume(sse_url, files, data, tts, on_action, on_done, timeout=120,
     return final
 
 
-# MP3 playback for ElevenLabs voice clone
+# MP3 playback for OpenAI TTS audio events
 _MP3_DIR = "/tmp/nao_voice"
 _mp3_counter = [0]
 _player_proxy = [None]
+_audio_dev_proxy = [None]
 
 
 def _play_mp3_b64(b64):
-    """Decode base64 MP3 and play through NAO's ALAudioPlayer (blocking)."""
+    """Decode base64 MP3 and play through NAO's ALAudioPlayer (blocking).
+
+    Bumps system output volume to 95/100 the first time so a quiet room
+    setting from a prior session doesn't muffle the TTS reply.
+    """
     if not b64:
         return
     try:
@@ -256,6 +261,11 @@ def _play_mp3_b64(b64):
             sys.path.insert(0, "/home/nao/nao_assist")
             import config as _cfg
             _player_proxy[0] = ALProxy("ALAudioPlayer", _cfg.NAO_IP, _cfg.NAO_PORT)
+            try:
+                _audio_dev_proxy[0] = ALProxy("ALAudioDevice", _cfg.NAO_IP, _cfg.NAO_PORT)
+                _audio_dev_proxy[0].setOutputVolume(95)
+            except Exception:
+                pass
         if not os.path.exists(_MP3_DIR):
             os.makedirs(_MP3_DIR)
         _mp3_counter[0] = (_mp3_counter[0] + 1) % 1000
