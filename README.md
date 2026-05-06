@@ -31,7 +31,7 @@ NAO listens, sees, remembers, and replies in the user's own cloned voice. The ro
 
 | Capability        | Implementation                                                                 |
 |-------------------|---------------------------------------------------------------------------------|
-| Speech‑to‑text    | **Deepgram Nova‑2** streaming ASR with keyword boosting (~150 ms)             |
+| Speech‑to‑text    | **Deepgram Nova‑2** preferred (~150 ms) with keyword boosting; falls back to OpenAI Whisper if `DEEPGRAM_API_KEY` is unset |
 | Endpointing       | **Silero VAD** + semantic "is the user done?" gate via `gpt-4.1-nano`         |
 | Reasoning         | **OpenAI Agents SDK** — router → chat / chatbot / skills / therapist          |
 | Therapy           | CBT thought records + grounding + Motivational Interviewing (OARS)            |
