@@ -14,9 +14,59 @@ from openai import OpenAI
 
 from agents import Runner
 
-from server import config, safety, session
+from server import config, memory, safety, semantic_endpoint, session, vad_silero
 from server.agents import pick_initial_agent
 from server.topologies import run_topology
+
+# Active session id per user (face_id). Created lazily on the first /turn or
+# /stream_turn after wake; closed on end_session=true or exit intent.
+_ACTIVE_SESSIONS: dict[str, int] = {}
+
+
+def _ensure_active_session(username: str, hint: str | None) -> int:
+    fid = (username or "").strip().lower()
+    if not fid:
+        return 0
+    sid = _ACTIVE_SESSIONS.get(fid)
+    if sid:
+        return sid
+    memory.ensure_user(fid, display_name=username)
+    sid = memory.start_session(fid, mode=hint)
+    _ACTIVE_SESSIONS[fid] = sid
+    return sid
+
+
+def _close_active_session(username: str) -> None:
+    """End the active session and kick off async summarization."""
+    fid = (username or "").strip().lower()
+    sid = _ACTIVE_SESSIONS.pop(fid, None)
+    if not sid:
+        return
+    # Pull transcript from the SQLiteSession (Agents SDK) for summarization.
+    lines: list[str] = []
+    try:
+        sess = session.get_or_create_session(fid)
+        items = asyncio.run(sess.get_items())
+        for it in items or []:
+            role = it.get("role") if isinstance(it, dict) else None
+            content = it.get("content") if isinstance(it, dict) else None
+            if isinstance(content, list):
+                # Responses-API shape: list of typed parts.
+                txt = " ".join(
+                    p.get("text", "") for p in content
+                    if isinstance(p, dict) and p.get("type") in ("input_text", "output_text", "text")
+                ).strip()
+            elif isinstance(content, str):
+                txt = content
+            else:
+                txt = ""
+            if txt and role:
+                lines.append("{0}: {1}".format(role, txt))
+    except Exception:
+        pass
+    memory.end_session(sid, summary=None)
+    if lines:
+        memory.summarize_session_async(sid, lines)
 
 app = Flask(__name__)
 _client = OpenAI(api_key=config.OPENAI_API_KEY)
@@ -59,7 +109,20 @@ except Exception:
 
 
 def _has_voice(path: str, aggressiveness: int = 2, voiced_ratio_min: float = 0.18) -> bool:
-    """True if at least `voiced_ratio_min` of 30ms frames are detected as speech."""
+    """True if at least `voiced_ratio_min` of 30ms frames are detected as speech.
+
+    Layered: Silero VAD is the authoritative gate when it loads. webrtcvad
+    is the fallback. Either one rejecting drops the clip — but both are
+    permissive on internal errors (return True) so we never block traffic
+    on a VAD bug.
+    """
+    # Server-side Silero is the strongest signal — runs on the trimmed clip
+    # and uses a learned model rather than energy heuristics.
+    try:
+        if not vad_silero.has_voice(path):
+            return False
+    except Exception:
+        pass
     if not _VAD_AVAILABLE:
         return True  # Fall back to other filters; don't block traffic.
     try:
@@ -283,6 +346,13 @@ def _reject_silence_sse(username: str, reason: str, transcript: str):
 
 
 def _transcribe(path: str) -> str:
+    if config.USE_DEEPGRAM:
+        from server import deepgram_asr
+        text = deepgram_asr.transcribe(path)
+        if text:
+            return text
+        # Empty/failure -> fall through to Whisper so we never silently drop a turn.
+        print("[transcribe] deepgram returned empty; falling back to whisper", flush=True)
     with open(path, "rb") as f:
         resp = _client.audio.transcriptions.create(
             model=config.WHISPER_MODEL, file=f,
@@ -348,6 +418,26 @@ def health():
     return jsonify(ok=True)
 
 
+@app.post("/tts")
+def tts_clone():
+    """Synthesize arbitrary text with the configured ElevenLabs voice clone.
+    NAO uses this for system speech (greetings, prompts, confirmations) so
+    everything sounds like the user, not the onboard robot voice.
+    Returns MP3 bytes; 503 if ElevenLabs isn't configured / synth fails.
+    """
+    text = (request.form.get("text") or request.json and request.json.get("text") or "").strip() if request.is_json else (request.form.get("text") or "").strip()
+    if not text:
+        return jsonify(error="missing_text"), 400
+    if not config.USE_ELEVENLABS:
+        return jsonify(error="elevenlabs_not_configured"), 503
+    from server.elevenlabs_tts import synthesize as _el_synth
+    mp3 = _el_synth(text)
+    if not mp3:
+        return jsonify(error="synth_failed"), 503
+    from flask import Response as _FResp
+    return _FResp(mp3, mimetype="audio/mpeg")
+
+
 @app.post("/turn")
 def turn():
     username = request.form.get("username") or "guest"
@@ -356,11 +446,14 @@ def turn():
 
     if end_session:
         body = _run_recap(username)
+        _close_active_session(username)
         return jsonify(
             username=username, user_input="", reply=body,
             active_agent="therapist", actions=[], crisis=False,
             suppress_image=False,
         )
+
+    _ensure_active_session(username, hint)
 
     audio = request.files.get("audio")
     image = request.files.get("image")
@@ -386,6 +479,20 @@ def turn():
     reason = _transcript_reject_reason(username, transcript)
     if reason:
         return _reject_silence_json(username, reason, transcript)
+
+    # Semantic endpointing — if the user trailed off mid-sentence, ask NAO
+    # to record more audio and resend instead of running the agent.
+    if semantic_endpoint.USE_SEMANTIC_ENDPOINT and not semantic_endpoint.is_complete_thought(transcript):
+        print(
+            "[transcript wait] username={0!r} text={1!r}".format(username, transcript),
+            flush=True,
+        )
+        return jsonify(
+            type="wait",
+            username=username, user_input=transcript,
+            reply="", active_agent="wait",
+            actions=[], crisis=False, suppress_image=False,
+        )
 
     print(
         "[transcript accepted] username={0!r} hint={1!r} text={2!r}".format(
@@ -432,6 +539,8 @@ def stream_turn():
     if not audio:
         return jsonify(error="missing_audio"), 400
 
+    _ensure_active_session(username, hint)
+
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
         audio.save(tmp.name)
         wav_path = tmp.name
@@ -451,6 +560,22 @@ def stream_turn():
     reason = _transcript_reject_reason(username, transcript)
     if reason:
         return _reject_silence_sse(username, reason, transcript)
+
+    # Semantic endpointing — wait for more audio if the transcript looks
+    # incomplete. NAO listens for `{"type": "wait"}` and re-records.
+    if semantic_endpoint.USE_SEMANTIC_ENDPOINT and not semantic_endpoint.is_complete_thought(transcript):
+        print(
+            "[transcript wait] username={0!r} text={1!r}".format(username, transcript),
+            flush=True,
+        )
+
+        def wait_gen():
+            yield _sse({"type": "wait", "user_input": transcript})
+            yield _sse({"type": "done", "active_agent": "wait", "crisis": False,
+                        "suppress_image": False, "user_input": transcript})
+
+        return Response(wait_gen(), mimetype="text/event-stream",
+                        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     print(
         "[transcript accepted] username={0!r} hint={1!r} text={2!r}".format(
@@ -495,7 +620,21 @@ def stream_turn():
         )
         _LAST_REPLY[username] = reply
         for sent in iter_sentences(iter([reply])):
-            yield _sse({"type": "sentence", "text": sent})
+            mp3 = None
+            if config.USE_ELEVENLABS:
+                from server.elevenlabs_tts import synthesize as _el_synth
+                mp3 = _el_synth(sent)
+            if mp3:
+                # Voice-cloned MP3 — NAO plays via ALAudioPlayer.
+                yield _sse({
+                    "type": "audio",
+                    "format": "mp3",
+                    "text": sent,  # transcript for logs / barge resume
+                    "b64": base64.b64encode(mp3).decode("ascii"),
+                })
+            else:
+                # Onboard TTS fallback (no ElevenLabs, or synth failed).
+                yield _sse({"type": "sentence", "text": sent})
         for action in ctx["actions_queue"]:
             yield _sse({"type": "action", "action": action})
         yield _sse({"type": "done", "active_agent": active, "crisis": False,
@@ -558,17 +697,70 @@ def _stream_passthrough(agent, message, ctx, sess, transcript, username):
                 return
             yield item
 
+    sent_count = 0
     for sent in iter_sentences(chunks()):
-        yield _sse({"type": "sentence", "text": sent})
+        sent_count += 1
+        print("[stream sentence] username={0!r} text={1!r}".format(username, sent), flush=True)
+        mp3 = None
+        if config.USE_ELEVENLABS:
+            from server.elevenlabs_tts import synthesize as _el_synth
+            mp3 = _el_synth(sent)
+        if mp3:
+            yield _sse({
+                "type": "audio", "format": "mp3", "text": sent,
+                "b64": base64.b64encode(mp3).decode("ascii"),
+            })
+        else:
+            yield _sse({"type": "sentence", "text": sent})
 
     t.join(timeout=2.0)
     final = state["final_text"]
     if final:
         _LAST_REPLY[username] = final
+    if sent_count == 0:
+        if state["error"]:
+            print("[stream error] username={0!r} error={1}".format(username, state["error"]), flush=True)
+            try:
+                reply, active, _verdict, _metadata = run_topology(
+                    agent, message, context=ctx, session=sess
+                )
+                state["active_agent"] = active
+                final = reply
+                _LAST_REPLY[username] = reply
+            except Exception as e:  # noqa: BLE001
+                print("[stream fallback error] username={0!r} error={1!r}".format(username, repr(e)), flush=True)
+                final = "I hit a server error. Please try again."
+        if final:
+            for sent in iter_sentences(iter([final])):
+                print("[stream fallback sentence] username={0!r} text={1!r}".format(username, sent), flush=True)
+                mp3 = None
+                if config.USE_ELEVENLABS:
+                    from server.elevenlabs_tts import synthesize as _el_synth
+                    mp3 = _el_synth(sent)
+                if mp3:
+                    yield _sse({
+                        "type": "audio", "format": "mp3", "text": sent,
+                        "b64": base64.b64encode(mp3).decode("ascii"),
+                    })
+                else:
+                    yield _sse({"type": "sentence", "text": sent})
     for action in ctx["actions_queue"]:
         yield _sse({"type": "action", "action": action})
     yield _sse({"type": "done", "active_agent": state["active_agent"], "crisis": False,
                 "suppress_image": bool(ctx["suppress_image"]), "user_input": transcript})
+
+
+def _maybe_emit_voiceclone_audio(text: str):
+    """If ElevenLabs is configured, generate a voice-cloned MP3 for the
+    sentence and yield an SSE 'audio' event with base64-encoded bytes.
+    NAO plays this through ALAudioPlayer instead of its onboard TTS.
+
+    Returns nothing — this is a side-effect helper used inside SSE generators.
+    Caller does `yield from _maybe_emit_voiceclone_audio(sent)` if it's a
+    generator helper, otherwise `yield _sse(...)` directly. We use the
+    direct-yield pattern below since we already yield the sentence first.
+    """
+    pass  # placeholder, real impl is the generator below
 
 
 def _sse(obj) -> str:

@@ -19,7 +19,7 @@ import stream_tts
 # Modes that route to the OpenAI Realtime API for sub-second voice replies.
 # Therapy and skills stay on /stream_turn so they keep the SAGE-CBT agent
 # graph + safety topology and the skills tool calls.
-_REALTIME_HINTS = {"chat", "morgan"}
+_REALTIME_HINTS = set()  # main: all modes use /stream_turn (proven stable)
 
 
 _engaged = threading.Event()

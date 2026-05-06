@@ -1,5 +1,5 @@
 """Chatbot specialist — Morgan State CS knowledge base RAG via Vertex AI Search."""
-from agents import Agent
+from agents import Agent, ModelSettings
 from server import config
 from server.tools.vertex_search import vertex_search
 from server.tools.nao_actions import nod_head, change_eye_color
@@ -16,5 +16,6 @@ chatbot_agent = Agent(
     name="chatbot",
     instructions=SYSTEM,
     model=config.CHATBOT_MODEL,
+    model_settings=ModelSettings(max_tokens=config.MINI_MAX_TOKENS),
     tools=[vertex_search, nod_head, change_eye_color],
 )

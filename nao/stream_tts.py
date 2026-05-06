@@ -136,6 +136,7 @@ def consume(sse_url, files, data, tts, on_action, on_done, timeout=120,
         if etype == "sentence":
             monitor = None
             try:
+                print("[stream_tts] sentence:", ev.get("text", ""))
                 touch_on = barge_config.get("touch_enabled", True) and memory is not None
                 acoustic_on = audio_device is not None and barge_config.get("enabled", True)
                 if touch_on or acoustic_on:
@@ -165,6 +166,39 @@ def consume(sse_url, files, data, tts, on_action, on_done, timeout=120,
                         except Exception:
                             pass
                         break
+        elif etype == "audio":
+            # Voice-cloned MP3 from ElevenLabs. Same barge semantics as a
+            # sentence event — head-touch interrupt + tail window.
+            monitor = None
+            try:
+                print("[stream_tts] audio:", ev.get("text", "")[:60])
+                touch_on = barge_config.get("touch_enabled", True) and memory is not None
+                acoustic_on = audio_device is not None and barge_config.get("enabled", True)
+                if touch_on or acoustic_on:
+                    monitor = BargeMonitor(
+                        audio_device, tts,
+                        threshold=barge_config.get("threshold", 3500),
+                        sustain_ms=barge_config.get("sustain_ms", 350),
+                        deadzone_ms=barge_config.get("deadzone_ms", 700),
+                        poll_ms=barge_config.get("poll_ms", 30),
+                        memory=memory,
+                        acoustic_enabled=acoustic_on,
+                        touch_enabled=touch_on,
+                    )
+                    monitor.start()
+                _play_mp3_b64(ev.get("b64", ""))
+            except Exception as e:
+                print("[stream_tts] mp3 play error:", e)
+            finally:
+                if monitor is not None:
+                    monitor.stop()
+                    if monitor.interrupted:
+                        final = {"type": "done", "active_agent": "barge",
+                                 "crisis": False, "suppress_image": False,
+                                 "user_input": "", "barge_in": True}
+                        try: resp.close()
+                        except Exception: pass
+                        break
         elif etype == "action":
             try:
                 on_action(ev.get("action") or {})
@@ -177,6 +211,35 @@ def consume(sse_url, files, data, tts, on_action, on_done, timeout=120,
             final["username"] = ev.get("username")
     on_done(final)
     return final
+
+
+# MP3 playback for ElevenLabs voice clone
+_MP3_DIR = "/tmp/nao_voice"
+_mp3_counter = [0]
+_player_proxy = [None]
+
+
+def _play_mp3_b64(b64):
+    """Decode base64 MP3 and play through NAO's ALAudioPlayer (blocking)."""
+    if not b64:
+        return
+    try:
+        import os, base64
+        from naoqi import ALProxy
+        if _player_proxy[0] is None:
+            import sys
+            sys.path.insert(0, "/home/nao/nao_assist")
+            import config as _cfg
+            _player_proxy[0] = ALProxy("ALAudioPlayer", _cfg.NAO_IP, _cfg.NAO_PORT)
+        if not os.path.exists(_MP3_DIR):
+            os.makedirs(_MP3_DIR)
+        _mp3_counter[0] = (_mp3_counter[0] + 1) % 1000
+        path = os.path.join(_MP3_DIR, "tts_{0}.mp3".format(_mp3_counter[0]))
+        with open(path, "wb") as f:
+            f.write(base64.b64decode(b64))
+        _player_proxy[0].playFile(path)
+    except Exception as e:
+        print("[stream_tts] _play_mp3_b64 error:", e)
 
 
 def _sayable(text):

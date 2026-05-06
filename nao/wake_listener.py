@@ -21,10 +21,12 @@ _MODE_HINT_MAP = {
     "start chat": "chat",
     "chatbot": "chat",
     "chatbot mode": "chat",
-    "morgan": "morgan",
     "morgan assist": "morgan",
     "morgan chat": "morgan",
     "morgan chatbot": "morgan",
+    "morgan mode": "morgan",
+    "morgan state": "morgan",
+    "morgan state mode": "morgan",
     "therapist": "therapy",
     "therapist mode": "therapy",
     "therapy": "therapy",
@@ -49,8 +51,12 @@ def extract_hint(phrase):
 
 DEBOUNCE_SECONDS    = 2.0
 SAME_WORD_COOLDOWN  = 3.0
-MIN_CONF            = 0.50
-NAO_WAKE_MIN_CONF   = 0.55
+MIN_CONF            = 0.45
+NAO_WAKE_MIN_CONF   = 0.38
+MORGAN_MIN_CONF     = 0.62
+ASR_SENSITIVITY     = 0.68
+MODE_SELECTION_TIMEOUT_S = 20.0
+MODE_PROMPT_DEADZONE_S   = 0.15
 
 YESNO_TIMEOUT_S     = 6.0
 YESNO_MIN_CONF      = 0.40
@@ -63,7 +69,7 @@ MAX_VALID_DIST      = 3.00
 YES_WORDS = ["yes","yeah","yep","sure","ok","okay","please"]
 NO_WORDS  = ["no","nope","nah","not now","later","maybe later","no thanks"]
 
-ASSIST_LINE = "Say chat, therapy, morgan, or skills."
+ASSIST_LINE = "Say chat, therapy, Morgan assist, or skills."
 
 
 # --- small utils ---
@@ -105,6 +111,12 @@ def _read_word(memory):
         return "", 0.0
     if isinstance(data, list) and len(data) >= 2:
         w = (data[0] or "")
+        # NAOqi's ALSpeechRecognition wraps recognized vocab tokens in "<...>"
+        # silence markers when spotting mode is off (e.g., "<...> nao <...>"
+        # or "<...> let's chat <...>"). Strip those so vocab lookup works.
+        import re
+        w = re.sub(r"<[^>]*>", " ", w)
+        w = re.sub(r"\s+", " ", w).strip()
         try: c = float(data[1] or 0.0)
         except: c = 0.0
         return w.lower(), c
@@ -124,11 +136,25 @@ def _set_vocab(asr, vocab, spotting=False):
     except:
         pass
 
+def _word_threshold(word):
+    if word == "nao":
+        return NAO_WAKE_MIN_CONF
+    if word in ("morgan assist", "morgan chat", "morgan chatbot",
+                "morgan mode", "morgan state", "morgan state mode"):
+        return MORGAN_MIN_CONF
+    return MIN_CONF
+
 def _accept_word(word, conf, vocab):
     if not word or word not in vocab:
         return False
-    threshold = NAO_WAKE_MIN_CONF if word == "nao" else MIN_CONF
+    threshold = _word_threshold(word)
     return conf > threshold
+
+def _mode_gate_allows(word, now, mode_armed_until, mode_ignore_until):
+    """Idle only accepts the wake word; modes require a recent wake prompt."""
+    if word == "nao":
+        return True
+    return now <= mode_armed_until and now >= mode_ignore_until
 
 # --- head tracking  ---
 
@@ -513,10 +539,12 @@ def listen_for_command(nao_ip, port=9559):
         "chat mode",
         "talk mode",
         "start chat",
-        "morgan",
         "morgan assist",
         "morgan chat",
         "morgan chatbot",
+        "morgan mode",
+        "morgan state",
+        "morgan state mode",
         "chatbot",
         "chatbot mode",
         "skills",
@@ -532,7 +560,9 @@ def listen_for_command(nao_ip, port=9559):
     asr.pause(True)
     try: asr.setLanguage("English")
     except: pass
-    _set_vocab(asr, MAIN_VOCAB, spotting=False)
+    try: asr.setParameter("Sensitivity", ASR_SENSITIVITY)
+    except: pass
+    _set_vocab(asr, MAIN_VOCAB, spotting=True)
     asr.subscribe("NAO_Chat_Listener")
 
     # head tracking
@@ -543,6 +573,8 @@ def listen_for_command(nao_ip, port=9559):
 
     last_trigger = 0.0
     last_word    = ""
+    mode_armed_until = 0.0
+    mode_ignore_until = 0.0
 
     try:
         while True:
@@ -556,7 +588,18 @@ def listen_for_command(nao_ip, port=9559):
                 time.sleep(0.05)
                 continue
 
-            if (now - last_trigger) < DEBOUNCE_SECONDS:
+            if word != "nao":
+                if not _mode_gate_allows(word, now, mode_armed_until, mode_ignore_until):
+                    if now < mode_ignore_until:
+                        print("[Heard ignored during prompt deadzone]: {} (conf {:.2f})".format(word, conf))
+                    else:
+                        print("[Heard ignored outside wake gate]: {} (conf {:.2f})".format(word, conf))
+                    _flush_word(memory)
+                    time.sleep(0.05)
+                    continue
+
+            allow_fast_mode_after_wake = (last_word == "nao" and word != "nao")
+            if not allow_fast_mode_after_wake and (now - last_trigger) < DEBOUNCE_SECONDS:
                 time.sleep(0.05)
                 continue
             if word == last_word and (now - last_trigger) < SAME_WORD_COOLDOWN:
@@ -596,8 +639,11 @@ def listen_for_command(nao_ip, port=9559):
 
 
             elif word == "nao":
-                _say_nowait(tts, asr, ASSIST_LINE)
+                _say_paused(tts, asr, ASSIST_LINE)
                 _flush_word(memory)
+                mode_armed_until = time.time() + MODE_SELECTION_TIMEOUT_S
+                mode_ignore_until = time.time() + MODE_PROMPT_DEADZONE_S
+                print("[wake gate armed] waiting for mode for {:.1f}s".format(MODE_SELECTION_TIMEOUT_S))
 
             # ALL CHAT TRIGGERS NOW RETURN "chat" 
             elif word in ["chat", "let's chat", "let's talk", "chat mode", "talk mode",
@@ -610,13 +656,14 @@ def listen_for_command(nao_ip, port=9559):
                 return "chat"
             
             # Morgan triggers route to Realtime with Morgan-specific instructions.
-            elif word in ["morgan", "morgan assist", "morgan chat", "morgan chatbot"]:
+            elif word in ["morgan assist", "morgan chat", "morgan chatbot",
+                          "morgan mode", "morgan state", "morgan state mode"]:
                 _stop_move_now(nao_ip, port)
                 head_flag["stop"] = True
                 _tracker_stop_now(nao_ip, port)
                 _say_paused(tts, asr, format_expressive(random_phrase("entering_chatbot"), "warm"))
                 _flush_word(memory)
-                return "morgan"
+                return "morgan assist"
             
             elif word in ["mini nao", "mininao", "skills"]:
                 _stop_move_now(nao_ip, port)

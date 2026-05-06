@@ -6,6 +6,8 @@ import time
 def recognize_face_naoqi(qi_session, tts, subscriber_name="FaceReco", timeout=10):
     """Use NAO's ALFaceDetection to recognize a known face.
 
+    Silent — no spoken prompt. The caller indicates listening via LEDs so
+    the user doesn't sit through a 4-second dead-air "look at me" pause.
     Returns the recognized name, or None if no face was recognized.
     """
     face_detection = None
@@ -13,7 +15,8 @@ def recognize_face_naoqi(qi_session, tts, subscriber_name="FaceReco", timeout=10
         memory = qi_session.service("ALMemory")
         face_detection = qi_session.service("ALFaceDetection")
         face_detection.subscribe(subscriber_name)
-        tts.say("Please look toward me for a moment.")
+        # No TTS prompt — just scan silently. ALFaceDetection populates
+        # ALMemory key "FaceDetected" within ~200ms when a face is in frame.
         start_time = time.time()
         recognized_name = None
         while time.time() - start_time < timeout:
@@ -74,15 +77,21 @@ def learn_new_face_naoqi(qi_session, tts, name, subscriber_name="FaceLearn"):
                 pass
             time.sleep(0.3)
         if face_found:
-            tts.say("Perfect. Please hold still for just a moment.")
-            time.sleep(1)
             print("[Learning face as]: {}".format(name))
             face_detection.learnFace(name)
-            time.sleep(3)
-            tts.say("Wonderful! I'll remember you, {}.".format(name))
+            time.sleep(0.8)
+            try:
+                from voice_clone import clone_say
+            except Exception:
+                from utils.voice_clone import clone_say
+            clone_say(tts, "Got it, {0}. Nice to meet you. What can I help with?".format(name))
             return True
         else:
-            tts.say("I wasn't able to get a clear view, but let's continue.")
+            try:
+                from voice_clone import clone_say
+            except Exception:
+                from utils.voice_clone import clone_say
+            clone_say(tts, "I couldn't see you clearly, {0}, but let's keep going.".format(name))
             return False
     except Exception as e:
         print("[Learn face error]:", e)

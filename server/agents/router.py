@@ -1,5 +1,5 @@
 """Router — triage agent that picks a specialist."""
-from agents import Agent, handoff
+from agents import Agent, ModelSettings, handoff
 from server import config
 from server.agents.chat import chat_agent
 from server.agents.chatbot import chatbot_agent
@@ -22,6 +22,7 @@ def build_router(username: str) -> Agent:
         name="router",
         instructions=SYSTEM,
         model=config.ROUTER_MODEL,
+        model_settings=ModelSettings(max_tokens=config.NANO_MAX_TOKENS),
         handoffs=[
             handoff(chat_agent),
             handoff(chatbot_agent),

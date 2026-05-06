@@ -12,6 +12,7 @@ import config
 import audio_handler
 from processing_announcer import ProcessingAnnouncer
 from utils import face_naoqi, ask_name_utils, nao_execute, camera_capture, exit_detection, intent as _intent
+from utils.voice_clone import clone_say
 from utils.speech import expressive_say, time_of_day_greeting
 
 
@@ -39,20 +40,31 @@ def _post(wav_path, img_path, username, hint, end_session=False):
 
 
 def _resolve_username(qi_session, tts, nao_ip):
-    """Recognize face or ask for a name. Returns (username, was_recognized)."""
-    name = face_naoqi.recognize_face_naoqi(qi_session, tts, timeout=4)
-    if name:
-        return name.lower(), True
-    asked = ask_name_utils.ask_name(
-        tts, nao_ip, "http://{0}:{1}".format(config.SERVER_IP, config.SERVER_PORT),
-        qi_session, audio_handler.record_audio,
-    )
-    if asked and asked != "Guest":
-        try:
-            face_naoqi.learn_new_face_naoqi(qi_session, tts, asked)
-        except Exception:
-            pass
-        return asked.lower(), False
+    """Recognize known face, otherwise ask once for a name.
+
+    Face recognition is silent (2s scan, no voice prompt) so the user isn't
+    left wondering why the robot is asking them to look at it. If unknown,
+    we ask once and fall back to 'guest' on server failure.
+    """
+    try:
+        name = face_naoqi.recognize_face_naoqi(qi_session, tts, timeout=2)
+        if name:
+            return name.lower(), True
+    except Exception as e:
+        print("[face recognize error]:", e)
+    try:
+        asked = ask_name_utils.ask_name(
+            tts, nao_ip, "http://{0}:{1}".format(config.SERVER_IP, config.SERVER_PORT),
+            qi_session, audio_handler.record_audio,
+        )
+        if asked and asked != "Guest":
+            try:
+                face_naoqi.learn_new_face_naoqi(qi_session, tts, asked)
+            except Exception:
+                pass
+            return asked.lower(), False
+    except Exception as e:
+        print("[ask_name error]:", e)
     return "guest", False
 
 
@@ -155,11 +167,20 @@ def run_streaming(qi_session, initial_hint=None):
 
     username, recognized = _resolve_username(qi_session, raw_tts, config.NAO_IP)
     if recognized and username != "guest":
-        expressive_say(raw_tts, "Welcome back, {0}.".format(username))
+        clone_say(raw_tts, "Welcome back, {0}. What can I help with?".format(username))
+    elif username == "guest":
+        clone_say(raw_tts, "I'm listening.")
+
+    # Audible "go" + green eyes so the user always knows when to start.
+    try:
+        leds.fadeRGB("FaceLeds", 0.0, 1.0, 0.0, 0.1)  # green = listening
+    except Exception:
+        pass
 
     suppress_image = False
     hint = initial_hint
     skip_tts_wait = False
+    silent_streak = 0  # count consecutive no-speech turns to re-prompt
     barge_config = {
         "enabled": config.BARGE_ENABLED,
         "threshold": config.BARGE_THRESHOLD,
@@ -174,10 +195,18 @@ def run_streaming(qi_session, initial_hint=None):
         else:
             _wait_tts_idle(memory)
         wav = audio_handler.record_audio(config.NAO_IP)
-        if wav is None:
+        if wav is None or not wav:
+            silent_streak += 1
+            # After 2 consecutive silent windows, prompt the user so they
+            # know NAO is still alive and waiting.
+            if silent_streak == 2:
+                clone_say(raw_tts, "I'm here when you're ready.")
+                try:
+                    leds.fadeRGB("FaceLeds", 0.0, 1.0, 0.0, 0.1)
+                except Exception:
+                    pass
             continue
-        if not wav:
-            continue
+        silent_streak = 0
         # Camera snap is opt-in (saves ~500ms per turn). Therapist agent can
         # call observe_face tool when it actually needs vision.
         img_path = None
