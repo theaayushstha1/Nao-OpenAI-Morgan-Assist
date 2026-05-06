@@ -45,17 +45,28 @@ def _post(wav_path, img_path, username, hint, end_session=False):
             f.close()
 
 
-def _resolve_username(qi_session, tts, nao_ip):
-    """Recognize known face, otherwise ask once for a name.
+# Cache the resolved user across wake phrases so we don't rerun face
+# recognition + ask_name every time the user says "Nao". Cleared only on
+# process restart.
+_USER_CACHE = {"username": None, "recognized": False}
 
-    Face recognition is silent (2s scan, no voice prompt) so the user isn't
-    left wondering why the robot is asking them to look at it. If unknown,
-    we ask once and fall back to 'guest' on server failure.
+
+def _resolve_username(qi_session, tts, nao_ip):
+    """Return (username, recognized). Cached after first successful resolve.
+
+    First call: try silent face recognition (3s scan, no voice prompt). If
+    that fails, ask the user once for their name and learn the face.
+    Subsequent calls in the same process reuse the cached identity so the
+    robot doesn't keep asking "what's your name?" on every wake phrase.
     """
+    if _USER_CACHE["username"]:
+        return _USER_CACHE["username"], _USER_CACHE["recognized"]
     try:
-        name = face_naoqi.recognize_face_naoqi(qi_session, tts, timeout=2)
+        name = face_naoqi.recognize_face_naoqi(qi_session, tts, timeout=3)
         if name:
-            return name.lower(), True
+            _USER_CACHE["username"] = name.lower()
+            _USER_CACHE["recognized"] = True
+            return _USER_CACHE["username"], True
     except Exception as e:
         print("[face recognize error]:", e)
     try:
@@ -68,9 +79,12 @@ def _resolve_username(qi_session, tts, nao_ip):
                 face_naoqi.learn_new_face_naoqi(qi_session, tts, asked)
             except Exception:
                 pass
-            return asked.lower(), False
+            _USER_CACHE["username"] = asked.lower()
+            _USER_CACHE["recognized"] = False
+            return _USER_CACHE["username"], False
     except Exception as e:
         print("[ask_name error]:", e)
+    # Don't cache the guest fallback — next wake might recognize them.
     return "guest", False
 
 
@@ -146,8 +160,13 @@ def run(qi_session, initial_hint=None):
 import stream_tts
 
 
-def _wait_tts_idle(memory, settle_s=0.2, timeout=3.0):
-    """Block until ALTextToSpeech reports done/stopped, then a short settle."""
+def _wait_tts_idle(memory, settle_s=0.2, timeout=0.6):
+    """Block until ALTextToSpeech reports done/stopped, then a short settle.
+
+    Timeout is short (0.6s) because OpenAI TTS plays via ALAudioPlayer (not
+    ALTextToSpeech), so the status key never updates from a stale prior state
+    and would otherwise pin us at the full timeout every turn.
+    """
     t0 = time.time()
     while time.time() - t0 < timeout:
         try:
@@ -173,9 +192,14 @@ def run_streaming(qi_session, initial_hint=None):
 
     username, recognized = _resolve_username(qi_session, raw_tts, config.NAO_IP)
     if recognized and username != "guest":
-        clone_say(raw_tts, "Welcome back, {0}. What can I help with?".format(username))
+        clone_say(raw_tts, "Welcome back, {0}.".format(username))
     elif username == "guest":
         clone_say(raw_tts, "I'm listening.")
+    else:
+        # New user we just learned. Single combined greeting — the previous
+        # flow said "Got it, X. Nice to meet you" then "I'm listening" which
+        # was 2 prompts of friction.
+        clone_say(raw_tts, "Nice to meet you, {0}. What can I help with?".format(username))
 
     # Audible "go" + green eyes so the user always knows when to start.
     try:
@@ -199,7 +223,7 @@ def run_streaming(qi_session, initial_hint=None):
         if skip_tts_wait:
             skip_tts_wait = False
         else:
-            _wait_tts_idle(memory, settle_s=0.7)
+            _wait_tts_idle(memory, settle_s=0.4)
         wav = audio_handler.record_audio(config.NAO_IP)
         if wav is None or not wav:
             silent_streak += 1

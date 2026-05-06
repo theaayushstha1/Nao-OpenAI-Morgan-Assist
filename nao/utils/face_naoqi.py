@@ -50,23 +50,25 @@ def recognize_face_naoqi(qi_session, tts, subscriber_name="FaceReco", timeout=10
 
 
 def learn_new_face_naoqi(qi_session, tts, name, subscriber_name="FaceLearn"):
-    """Use NAO's ALFaceDetection to learn a new face.
+    """Try to learn the face currently visible to NAO. Silent — no spoken
+    prompt and no follow-up greeting. The caller already had a conversation
+    with the user (asking their name) so the camera almost always has a face
+    in frame; saying "please look at me" again is redundant and was the main
+    reason onboarding felt slow.
 
-    Returns True if the face was learned, False otherwise.
+    Returns True if a face was captured and learnFace was called.
     """
     face_detection = None
     try:
         face_detection = qi_session.service("ALFaceDetection")
         memory = qi_session.service("ALMemory")
-        tts.say("Please look at me so I can remember your face.")
-        time.sleep(1)
         try:
             face_detection.subscribe(subscriber_name)
         except Exception:
             pass
         start_time = time.time()
         face_found = False
-        while time.time() - start_time < 8:
+        while time.time() - start_time < 4:
             try:
                 face_data = memory.getData("FaceDetected")
                 if face_data and isinstance(face_data, list) and len(face_data) >= 2:
@@ -75,24 +77,18 @@ def learn_new_face_naoqi(qi_session, tts, name, subscriber_name="FaceLearn"):
                         break
             except Exception:
                 pass
-            time.sleep(0.3)
+            time.sleep(0.2)
         if face_found:
             print("[Learning face as]: {}".format(name))
-            face_detection.learnFace(name)
-            time.sleep(0.8)
             try:
-                from voice_clone import clone_say
-            except Exception:
-                from utils.voice_clone import clone_say
-            clone_say(tts, "Got it, {0}. Nice to meet you. What can I help with?".format(name))
+                face_detection.learnFace(name)
+            except Exception as e:
+                print("[learnFace error]:", e)
+                return False
+            time.sleep(0.4)
             return True
-        else:
-            try:
-                from voice_clone import clone_say
-            except Exception:
-                from utils.voice_clone import clone_say
-            clone_say(tts, "I couldn't see you clearly, {0}, but let's keep going.".format(name))
-            return False
+        print("[Learn face]: no face in frame for {0}, skipping".format(name))
+        return False
     except Exception as e:
         print("[Learn face error]:", e)
         return False

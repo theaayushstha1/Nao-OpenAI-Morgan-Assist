@@ -70,7 +70,7 @@ def _get_phrase():
         return None
 
 
-def _set_volume(ip, port, level=95):
+def _set_volume(ip, port, level=100):
     """Pin NAO's master speaker output high so the OpenAI TTS MP3 is audible
     in a noisy room. ALAudioDevice.setOutputVolume takes 0-100.
     """
@@ -128,7 +128,7 @@ def _conversation_hint_for_phrase(phrase):
 
 def main():
     _disable_autonomous(config.NAO_IP, config.NAO_PORT)
-    _set_volume(config.NAO_IP, config.NAO_PORT, level=95)
+    _set_volume(config.NAO_IP, config.NAO_PORT, level=100)
     session = qi.Session()
     session.connect("tcp://{0}:{1}".format(config.NAO_IP, config.NAO_PORT))
 

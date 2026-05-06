@@ -248,8 +248,10 @@ _audio_dev_proxy = [None]
 def _play_mp3_b64(b64):
     """Decode base64 MP3 and play through NAO's ALAudioPlayer (blocking).
 
-    Bumps system output volume to 95/100 the first time so a quiet room
-    setting from a prior session doesn't muffle the TTS reply.
+    Pins ALAudioDevice output volume to 100 and ALAudioPlayer master volume
+    to 1.0 BEFORE EVERY play. Setting once at startup wasn't enough — some
+    service on the robot kept dropping the output volume back down between
+    sentences, which is why responses got quieter mid-reply.
     """
     if not b64:
         return
@@ -263,9 +265,14 @@ def _play_mp3_b64(b64):
             _player_proxy[0] = ALProxy("ALAudioPlayer", _cfg.NAO_IP, _cfg.NAO_PORT)
             try:
                 _audio_dev_proxy[0] = ALProxy("ALAudioDevice", _cfg.NAO_IP, _cfg.NAO_PORT)
-                _audio_dev_proxy[0].setOutputVolume(95)
             except Exception:
-                pass
+                _audio_dev_proxy[0] = None
+        # Re-pin volumes EVERY play, not just on init.
+        if _audio_dev_proxy[0] is not None:
+            try: _audio_dev_proxy[0].setOutputVolume(100)
+            except Exception: pass
+        try: _player_proxy[0].setMasterVolume(1.0)
+        except Exception: pass
         if not os.path.exists(_MP3_DIR):
             os.makedirs(_MP3_DIR)
         _mp3_counter[0] = (_mp3_counter[0] + 1) % 1000

@@ -145,8 +145,15 @@ CHAT_ACTIONS = [
     dance, change_eye_color, follow_movement,
 ]
 
+# Therapy mode keeps grounding/empathy gestures plus a few playful actions
+# so users who ask "do a dance" or "wave" mid-conversation aren't told NAO
+# can't do anything physical. Heavy locomotion (move_forward/spin) stays
+# out — clinical-feeling agents shouldn't pace around.
 THERAPIST_ACTIONS = [
-    set_led_color, nod_head,
+    set_led_color, nod_head, shake_head,
+    wave_hand, wave_both_hands, clap_hands,
+    dance, follow_movement,
+    stand_up, sit_down,
 ]
 
 ALL_TOOL_NAMES = {t.name for t in CHAT_ACTIONS} | {"set_led_color"}

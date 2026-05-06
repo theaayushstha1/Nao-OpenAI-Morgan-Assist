@@ -56,31 +56,30 @@ SAMPLE_WIDTH    = 2              # S16_LE
 # Timing
 CALIBRATION_MS      = 80
 POLL_MS             = 30
-NO_SPEECH_TIMEOUT_S = 4.0
-MIN_CLIP_SEC        = 0.3        # clips shorter than this dropped client-side
+NO_SPEECH_TIMEOUT_S = 3.0
+MIN_CLIP_SEC        = 0.5        # match server-side 0.3s min — anything shorter 503s
 
-# Stop behavior. Tightened: 700ms trailing silence is enough to mark
-# end-of-utterance; longer windows let background room voices keep the
-# recording rolling past when the user actually finished speaking.
-TRAIL_MS            = 700
+# Stop behavior. 800 ms trailing silence balances snappy turn-taking against
+# brief mid-sentence pauses. Tighter than this and "uh" pauses cut you off.
+TRAIL_MS            = 800
 
-# Durations — keep clips short; semantic endpoint stitches partials.
-DEFAULT_MAX_SEC     = 6.0
-ABS_HARD_CAP_SEC    = 20.0
+DEFAULT_MAX_SEC     = 7.0
+ABS_HARD_CAP_SEC    = 18.0
 
 # Energy thresholds — tuned for the user speaking ~50cm from NAO's front mic.
-# Raised vs defaults to reject background-room conversation that was bleeding
-# into transcripts. If user's voice gets cut off, lower START_BONUS first.
-ENERGY_MIN_START    = 800
-ENERGY_MIN_KEEP     = 480
-START_BONUS         = 320
+# 700 catches speech-volume voices reliably without false-triggering on
+# background room conversation. Drop START_BONUS if quiet voices still miss.
+ENERGY_MIN_START    = 700
+ENERGY_MIN_KEEP     = 420
+START_BONUS         = 280
 KEEP_MARGIN         = 0.55
-SOFT_START_FLOOR    = 560
-SOFT_START_RATIO    = 0.50
-SOFT_START_MS       = 220
+SOFT_START_FLOOR    = 480
+SOFT_START_RATIO    = 0.48
+SOFT_START_MS       = 200
 
-# Trimming
-TRIM_FRACTION       = 0.40
+# Trimming. 0.25 fraction = less aggressive leading-silence strip so the
+# first word/syllable isn't shaved off when users start speaking softly.
+TRIM_FRACTION       = 0.25
 TRIM_CHUNK_BYTES    = 1024
 
 # Post-FX
@@ -257,11 +256,13 @@ def record_audio(nao_ip, max_duration=None):
         return None
     print("[VAD] captured {0:.2f}s".format(dur))
 
-    trimmed = _trim_silence(out_path, trim_rms, TRIM_CHUNK_BYTES) or out_path
+    # Skip client-side _trim_silence: it shaved off the first word/syllable
+    # when users started speaking softly. Server-side Silero VAD trims the
+    # WAV more accurately on the way to the transcriber.
     if PREEMPH_ENABLED:
-        pre = _pre_emphasis(trimmed, PREEMPH_COEFF) or trimmed
+        pre = _pre_emphasis(out_path, PREEMPH_COEFF) or out_path
     else:
-        pre = trimmed
+        pre = out_path
     if AGC_ENABLED:
         agc = _agc_to_target_rms(pre, AGC_TARGET_RMS, AGC_MAX_GAIN) or pre
     else:

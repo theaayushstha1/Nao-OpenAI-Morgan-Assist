@@ -77,9 +77,15 @@ do_stop() {
 do_deploy() {
     log "deploying nao/ to nao@$NAO_IP:/home/nao/nao_assist/"
     sshpass -p "$NAO_PASSWORD" rsync -az --delete \
+        --exclude='*.pyc' --exclude='__pycache__' --exclude='nao.log' \
         -e "ssh -o ConnectTimeout=8 -o StrictHostKeyChecking=no" \
         "$PROJECT_ROOT/nao/" "nao@$NAO_IP:/home/nao/nao_assist/"
-    ok "deploy complete"
+    # Wipe any stale .pyc on the robot — Python 2 prefers cached bytecode
+    # over .py source when timestamps look close, which made VAD threshold
+    # tweaks silently no-op.
+    sshpass -p "$NAO_PASSWORD" ssh -o ConnectTimeout=8 -o StrictHostKeyChecking=no \
+        "nao@$NAO_IP" 'find /home/nao/nao_assist -name "*.pyc" -delete 2>/dev/null; true'
+    ok "deploy complete (.pyc cleared)"
 }
 
 # ─────────── start Flask server ───────────
@@ -125,6 +131,7 @@ start_robot() {
 LD_LIBRARY_PATH=/opt/aldebaran/lib:/opt/aldebaran/lib/naoqi \
 SERVER_IP='$LOCAL_IP' SERVER_PORT='$SERVER_PORT' \
 NAO_SHARED_SECRET='$NAO_SHARED_SECRET' \
+IMAGE_PER_TURN='${IMAGE_PER_TURN:-1}' \
 nohup python -u /home/nao/nao_assist/main.py \
 > $ROBOT_LOG_REMOTE 2>&1 </dev/null &"
     sleep 2
