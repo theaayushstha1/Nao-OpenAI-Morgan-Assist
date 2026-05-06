@@ -69,7 +69,34 @@ def _close_active_session(username: str) -> None:
         memory.summarize_session_async(sid, lines)
 
 app = Flask(__name__)
+# Hard cap on multipart uploads. 30s of 16kHz mono PCM WAV is ~960KB; 10MB
+# leaves headroom for the JPEG snap and prevents tmpfs DoS via giant POSTs.
+app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_UPLOAD_BYTES", str(10 * 1024 * 1024)))
 _client = OpenAI(api_key=config.OPENAI_API_KEY)
+
+
+# ───────── auth (LAN-only shared secret) ─────────
+
+_OPEN_PATHS = {"/health"}
+
+
+@app.before_request
+def _require_shared_secret():
+    """Reject any request missing the X-NAO-Secret header. /health stays
+    open so liveness probes work. WebSocket /chat_realtime is gated
+    separately inside realtime_proxy.init_app."""
+    if request.path in _OPEN_PATHS:
+        return None
+    expected = config.NAO_SHARED_SECRET
+    if not expected:
+        # No secret configured -> server runs in OPEN mode. We log a warning
+        # at startup; here we just allow through so dev workflows don't break.
+        return None
+    got = request.headers.get("X-NAO-Secret", "")
+    if got != expected:
+        return jsonify({"error": "unauthorized"}), 401
+    return None
+
 
 # Realtime API proxy (WebSocket /chat_realtime). Optional — only loads if the
 # extra deps are installed.
@@ -80,6 +107,13 @@ except Exception as _e:
     import logging as _logging
     _logging.getLogger("sage.realtime").warning(
         "realtime proxy not loaded: %s", _e,
+    )
+
+if not config.NAO_SHARED_SECRET:
+    import logging as _logging
+    _logging.getLogger("sage.auth").warning(
+        "NAO_SHARED_SECRET unset — server is OPEN to anyone on the network. "
+        "Set it in .env before exposing /turn, /stream_turn, /tts, /chat_realtime."
     )
 
 
@@ -480,6 +514,19 @@ def turn():
     if reason:
         return _reject_silence_json(username, reason, transcript)
 
+    # Crisis check FIRST — before semantic endpointing — so a partial like
+    # "I keep thinking about" can't be quietly waited-on and split apart
+    # to bypass safety on the second half. Hard keywords match cheaply on
+    # partial input; LLM probe runs on the partial too.
+    crisis = safety.crisis_check(transcript)
+    if crisis.positive:
+        return jsonify(
+            username=username, user_input=transcript,
+            reply=safety.HOTLINE_REPLY, active_agent="safety",
+            actions=[{"name": "change_eye_color", "args": {"color": "white"}}],
+            crisis=True, suppress_image=False,
+        )
+
     # Semantic endpointing — if the user trailed off mid-sentence, ask NAO
     # to record more audio and resend instead of running the agent.
     if semantic_endpoint.USE_SEMANTIC_ENDPOINT and not semantic_endpoint.is_complete_thought(transcript):
@@ -500,15 +547,6 @@ def turn():
         ),
         flush=True,
     )
-
-    crisis = safety.crisis_check(transcript)
-    if crisis.positive:
-        return jsonify(
-            username=username, user_input=transcript,
-            reply=safety.HOTLINE_REPLY, active_agent="safety",
-            actions=[{"name": "change_eye_color", "args": {"color": "white"}}],
-            crisis=True, suppress_image=False,
-        )
 
     consent = session.get_camera_consent(username)
     image_b64 = None
@@ -561,6 +599,19 @@ def stream_turn():
     if reason:
         return _reject_silence_sse(username, reason, transcript)
 
+    # Crisis check FIRST — before semantic endpointing — so a partial
+    # utterance can't be quietly buffered away to dodge the gate when a
+    # second turn alone wouldn't trip keywords.
+    crisis = safety.crisis_check(transcript)
+    if crisis.positive:
+        def crisis_gen():
+            yield _sse({"type": "sentence", "text": safety.HOTLINE_REPLY})
+            yield _sse({"type": "action", "action": {"name": "change_eye_color", "args": {"color": "white"}}})
+            yield _sse({"type": "done", "active_agent": "safety", "crisis": True,
+                        "suppress_image": False, "user_input": transcript})
+        return Response(crisis_gen(), mimetype="text/event-stream",
+                        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
     # Semantic endpointing — wait for more audio if the transcript looks
     # incomplete. NAO listens for `{"type": "wait"}` and re-records.
     if semantic_endpoint.USE_SEMANTIC_ENDPOINT and not semantic_endpoint.is_complete_thought(transcript):
@@ -584,20 +635,14 @@ def stream_turn():
         flush=True,
     )
 
-    crisis = safety.crisis_check(transcript)
     consent = session.get_camera_consent(username)
     image_b64 = base64.b64encode(image.read()).decode("ascii") if image and consent else None
 
     use_true_streaming = (config.SAGE_TOPOLOGY or "passthrough").strip().lower() == "passthrough"
 
     def generate():
-        if crisis.positive:
-            yield _sse({"type": "sentence", "text": safety.HOTLINE_REPLY})
-            yield _sse({"type": "action", "action": {"name": "change_eye_color", "args": {"color": "white"}}})
-            yield _sse({"type": "done", "active_agent": "safety", "crisis": True,
-                        "suppress_image": False, "user_input": transcript})
-            return
-
+        # Crisis path already returned above; we only reach generate() on a
+        # clean, complete transcript that needs an agent run.
         agent = pick_initial_agent(username, hint)
         sess = session.get_or_create_session(username)
         ctx = {

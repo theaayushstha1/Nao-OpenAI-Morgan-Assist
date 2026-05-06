@@ -19,6 +19,11 @@ from utils.speech import expressive_say, time_of_day_greeting
 _DEFAULT_TIMEOUT = 45
 
 
+def _auth_headers():
+    """Return X-NAO-Secret header dict (empty when OPEN mode)."""
+    return {"X-NAO-Secret": config.NAO_SHARED_SECRET} if config.NAO_SHARED_SECRET else {}
+
+
 def _post(wav_path, img_path, username, hint, end_session=False):
     url = "http://{0}:{1}/turn".format(config.SERVER_IP, config.SERVER_PORT)
     files = {}
@@ -32,7 +37,8 @@ def _post(wav_path, img_path, username, hint, end_session=False):
     if end_session:
         data["end_session"] = "true"
     try:
-        r = requests.post(url, files=files, data=data, timeout=_DEFAULT_TIMEOUT)
+        r = requests.post(url, files=files, data=data,
+                          headers=_auth_headers(), timeout=_DEFAULT_TIMEOUT)
         return r.json() if r.status_code == 200 else None
     finally:
         for f in files.values():
@@ -287,6 +293,7 @@ def run_streaming(qi_session, initial_hint=None):
                 requests.post(
                     "http://{0}:{1}/turn".format(config.SERVER_IP, config.SERVER_PORT),
                     data={"username": username, "end_session": "true"},
+                    headers=_auth_headers(),
                     timeout=10,
                 )
             except Exception:

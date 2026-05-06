@@ -77,6 +77,15 @@ class BargeMonitor(object):
             self.tts.stopAll()
         except Exception:
             pass
+        # ALTextToSpeech.stopAll only kills onboard TTS. Cloned-voice MP3
+        # playback runs through ALAudioPlayer, which has its own stopAll.
+        # Without this, head touch silences NAO's voice but the user's
+        # cloned reply keeps playing for another 1-2 seconds.
+        try:
+            if _player_proxy[0] is not None:
+                _player_proxy[0].stopAll()
+        except Exception:
+            pass
 
     def _run(self):
         started = time.time()
@@ -118,6 +127,12 @@ def consume(sse_url, files, data, tts, on_action, on_done, timeout=120,
     Returns the final info dict (also passed to on_done).
     """
     headers = {"Accept": "text/event-stream"}
+    try:
+        import config as _cfg
+        if getattr(_cfg, "NAO_SHARED_SECRET", ""):
+            headers["X-NAO-Secret"] = _cfg.NAO_SHARED_SECRET
+    except Exception:
+        pass
     resp = requests.post(sse_url, files=files, data=data, headers=headers,
                          stream=True, timeout=timeout)
     if resp.status_code != 200:
