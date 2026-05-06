@@ -30,8 +30,13 @@ def ask_name(tts, nao_ip, server_url, session, record_audio_func):
                 expressive_say(tts, random_phrase("ask_name_retry"), "warm")
             continue
         try:
+            try:
+                import config as _cfg
+                _hdr = {"X-NAO-Secret": _cfg.NAO_SHARED_SECRET} if getattr(_cfg, "NAO_SHARED_SECRET", "") else {}
+            except Exception:
+                _hdr = {}
             with open(wav, 'rb') as f:
-                r = requests.post(server_url + "/turn", files={"audio": f}, data={"username": "guest"}, timeout=30)
+                r = requests.post(server_url + "/turn", files={"audio": f}, data={"username": "guest"}, headers=_hdr, timeout=30)
             spoken = (r.json() or {}).get("user_input", "")
             print("[Heard]: '{}'".format(spoken))
             name = extract_name(spoken)

@@ -19,6 +19,11 @@ MODEL_PROVIDER = os.environ.get("MODEL_PROVIDER", "openai")
 SERVER_IP = os.environ.get("SERVER_IP", "172.20.95.118")
 SERVER_PORT = int(os.environ.get("SERVER_PORT", "5050"))
 
+# Shared secret sent as X-NAO-Secret on every HTTP request and as
+# {"secret": "..."} on the /chat_realtime WebSocket handshake. Must match
+# the server's NAO_SHARED_SECRET. Empty = OPEN mode (server warns at boot).
+NAO_SHARED_SECRET = os.environ.get("NAO_SHARED_SECRET", "")
+
 # Realtime chat/morgan VAD tuning. NAO is a far-field robot mic, so the
 # threshold is lower than the OpenAI default 0.5.
 REALTIME_VAD_THRESHOLD = float(os.environ.get("REALTIME_VAD_THRESHOLD", "0.55"))

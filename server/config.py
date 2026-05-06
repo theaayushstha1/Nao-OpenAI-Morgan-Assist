@@ -42,6 +42,11 @@ ELEVENLABS_VOICE_ID = os.environ.get("ELEVENLABS_VOICE_ID", "")
 ELEVENLABS_MODEL_ID = os.environ.get("ELEVENLABS_MODEL_ID", "eleven_turbo_v2_5")
 USE_ELEVENLABS = bool(ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID)
 
+# Shared secret required on every HTTP/WS request (X-NAO-Secret header, or
+# {"secret": "..."} in the realtime WebSocket handshake). Empty string =
+# OPEN mode for local dev — server logs a warning at startup.
+NAO_SHARED_SECRET = os.environ.get("NAO_SHARED_SECRET", "")
+
 # Vertex AI Search (Morgan State CS knowledge base)
 GOOGLE_CLOUD_PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT", "csnavigator-vertex-ai")
 VERTEX_LOCATION = os.environ.get("VERTEX_LOCATION", "us")

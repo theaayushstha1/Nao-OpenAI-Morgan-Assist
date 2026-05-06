@@ -173,21 +173,42 @@ def init_app(app):
     def chat_realtime(client_ws):
         username = "guest"
         try:
-            # NAO sends a tiny JSON header as the first message so we know who
-            # this is and can stamp logs. Optional.
+            # First message MUST be a JSON header carrying the shared secret
+            # when one is configured. Without it the proxy refuses to open
+            # the OpenAI socket — otherwise anyone on the LAN can drain the
+            # API key. The header may also include {"username": "..."}.
+            expected = config.NAO_SHARED_SECRET
             try:
                 first = client_ws.receive(timeout=2)
-                if first:
-                    try:
-                        meta = json.loads(first)
-                        username = meta.get("username", "guest")
-                    except Exception:
-                        # First message wasn't a header — push it through.
-                        _open_and_proxy(client_ws, first, username)
-                        return
             except Exception:
-                pass
-
+                first = None
+            if expected:
+                if not first:
+                    try: client_ws.close()
+                    except Exception: pass
+                    return
+                try:
+                    meta = json.loads(first)
+                except Exception:
+                    try: client_ws.close()
+                    except Exception: pass
+                    return
+                if meta.get("secret") != expected:
+                    try: client_ws.close()
+                    except Exception: pass
+                    return
+                username = meta.get("username", "guest")
+                _open_and_proxy(client_ws, None, username)
+                return
+            # OPEN mode (no secret configured): preserve the legacy header-
+            # or-passthrough behavior so dev workflows keep working.
+            if first:
+                try:
+                    meta = json.loads(first)
+                    username = meta.get("username", "guest")
+                except Exception:
+                    _open_and_proxy(client_ws, first, username)
+                    return
             _open_and_proxy(client_ws, None, username)
         except Exception as e:
             logger.exception("realtime route error: %s", e)

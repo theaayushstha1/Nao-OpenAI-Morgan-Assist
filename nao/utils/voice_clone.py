@@ -50,8 +50,9 @@ def clone_say(tts_proxy, text, fallback_voice=True):
         return
     text = text.strip()
     url = "http://{0}:{1}/tts".format(config.SERVER_IP, config.SERVER_PORT)
+    headers = {"X-NAO-Secret": config.NAO_SHARED_SECRET} if config.NAO_SHARED_SECRET else {}
     try:
-        r = requests.post(url, data={"text": text}, timeout=10)
+        r = requests.post(url, data={"text": text}, headers=headers, timeout=10)
         if r.status_code == 200 and r.content:
             _ensure_dir()
             _counter[0] = (_counter[0] + 1) % 1000

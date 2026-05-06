@@ -7,6 +7,18 @@ from typing import Iterable, Iterator
 # Common abbreviations that shouldn't end a sentence.
 _ABBR = {"dr.", "mr.", "mrs.", "ms.", "prof.", "e.g.", "i.e.", "etc.", "vs.", "st.", "no."}
 
+# Pacing tags the therapy agents may append (e.g. "tts_pacing: slow").
+# Strip them before TTS so the robot doesn't literally read them aloud.
+_PACING_TAG = re.compile(r"(?im)^\s*tts_pacing\s*:\s*\w+\s*$")
+_PACING_INLINE = re.compile(r"(?i)\btts_pacing\s*:\s*\w+\b")
+
+
+def strip_pacing_tags(text: str) -> str:
+    """Remove tts_pacing markers from a reply so they aren't spoken."""
+    text = _PACING_TAG.sub("", text)
+    text = _PACING_INLINE.sub("", text)
+    return text
+
 
 def _is_abbreviation_end(text: str) -> bool:
     """Return True if text ends with a known abbreviation (case-insensitive)."""
@@ -28,7 +40,7 @@ def iter_sentences(chunks: Iterable[str]) -> Iterator[str]:
     """
     buf = ""
     for chunk in chunks:
-        buf += chunk
+        buf += strip_pacing_tags(chunk)
         while True:
             m = re.search(r"[.!?](\s|$)", buf)
             if not m:
@@ -61,4 +73,6 @@ def iter_sentences(chunks: Iterable[str]) -> Iterator[str]:
                 yield candidate
                 buf = buf[m.end():].lstrip()
     if buf.strip():
-        yield buf.strip()
+        out = strip_pacing_tags(buf).strip()
+        if out:
+            yield out

@@ -2,12 +2,11 @@
 from __future__ import annotations
 
 import json
-from typing import Any
 
 from openai import OpenAI
 
 from agents import RunContextWrapper, function_tool
-from server import config, session
+from server import config, memory, session
 
 _client = OpenAI(api_key=config.OPENAI_API_KEY)
 
