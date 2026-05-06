@@ -333,6 +333,13 @@ def _reject_silence_sse(username: str, reason: str, transcript: str):
 
 
 def _transcribe(path: str) -> str:
+    if config.USE_DEEPGRAM:
+        from server import deepgram_asr
+        text = deepgram_asr.transcribe(path)
+        if text:
+            return text
+        # Empty/failure -> fall through to Whisper so we never silently drop a turn.
+        print("[transcribe] deepgram returned empty; falling back to whisper", flush=True)
     with open(path, "rb") as f:
         resp = _client.audio.transcriptions.create(
             model=config.WHISPER_MODEL, file=f,

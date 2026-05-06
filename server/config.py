@@ -21,6 +21,13 @@ GROUNDING_MODEL = os.environ.get("GROUNDING_MODEL", "gpt-4.1-mini")
 NANO_MAX_TOKENS = int(os.environ.get("NANO_MAX_TOKENS", "200"))
 MINI_MAX_TOKENS = int(os.environ.get("MINI_MAX_TOKENS", "400"))
 WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "gpt-4o-mini-transcribe")
+
+# Deepgram Nova-2 streaming/prerecorded ASR. When USE_DEEPGRAM is true and the
+# API key is present, /turn and /stream_turn use Deepgram instead of Whisper.
+DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY", "")
+DEEPGRAM_MODEL = os.environ.get("DEEPGRAM_MODEL", "nova-2")
+DEEPGRAM_LANGUAGE = os.environ.get("DEEPGRAM_LANGUAGE", "en-US")
+USE_DEEPGRAM = bool(DEEPGRAM_API_KEY) and os.environ.get("USE_DEEPGRAM", "1") == "1"
 REALTIME_MODEL = os.environ.get("REALTIME_MODEL", "gpt-realtime")
 REALTIME_VAD_THRESHOLD = float(os.environ.get("REALTIME_VAD_THRESHOLD", "0.30"))
 REALTIME_VAD_PREFIX_MS = int(os.environ.get("REALTIME_VAD_PREFIX_MS", "500"))
