@@ -431,9 +431,18 @@ def run(qi_session, initial_hint=None):
     except Exception:
         pass
 
-    # Send minimal session header — server uses this for logs only.
+    # First frame must carry the shared secret when the server enforces it,
+    # otherwise the proxy closes the socket before opening the OpenAI side.
+    # See server/realtime_proxy.py:_require_shared_secret.
+    _hdr = {"username": "guest"}
     try:
-        _send_json(conn, {"username": "guest"})
+        import config as _cfg
+        if getattr(_cfg, "NAO_SHARED_SECRET", ""):
+            _hdr["secret"] = _cfg.NAO_SHARED_SECRET
+    except Exception:
+        pass
+    try:
+        _send_json(conn, _hdr)
         print("[realtime] header sent")
     except Exception as e:
         print("[realtime] header send failed:", e)
