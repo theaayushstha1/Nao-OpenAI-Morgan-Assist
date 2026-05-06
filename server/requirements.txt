@@ -10,6 +10,10 @@ requests==2.32.3
 # before paying for a transcription call. _has_voice() falls back to permissive
 # if this is missing, so it's safe to omit, but recommended.
 webrtcvad==2.0.10
+# Silero VAD — neural endpoint detector that runs after webrtcvad to catch
+# noise webrtcvad lets through. Tiny (~1.5MB) torch model, CPU-only.
+silero-vad>=5.1.2
+torch>=2.2.0
 # WebSocket support for the OpenAI Realtime API proxy.
 flask-sock==0.7.0
 websocket-client==1.8.0
