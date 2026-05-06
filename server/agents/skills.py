@@ -1,6 +1,7 @@
 """Skills specialist — time, weather, timers, todos."""
 from agents import Agent, ModelSettings
 from server import config
+from server.agents._memory_inject import with_memory_preamble
 from server.tools.skills_tools import (
     get_time, get_date, get_weather_baltimore,
     set_timer, add_todo, list_todos, complete_todo,
@@ -13,7 +14,7 @@ SYSTEM = (
 
 skills_agent = Agent(
     name="skills",
-    instructions=SYSTEM,
+    instructions=with_memory_preamble(SYSTEM),
     model=config.SKILLS_MODEL,
     model_settings=ModelSettings(max_tokens=config.NANO_MAX_TOKENS),
     tools=[get_time, get_date, get_weather_baltimore,
