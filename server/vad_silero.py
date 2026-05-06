@@ -53,26 +53,23 @@ def _try_load() -> bool:
     try:
         import torch  # type: ignore
         _torch = torch
-        # Prefer the standalone `silero-vad` pip package (newer, simpler).
-        # Fall back to torch.hub if not installed.
-        try:
-            from silero_vad import load_silero_vad, get_speech_timestamps  # type: ignore
-            _model = load_silero_vad()
-            _get_speech_timestamps = get_speech_timestamps
-        except Exception:
-            model, utils = torch.hub.load(
-                repo_or_dir="snakers4/silero-vad",
-                model="silero_vad",
-                trust_repo=True,
-            )
-            _model = model
-            # utils is a tuple: (get_speech_timestamps, save_audio,
-            #                    read_audio, VADIterator, collect_chunks)
-            _get_speech_timestamps = utils[0]
+        # Use the standalone `silero-vad` pip package, period. The previous
+        # torch.hub.load fallback pulled `snakers4/silero-vad` HEAD with
+        # trust_repo=True at runtime — supply-chain risk if that repo is
+        # ever compromised. The pip package is pinned in requirements.txt
+        # and ships the same model weights, so dropping the fallback
+        # reduces attack surface without losing capability.
+        from silero_vad import load_silero_vad, get_speech_timestamps  # type: ignore
+        _model = load_silero_vad()
+        _get_speech_timestamps = get_speech_timestamps
         return True
     except Exception as e:  # noqa: BLE001
         _load_error = repr(e)
-        log.warning("silero VAD failed to load: %s", _load_error)
+        log.warning(
+            "silero VAD failed to load: %s. Install `silero-vad` from "
+            "requirements.txt; the unsafe torch.hub fallback was removed.",
+            _load_error,
+        )
         return False
 
 
