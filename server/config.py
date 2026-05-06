@@ -6,12 +6,20 @@ load_dotenv()
 
 # OpenAI
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
-ROUTER_MODEL = os.environ.get("ROUTER_MODEL", "gpt-4o-mini")
-CHAT_MODEL = os.environ.get("CHAT_MODEL", "gpt-4o-mini")
-CHATBOT_MODEL = os.environ.get("CHATBOT_MODEL", "gpt-4o-mini")
-THERAPIST_MODEL = os.environ.get("THERAPIST_MODEL", "gpt-4o-mini")
-SKILLS_MODEL = os.environ.get("SKILLS_MODEL", "gpt-4o-mini")
-CRISIS_MODEL = os.environ.get("CRISIS_MODEL", "gpt-4o-mini")
+ROUTER_MODEL = os.environ.get("ROUTER_MODEL", "gpt-4.1-nano")
+CHAT_MODEL = os.environ.get("CHAT_MODEL", "gpt-4.1-nano")
+CHATBOT_MODEL = os.environ.get("CHATBOT_MODEL", "gpt-4.1-mini")
+THERAPIST_MODEL = os.environ.get("THERAPIST_MODEL", "gpt-4.1-mini")
+SKILLS_MODEL = os.environ.get("SKILLS_MODEL", "gpt-4.1-nano")
+CRISIS_MODEL = os.environ.get("CRISIS_MODEL", "gpt-4.1")
+CBT_MODEL = os.environ.get("CBT_MODEL", "gpt-4.1-mini")
+GROUNDING_MODEL = os.environ.get("GROUNDING_MODEL", "gpt-4.1-mini")
+
+# Per-agent max output tokens. Nano agents are capped tightly to keep replies
+# snappy (under 2 short sentences). Mini agents get a bit more headroom for
+# clinical reasoning / RAG synthesis but still stay terse.
+NANO_MAX_TOKENS = int(os.environ.get("NANO_MAX_TOKENS", "200"))
+MINI_MAX_TOKENS = int(os.environ.get("MINI_MAX_TOKENS", "400"))
 WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "gpt-4o-mini-transcribe")
 REALTIME_MODEL = os.environ.get("REALTIME_MODEL", "gpt-realtime")
 REALTIME_VAD_THRESHOLD = float(os.environ.get("REALTIME_VAD_THRESHOLD", "0.30"))

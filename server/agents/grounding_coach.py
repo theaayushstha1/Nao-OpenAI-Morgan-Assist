@@ -1,5 +1,5 @@
 """Grounding coach — runs one grounding exercise on therapist handoff."""
-from agents import Agent
+from agents import Agent, ModelSettings
 from server import config
 from server.tools.emotion import observe_face
 
@@ -17,6 +17,7 @@ SYSTEM = (
 grounding_coach_agent = Agent(
     name="grounding_coach",
     instructions=SYSTEM,
-    model=config.THERAPIST_MODEL,
+    model=config.GROUNDING_MODEL,
+    model_settings=ModelSettings(max_tokens=config.MINI_MAX_TOKENS),
     tools=[observe_face],
 )

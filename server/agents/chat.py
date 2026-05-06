@@ -1,5 +1,5 @@
 """Chat specialist — open conversation with NAO action tools."""
-from agents import Agent
+from agents import Agent, ModelSettings
 from server import config
 from server.tools.nao_actions import CHAT_ACTIONS
 
@@ -14,5 +14,6 @@ chat_agent = Agent(
     name="chat",
     instructions=SYSTEM,
     model=config.CHAT_MODEL,
+    model_settings=ModelSettings(max_tokens=config.NANO_MAX_TOKENS),
     tools=CHAT_ACTIONS,
 )
