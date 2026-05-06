@@ -39,6 +39,9 @@ def _ensure_active_session(username: str, hint: str | None) -> int:
 def _close_active_session(username: str) -> None:
     """End the active session and kick off async summarization."""
     fid = (username or "").strip().lower()
+    # Drop any buffered partial — the user is leaving, no point dragging
+    # an unfinished sentence into the next session.
+    _PARTIAL_BUFFER.pop(fid, None)
     sid = _ACTIVE_SESSIONS.pop(fid, None)
     if not sid:
         return
@@ -307,6 +310,29 @@ def _looks_like_hallucination(text: str) -> bool:
 # new transcript against the last reply and reject if too similar.
 _LAST_REPLY: dict[str, str] = {}
 
+# Per-username partial-transcript buffer. When the semantic endpoint says the
+# user trailed off, we stash the partial here; the next clip's transcript is
+# prepended with this so the agent eventually sees the complete thought.
+# Cleared once a complete-thought turn runs or on session end.
+_PARTIAL_BUFFER: dict[str, str] = {}
+_PARTIAL_MAX_CHARS = 600  # ~5 sentences; cap to bound prompt size + costs
+
+
+def _consume_partial(username: str, current: str) -> str:
+    """Prepend any buffered partial to the current transcript and clear it."""
+    head = _PARTIAL_BUFFER.pop(username, "")
+    if not head:
+        return current
+    joined = (head + " " + current).strip()
+    return joined[-_PARTIAL_MAX_CHARS:]
+
+
+def _stash_partial(username: str, text: str) -> None:
+    """Stash a partial transcript so the next turn can resume it."""
+    if not text or not text.strip():
+        return
+    _PARTIAL_BUFFER[username] = text.strip()[-_PARTIAL_MAX_CHARS:]
+
 
 def _norm(text: str) -> str:
     import re
@@ -510,6 +536,10 @@ def turn():
     finally:
         os.unlink(wav_path)
 
+    # Stitch any buffered partial from a prior wait turn so the agent
+    # eventually sees the complete thought.
+    transcript = _consume_partial(username, transcript)
+
     reason = _transcript_reject_reason(username, transcript)
     if reason:
         return _reject_silence_json(username, reason, transcript)
@@ -530,6 +560,7 @@ def turn():
     # Semantic endpointing — if the user trailed off mid-sentence, ask NAO
     # to record more audio and resend instead of running the agent.
     if semantic_endpoint.USE_SEMANTIC_ENDPOINT and not semantic_endpoint.is_complete_thought(transcript):
+        _stash_partial(username, transcript)
         print(
             "[transcript wait] username={0!r} text={1!r}".format(username, transcript),
             flush=True,
@@ -595,6 +626,8 @@ def stream_turn():
     finally:
         os.unlink(wav_path)
 
+    transcript = _consume_partial(username, transcript)
+
     reason = _transcript_reject_reason(username, transcript)
     if reason:
         return _reject_silence_sse(username, reason, transcript)
@@ -615,6 +648,7 @@ def stream_turn():
     # Semantic endpointing — wait for more audio if the transcript looks
     # incomplete. NAO listens for `{"type": "wait"}` and re-records.
     if semantic_endpoint.USE_SEMANTIC_ENDPOINT and not semantic_endpoint.is_complete_thought(transcript):
+        _stash_partial(username, transcript)
         print(
             "[transcript wait] username={0!r} text={1!r}".format(username, transcript),
             flush=True,

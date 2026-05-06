@@ -138,6 +138,54 @@ def test_iter_sentences_strips_pacing_tag():
     assert "we can pause" in joined.lower()
 
 
+# ───────── partial-transcript accumulation ─────────
+
+def test_partial_buffer_accumulates_across_wait_turns(open_client):
+    """Two wait turns should concatenate so the third clip carries the
+    full thought to the agent rather than just the latest fragment."""
+    fake_wav = _wav_bytes()
+    transcripts = iter(["i was thinking", "about studying tonight"])
+
+    def _next_transcript(_path):
+        return next(transcripts)
+
+    # First call: incomplete -> wait, partial stashed.
+    with patch("server.server._validate_wav", return_value=True), \
+         patch("server.server._has_voice", return_value=True), \
+         patch("server.server._transcribe", side_effect=_next_transcript), \
+         patch("server.semantic_endpoint.is_complete_thought", return_value=False), \
+         patch("server.semantic_endpoint.USE_SEMANTIC_ENDPOINT", True):
+        r1 = open_client.post("/turn", data={
+            "audio": (io.BytesIO(fake_wav), "sample.wav"),
+            "username": "buf-user",
+        }, content_type="multipart/form-data")
+    assert r1.status_code == 200
+    assert r1.get_json()["active_agent"] == "wait"
+
+    # Second call: complete -> agent runs and the buffered partial is
+    # prepended. We patch _run_agent so we can assert it received both
+    # halves stitched together.
+    seen = {}
+
+    def _fake_run(username, hint, transcript, image_b64):
+        seen["transcript"] = transcript
+        return ("ok", "chat", [], False)
+
+    with patch("server.server._validate_wav", return_value=True), \
+         patch("server.server._has_voice", return_value=True), \
+         patch("server.server._transcribe", side_effect=_next_transcript), \
+         patch("server.semantic_endpoint.is_complete_thought", return_value=True), \
+         patch("server.semantic_endpoint.USE_SEMANTIC_ENDPOINT", True), \
+         patch("server.server._run_agent", side_effect=_fake_run):
+        r2 = open_client.post("/turn", data={
+            "audio": (io.BytesIO(fake_wav), "sample.wav"),
+            "username": "buf-user",
+        }, content_type="multipart/form-data")
+    assert r2.status_code == 200
+    assert "i was thinking" in seen.get("transcript", "")
+    assert "about studying tonight" in seen.get("transcript", "")
+
+
 # ───────── memory preamble sandbox ─────────
 
 def test_preamble_sandbox_quarantines_user_content(tmp_path, monkeypatch):
