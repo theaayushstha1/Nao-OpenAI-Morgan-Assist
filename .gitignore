@@ -34,3 +34,9 @@ logs/
 server/nao.db-shm
 server/nao.db-wal
 .claude/
+
+# Phase 10.5 simulator: timestamped per-run proof reports. Treat as
+# build artifacts. The sample_proof.{md,json} pair IS committed as
+# a documentation example of what the report looks like.
+sim/reports/proof_*.json
+sim/reports/proof_*.md

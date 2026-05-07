@@ -64,8 +64,13 @@ def load(name: str) -> ModuleType:
     return mod
 
 
-def _run_one(name: str) -> int:
-    """Run a single scenario, write its CSV, print the report. Returns exit code."""
+def _run_one(name: str, *, collect: bool = False) -> tuple[int, Any]:
+    """Run a single scenario, write its CSV, print the report.
+
+    Returns ``(exit_code, ProofRecord_or_None)``. The ProofRecord is only
+    populated when ``collect=True``; it captures prompt/agent/reply/timings
+    so a downstream caller can build a summary report.
+    """
     # Import locally so module-import doesn't drag in the driver during a
     # bare `python -m sim.scenarios` listing call.
     try:
@@ -73,31 +78,42 @@ def _run_one(name: str) -> int:
         from sim.telemetry import Telemetry
     except Exception as e:  # pragma: no cover — runtime missing-dep path
         print(f"sim.scenarios: cannot run scenarios — {e!r}")
-        return 2
+        return 2, None
 
     try:
         mod = load(name)
     except (ModuleNotFoundError, AttributeError, ValueError) as e:
         print(f"sim.scenarios: load({name!r}) failed — {e!r}")
-        return 2
+        return 2, None
 
     telemetry = Telemetry()
     driver = Driver()
     print(f"=== running scenario: {name} ===")
+    started = _datetime_utcnow()
+    t_start = _monotonic()
+    result: dict[str, Any] | None = None
+    crashed_outcome: str | None = None
     try:
         result = mod.run(driver, telemetry)
     except DriverUnavailable as e:
         print(f"SKIPPED ({name}): {e}")
-        return 0
+        crashed_outcome = "skipped"
+        result = {"scenario": name, "outcome": "skipped",
+                  "details": {"reason": str(e)},
+                  "telemetry_rows": telemetry.rows}
     except Exception as e:  # noqa: BLE001
         _log.exception("scenario crashed: %s", name)
         print(f"FAIL ({name}): unhandled exception {e!r}")
-        return 1
+        crashed_outcome = "fail"
+        result = {"scenario": name, "outcome": "fail",
+                  "details": {"reason": repr(e)},
+                  "telemetry_rows": telemetry.rows}
     finally:
         try:
             driver.close()
         except Exception:
             pass
+    duration_ms = (_monotonic() - t_start) * 1000.0
 
     outcome = (result or {}).get("outcome", "unknown")
     details = (result or {}).get("details", {})
@@ -108,7 +124,25 @@ def _run_one(name: str) -> int:
     print()
     print(telemetry.report())
     print(f"\nlatency csv: {telemetry.csv_path}")
-    return 0 if outcome == "ok" else 1
+
+    record = None
+    if collect:
+        try:
+            from sim.proof_report import collect_record
+            record = collect_record(
+                scenario=name,
+                result=result,
+                telemetry_rows=telemetry.rows,
+                started_at=started,
+                duration_ms=duration_ms,
+            )
+        except Exception as e:
+            _log.warning("proof_report collect failed for %s: %r", name, e)
+
+    rc = 0 if outcome in ("ok", "skipped") else 1
+    if crashed_outcome == "skipped":
+        rc = 0
+    return rc, record
 
 
 def _main(argv: list[str]) -> int:
@@ -123,17 +157,65 @@ def _main(argv: list[str]) -> int:
         print()
         print("Run one:        python -m sim.scenarios <name>")
         print("Run them all:   python -m sim.scenarios all")
+        print("Run + proof:    python -m sim.scenarios all --report")
         return 0
 
     target = argv[1]
+    args = argv[2:]
+    want_report = ("--report" in args) or ("-r" in args)
+
     if target in {"all", "*"}:
         rc = 0
+        records: list[Any] = []
         for n in list_scenarios():
-            r = _run_one(n)
+            r, rec = _run_one(n, collect=want_report)
             if r != 0:
                 rc = r
+            if rec is not None:
+                records.append(rec)
+
+        if want_report and records:
+            try:
+                from sim.proof_report import (
+                    format_table, write_proof_files,
+                )
+            except Exception as e:
+                print(f"\nproof report unavailable — {e!r}")
+                return rc
+            print()
+            print("=" * 78)
+            print("PROOF REPORT")
+            print("=" * 78)
+            print(format_table(records))
+            paths = write_proof_files(records)
+            print()
+            print("proof JSON:     {}".format(paths["json"]))
+            print("proof Markdown: {}".format(paths["markdown"]))
         return rc
-    return _run_one(target)
+
+    rc, rec = _run_one(target, collect=want_report)
+    if want_report and rec is not None:
+        try:
+            from sim.proof_report import format_table, write_proof_files
+            print()
+            print(format_table([rec]))
+            paths = write_proof_files([rec])
+            print()
+            print("proof JSON:     {}".format(paths["json"]))
+            print("proof Markdown: {}".format(paths["markdown"]))
+        except Exception as e:
+            print(f"\nproof report write failed — {e!r}")
+    return rc
+
+
+# Imports kept down here so the bare ``list_scenarios()`` path stays
+# import-cheap for callers that just want to enumerate.
+from datetime import datetime as _datetime
+from time import monotonic as _monotonic
+
+
+def _datetime_utcnow():
+    return _datetime.utcnow()
 
 
 __all__ = ["list_scenarios", "load"]
