@@ -477,7 +477,7 @@ async def run_agent_streamed(
                 "actions": actions, "suppress_image": suppress}
         return
 
-    agent = pick_initial_agent(username, hint)
+    agent = pick_initial_agent(username, hint, transcript)
     sess = session.get_or_create_session(username)
     ctx = {
         "username": username,
@@ -539,7 +539,7 @@ def run_agent(username: str, hint: str | None, transcript: str,
     to call ``observe_face`` itself, so the "skipped tool but said 'I can
     see...'" hallucination path is closed.
     """
-    agent = pick_initial_agent(username, hint)
+    agent = pick_initial_agent(username, hint, transcript)
     sess = session.get_or_create_session(username)
     ctx = {
         "username": username,

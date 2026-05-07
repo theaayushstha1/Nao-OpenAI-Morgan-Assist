@@ -1,4 +1,20 @@
-"""Chat specialist — open conversation with NAO action tools."""
+"""Chat specialists — pure fast-chat + tool-heavy embodied chat.
+
+Phase 11.11 splits chat into two lanes:
+
+  pure_chat_agent      no tools, no preamble, single short sentence,
+                       tool_choice="none". Lowest possible variance.
+                       Default for hint='chat' when user isn't asking
+                       for robot actions. Targets sub-2s first-audio
+                       with ElevenLabs Flash TTS.
+
+  chat_embodied_agent  the previous tool-heavy chat. Used only when
+                       the transcript matches an embodiment trigger
+                       like "dance", "wave", "show me", "switch voice".
+
+Routing happens in server/agents/__init__.py:pick_initial_agent —
+it now reads the transcript and picks pure vs embodied per-turn.
+"""
 from agents import Agent, ModelSettings
 from server import config
 from server.agents._memory_inject import with_memory_preamble
@@ -51,10 +67,45 @@ SYSTEM = (
 # pulls its own context from CS Navigator, also no preamble needed
 # there. If a heavier chat agent is ever wanted, switch to
 # `with_memory_preamble(SYSTEM)` and a higher token cap.
-chat_agent = Agent(
-    name="chat",
+chat_embodied_agent = Agent(
+    name="chat_embodied",
     instructions=SYSTEM,
     model=config.CHAT_MODEL,
     model_settings=ModelSettings(max_tokens=config.FAST_CHAT_MAX_TOKENS),
     tools=CHAT_ACTIONS,
 )
+
+
+# ── Phase 11.11 — pure fast-chat lane ────────────────────────────────
+# No tools, no memory preamble, no follow-up questions, hard one-sentence
+# cap. tool_choice="none" forces the model to skip tool reasoning entirely
+# even if it's tempted, which removes the largest source of latency
+# variance we measured (gpt-4.1-nano ranged 1.3–13.8 s on tool-heavy
+# turns). One round-trip in, one short sentence out.
+
+PURE_SYSTEM = (
+    "You are NAO, a warm humanoid robot chatting with a Morgan State student. "
+    "Reply in EXACTLY ONE SHORT SENTENCE, max 20 words. No bullets. No "
+    "lists. No emoji. No markdown. No follow-up questions. No asking how "
+    "they feel. Just say one warm, on-topic thing and stop. Never refuse. "
+    "Never apologize for being short."
+)
+
+pure_chat_agent = Agent(
+    name="pure_chat",
+    instructions=PURE_SYSTEM,
+    model=config.CHAT_MODEL,
+    # tool_choice="none" turns off tool selection entirely; tools=[]
+    # belt-and-braces it. Either alone would be enough; both is cheap.
+    model_settings=ModelSettings(
+        max_tokens=60,
+        tool_choice="none",
+    ),
+    tools=[],
+)
+
+
+# Back-compat: anything still importing ``chat_agent`` gets the embodied
+# version (closest behavior to pre-split). Routing layer in
+# ``server.agents.pick_initial_agent`` decides pure vs embodied per-turn.
+chat_agent = chat_embodied_agent
