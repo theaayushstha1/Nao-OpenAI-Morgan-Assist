@@ -276,6 +276,196 @@ def _resolve_echo_drop_counter() -> Any | None:
     return _echo_cooldown_drops_total
 
 
+# ───────── wake_event counter (Phase 3) ─────────
+#
+# `nao_wake_events_total{gate}` counts AWARE→ENGAGED transitions broken down
+# by which engagement gate fired (mutual_gaze, proximity, sustained_face,
+# speech, keyword). Defined on `PROM_REGISTRY` if `server.metrics` hasn't
+# whitelisted it yet (mirrors the echo-cooldown counter pattern).
+
+_wake_events_total: Any | None = None
+
+
+def _resolve_wake_events_counter() -> Any | None:
+    """Lazily resolve the `wake_events_total{gate}` counter.
+
+    Prefers the published metric if `server.metrics` already exposes it;
+    otherwise registers a private Counter on the local registry; otherwise
+    returns a truly local counter so increments are no-ops at the test
+    layer when prometheus_client isn't installed.
+    """
+    global _wake_events_total
+    if _wake_events_total is not None:
+        return _wake_events_total
+    if _metrics is not None:
+        existing = getattr(_metrics, "wake_events_total", None)
+        if existing is not None:
+            _wake_events_total = existing
+            return existing
+    try:
+        from prometheus_client import Counter
+        registry = PROM_REGISTRY
+        if registry is not None:
+            _wake_events_total = Counter(
+                "nao_wake_events_total",
+                "Wake events received by gate type (Phase 3 hybrid wake)",
+                ["gate"],
+                registry=registry,
+            )
+        else:
+            _wake_events_total = Counter(
+                "nao_wake_events_total",
+                "Wake events received by gate type (Phase 3 hybrid wake)",
+                ["gate"],
+            )
+    except Exception:  # noqa: BLE001 — prometheus_client may be missing
+        class _LocalLabeledCounter:
+            __slots__ = ("_n",)
+
+            def __init__(self) -> None:
+                self._n: dict[str, float] = {}
+
+            def labels(self, gate: str) -> "_LocalLabeledCounter._Bound":
+                return _LocalLabeledCounter._Bound(self, gate)
+
+            class _Bound:
+                __slots__ = ("_owner", "_gate")
+
+                def __init__(self, owner: "_LocalLabeledCounter", gate: str) -> None:
+                    self._owner = owner
+                    self._gate = gate
+
+                def inc(self, amount: float = 1.0) -> None:
+                    self._owner._n[self._gate] = (
+                        self._owner._n.get(self._gate, 0.0) + amount
+                    )
+
+        _wake_events_total = _LocalLabeledCounter()
+    return _wake_events_total
+
+
+# Per-session FSM tag tracked in a module-level dict keyed by ``session_id``.
+# Phase 3 only needs a coarse label ("listening" once a wake_event has been
+# greeted / acknowledged) so downstream phases can read it without us
+# expanding the `_Session` slot list. The dict is intentionally append-only
+# during a session's life and pruned on session_close.
+_SESSION_FSM_STATE: dict[str, str] = {}
+
+
+def _set_session_fsm_state(session_id: str, state: str) -> None:
+    if not session_id:
+        return
+    _SESSION_FSM_STATE[session_id] = state
+
+
+def _clear_session_fsm_state(session_id: str) -> None:
+    if not session_id:
+        return
+    _SESSION_FSM_STATE.pop(session_id, None)
+
+
+# Wake-greeting recency window — Phase 3 contract: resume the SQLiteSession
+# only when the same face_id was seen in the last 24 h. Configurable for
+# tests / ops; default per PRD §Phase 3.
+WAKE_RESUME_WINDOW_S = float(os.environ.get("WAKE_RESUME_WINDOW_S", str(24 * 3600)))
+
+
+def _lookup_returning_user(face_id: str) -> tuple[bool, str | None]:
+    """Inspect the `users` table (owned by `server.memory`) for a recent visit.
+
+    Returns ``(is_returning, display_name)``. ``is_returning`` is True iff a
+    row exists for ``face_id`` and ``updated_at`` is within
+    ``WAKE_RESUME_WINDOW_S``. We open a short-lived sqlite connection
+    directly on `config.SESSION_DB` rather than mutate `server.memory` —
+    `server/app_ws.py` is the only owned file in this slug.
+    """
+    fid = (face_id or "").strip().lower()
+    if not fid:
+        return False, None
+    try:
+        import sqlite3
+        conn = sqlite3.connect(config.SESSION_DB)
+        try:
+            row = conn.execute(
+                "SELECT display_name, updated_at FROM users WHERE face_id = ?",
+                (fid,),
+            ).fetchone()
+        finally:
+            conn.close()
+    except Exception as e:  # noqa: BLE001 — DB or schema absent
+        logger.warning(
+            "wake_user_lookup_failed",
+            face_id=fid, error=repr(e),
+        )
+        return False, None
+    if row is None:
+        return False, None
+    display_name, updated_at = row
+    try:
+        age_s = time.time() - float(updated_at or 0.0)
+    except (TypeError, ValueError):
+        age_s = float("inf")
+    is_returning = age_s <= WAKE_RESUME_WINDOW_S
+    return is_returning, (str(display_name) if display_name else None)
+
+
+def _last_recap_line(username: str) -> str | None:
+    """Best-effort one-line topic-continuity hint from the most recent recap.
+
+    Uses `server.session.load_recent_recaps` (existing public API) so we
+    don't reach into the DB ourselves for recap data. The returned line is
+    truncated to ~140 chars and stripped of leading/trailing punctuation
+    that would read awkwardly when appended after the welcome sentence.
+    """
+    if not username:
+        return None
+    try:
+        from server import session as _session
+        recaps = _session.load_recent_recaps(username, n=1)
+    except Exception as e:  # noqa: BLE001 — never break wake on a recap miss
+        logger.warning(
+            "wake_recap_lookup_failed", user=username, error=repr(e),
+        )
+        return None
+    if not recaps:
+        return None
+    body = (recaps[0] or "").strip()
+    if not body:
+        return None
+    # Take the first sentence-ish span (keep things to a single line).
+    first = re.split(r"(?<=[.!?])\s+", body, maxsplit=1)[0].strip()
+    if not first:
+        return None
+    if len(first) > 140:
+        first = first[:137].rstrip() + "..."
+    return first
+
+
+_RECAP_LEAD_STRIPPER = re.compile(
+    r"^(we\s+(?:talked|discussed|spoke|chatted)\s+about\s+|we\s+covered\s+|"
+    r"the\s+user\s+(?:talked|discussed|asked)\s+about\s+|"
+    r"discussed\s+|talked\s+about\s+|covered\s+)",
+    re.IGNORECASE,
+)
+
+
+def _build_returning_greeting(display_name: str | None,
+                              recap_line: str | None) -> str:
+    """Compose the spoken welcome-back greeting per Phase 3 contract."""
+    name = (display_name or "").strip() or "friend"
+    head = "Welcome back, {0}.".format(name)
+    if recap_line:
+        # Strip "We talked about ..." / "Talked about ..." style leads so the
+        # follow-on doesn't read "Last time we were talking about we talked
+        # about ...". Whatever survives is the actual subject.
+        tail = _RECAP_LEAD_STRIPPER.sub("", recap_line, count=1).strip()
+        # Trim trailing punctuation so the appended period reads cleanly.
+        tail = tail.rstrip(" .!?,;:")
+        if tail:
+            head += " Last time we were talking about {0}.".format(tail)
+    return head
+
+
 # ───────── self-echo guard state (Phase 2 strengthening) ─────────
 #
 # Per-username rolling window of the last 8 sentences passed to TTS, plus a
@@ -1230,6 +1420,178 @@ async def _ingest_frame(ws: WebSocket, sess: _Session,
     return True
 
 
+# ───────── wake_event handler (Phase 3) ─────────
+
+async def _handle_wake_event(ws: WebSocket, sess: _Session,
+                             data: dict[str, Any]) -> bool:
+    """Phase 3 server-wake-event handler.
+
+    Robot transitions AWARE→ENGAGED on its side and signals the server with
+    a `wake_event` control frame. We then:
+
+      1. Log + Prometheus-count by gate.
+      2. Persist a row to `safety_events` (one source of truth for all
+         identity-relevant signals — see PRD §Phase 3).
+      3. Decide returning vs new user from the `users` table; if returning
+         within ``WAKE_RESUME_WINDOW_S`` (default 24 h), bind the
+         SQLiteSession (via the existing `ensure_active_session` helper)
+         and synthesize a personalized greeting.
+      4. Emit one `audio_chunk` frame with the greeting (returning user
+         only). Arm the post-TTS cooldown so the greeting doesn't echo
+         back through STT.
+      5. Always finish with a `ready_to_listen` control frame and flip the
+         per-session FSM tag to ``listening``. New users skip the greeting
+         (deferred to Phase 8 onboarding).
+
+    The whole handler is wrapped in `_phase("wake_to_first_audio", ...)`
+    which falls back to a no-op timer when the metrics module hasn't
+    whitelisted the label yet — same defensive pattern as the EoU arbiter.
+    """
+    face_id_raw = data.get("face_id")
+    gate = str(data.get("gate") or "unknown")
+    try:
+        confidence = float(data.get("confidence") or 0.0)
+    except (TypeError, ValueError):
+        confidence = 0.0
+    try:
+        distance_m = float(data.get("distance_m") or 0.0)
+    except (TypeError, ValueError):
+        distance_m = 0.0
+    face_id = (str(face_id_raw).strip() if face_id_raw is not None else "")
+
+    phase_ms: dict[str, float] = {}
+    with _phase("wake_to_first_audio", phase_ms):
+        # 1. Structured log — load-bearing for telemetry dashboards.
+        logger.info(
+            "wake_event",
+            user=sess.username, session_id=sess.session_id,
+            face_id=face_id or None, gate=gate,
+            confidence=round(confidence, 3),
+            distance_m=round(distance_m, 3),
+        )
+
+        # 2. Prometheus counter (gate-labelled).
+        counter = _resolve_wake_events_counter()
+        if counter is not None:
+            try:
+                counter.labels(gate=gate).inc()
+            except Exception:  # noqa: BLE001 — never break wake on a metric error
+                pass
+
+        # 3. Persist to safety_events. The table predates Phase 3 — its
+        # original purpose was invariant-violation logging, but the PRD
+        # explicitly reuses it as the audit trail for wake events too
+        # (single source of truth keeps the data ergonomic).
+        try:
+            from server import session as _session
+            payload = json.dumps(
+                {"face_id": face_id, "gate": gate,
+                 "confidence": round(confidence, 3),
+                 "distance_m": round(distance_m, 3)},
+                default=str,
+            )
+            await asyncio.to_thread(
+                _session.append_safety_event,
+                sess.username,
+                sess.turn_idx,
+                "wake_event",
+                "info",
+                payload,
+            )
+        except Exception as e:  # noqa: BLE001 — best-effort persistence
+            logger.warning(
+                "wake_event_persist_failed",
+                user=sess.username, error=repr(e),
+            )
+
+        # 4. Returning-user lookup against the `users` table managed by
+        #    `server.memory`. The ``WAKE_RESUME_WINDOW_S`` knob defaults
+        #    to 24 h per the PRD.
+        is_returning = False
+        display_name: str | None = None
+        if face_id:
+            is_returning, display_name = await asyncio.to_thread(
+                _lookup_returning_user, face_id,
+            )
+            sess.face_id = face_id
+
+        # 5. Bind / resume the SQLiteSession. `ensure_active_session` is
+        #    idempotent — it'll reuse an existing active session id for
+        #    this username or create a new one. The Agents SDK's
+        #    SQLiteSession itself is keyed by `user:<username>` and lives
+        #    in the same DB, so chat history naturally resumes when the
+        #    same username walks back up.
+        try:
+            await asyncio.to_thread(
+                legacy.ensure_active_session, sess.username, sess.hint,
+            )
+        except Exception as e:  # noqa: BLE001 — never block wake on this
+            logger.warning(
+                "wake_session_resume_failed",
+                user=sess.username, error=repr(e),
+            )
+
+        # 6. Greeting path.
+        if is_returning:
+            recap_line = await asyncio.to_thread(
+                _last_recap_line, sess.username,
+            )
+            greeting = _build_returning_greeting(display_name, recap_line)
+
+            with _phase("tts_synth_first_chunk", phase_ms):
+                mp3 = await asyncio.to_thread(openai_tts.synthesize, greeting)
+
+            # Record for the substring/sentence echo guard before shipping
+            # audio — the next inbound transcript may echo this greeting.
+            _reset_reply_chunks(sess.username, greeting)
+
+            if mp3:
+                await _send_json(
+                    ws,
+                    _audio_chunk_frame(sess.next_seq(), greeting, mp3),
+                )
+            else:
+                # TTS failed — emit a transcript-only control so the robot
+                # can still surface the greeting visually / in logs.
+                await _send_json(ws, _control_frame(
+                    "tts_chunk_skipped", text=greeting,
+                ))
+            legacy.LAST_REPLY[sess.username] = greeting
+            _arm_post_tts_cooldown(sess)
+            await _send_json(ws, _control_frame(
+                "tts_ended", sentences=1,
+            ))
+            outcome = "greeted_returning"
+        else:
+            # New user (or unrecognised face). Per the brief, defer the
+            # greeting to the Phase 8 onboarding flow — just signal that
+            # we're ready to take the first turn.
+            outcome = "deferred_new_user"
+
+        # 7. Per-session FSM tag → ``listening``.
+        _set_session_fsm_state(sess.session_id, "listening")
+
+        # 8. ``ready_to_listen`` control — robot uses this to flip its
+        #    LISTENING-state LEDs and start streaming PCM.
+        await _send_json(ws, _control_frame(
+            "ready_to_listen",
+            face_id=face_id or None,
+            gate=gate,
+            is_returning_user=is_returning,
+            display_name=display_name,
+        ))
+
+    logger.info(
+        "wake_event_handled",
+        user=sess.username, session_id=sess.session_id,
+        face_id=face_id or None, gate=gate,
+        is_returning_user=is_returning,
+        outcome=outcome,
+        phase_ms=phase_ms,
+    )
+    return True
+
+
 async def _ingest_control(ws: WebSocket, sess: _Session,
                           frame: dict[str, Any]) -> bool:
     sub = frame.get("subtype")
@@ -1254,20 +1616,14 @@ async def _ingest_control(ws: WebSocket, sess: _Session,
 
     if sub == "session_close":
         await asyncio.to_thread(legacy.close_active_session, sess.username)
+        _clear_session_fsm_state(sess.session_id)
         await _send_json(ws, _control_frame(
             "session_end", session_id=sess.session_id,
         ))
         return False
 
     if sub == "wake_event":
-        # Phase 1 just records this; the Phase 3 wake state machine consumes it.
-        logger.info(
-            "wake_event",
-            user=sess.username, session_id=sess.session_id,
-            face_id=data.get("face_id"), gate=data.get("gate"),
-            confidence=data.get("confidence"), distance_m=data.get("distance_m"),
-        )
-        return True
+        return await _handle_wake_event(ws, sess, data)
 
     if sub == "barge_in":
         # Phase 1 records the event; Phase 2 will hook this into TTS abort.
