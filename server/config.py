@@ -28,6 +28,11 @@ GROUNDING_MODEL = os.environ.get("GROUNDING_MODEL", "gpt-4.1-mini")
 # snappy (under 2 short sentences). Mini agents get a bit more headroom for
 # clinical reasoning / RAG synthesis but still stay terse.
 NANO_MAX_TOKENS = int(os.environ.get("NANO_MAX_TOKENS", "200"))
+# Phase 11.7: dedicated cap for the fast-chat lane. Casual replies must
+# be 1–2 spoken sentences (~25 words), so 80 tokens is plenty and forces
+# the model to stop early on long-tail tangents. Helps the under-3-second
+# target for chat mode.
+FAST_CHAT_MAX_TOKENS = int(os.environ.get("FAST_CHAT_MAX_TOKENS", "80"))
 MINI_MAX_TOKENS = int(os.environ.get("MINI_MAX_TOKENS", "400"))
 WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "gpt-4o-mini-transcribe")
 

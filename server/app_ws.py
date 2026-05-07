@@ -1585,9 +1585,21 @@ async def _process_turn(ws: WebSocket, sess: _Session) -> None:
     # cached observation is still fresh AND the transcript doesn't
     # explicitly invite a re-look. The cached observation is reused
     # via _cached_vision in _emit_agent_turn.
+    #
+    # Phase 11.7 — fast-chat lane. When hint='chat' the agent is the
+    # nano-model casual chatbot; vision is unused there and would just
+    # eat 2 s for nothing. Skip the kickoff entirely and clear cache so
+    # the prompt sees vision_status=skipped (its safety rule kicks in).
     image_b64 = sess.image_b64
     sess._vision_task = None  # type: ignore[attr-defined]
-    if image_b64:
+    is_fast_chat = (sess.hint or "").lower() == "chat"
+    if is_fast_chat:
+        logger.info(
+            "vision_decision",
+            user=sess.username, session_id=sess.session_id,
+            decision="skip", reason="fast_chat_lane",
+        )
+    elif image_b64:
         refresh, reason = _should_refresh_vision(sess, transcript)
         if refresh:
             sess._vision_task = asyncio.create_task(  # type: ignore[attr-defined]
