@@ -1372,13 +1372,33 @@ async def _emit_agent_turn(ws: WebSocket, sess: _Session,
         finally:
             await _q.put({"type": "_eos"})
 
+    # Phase 11.12 — pure-chat fast-fallback wrapper. When the user is
+    # in hint='chat' and the transcript doesn't ask for embodied
+    # actions, route through the safety-valve wrapper that watches for
+    # nano stalling past 3.5 s and falls back to gpt-4o-mini with a
+    # short audio filler. Other modes (therapy / morgan / skills) keep
+    # the plain run_agent_streamed since their long latencies are
+    # justified (vision, RAG, multi-tool reasoning).
+    is_pure_chat_lane = False
+    if (sess.hint or "").lower() == "chat":
+        try:
+            from server.agents import _wants_embodied
+            is_pure_chat_lane = not _wants_embodied(transcript)
+        except Exception:
+            is_pure_chat_lane = True
+
     def _bridge():
         # Spawn a fresh asyncio loop in this thread to host the agent
         # generator. Use run_coroutine_threadsafe to push items back to
         # the main loop's queue so the WS handler can await them.
         async def _runner():
+            stream_fn = (
+                legacy.run_pure_chat_with_fallback
+                if is_pure_chat_lane
+                else legacy.run_agent_streamed
+            )
             try:
-                async for ev in legacy.run_agent_streamed(
+                async for ev in stream_fn(
                     sess.username, sess.hint, transcript, None,
                     vision_observation,
                 ):
@@ -1422,6 +1442,21 @@ async def _emit_agent_turn(ws: WebSocket, sess: _Session,
                 final_reply["text"] += ev.get("text", "")
                 sent_any_delta = True
                 await delta_q.put(ev.get("text", ""))
+            elif t == "filler":
+                # Phase 11.12 — pure-chat fallback emitted "One sec."
+                # before kicking off the gpt-4o-mini retry. Pipe it
+                # through the chunker the same way as a delta so the
+                # robot starts speaking immediately while the fallback
+                # model is still warming up.
+                filler_text = ev.get("text", "One sec.")
+                final_reply["text"] += filler_text + " "
+                sent_any_delta = True
+                logger.info(
+                    "chat_fallback_filler",
+                    user=sess.username, session_id=sess.session_id,
+                    filler=filler_text,
+                )
+                await delta_q.put(filler_text + " ")
             elif t == "agent":
                 final_reply["active_agent"] = ev.get("active_agent",
                                                       final_reply["active_agent"])

@@ -433,6 +433,9 @@ def _build_user_message(transcript: str, image_b64: str | None,
 async def run_agent_streamed(
     username: str, hint: str | None, transcript: str,
     image_b64: str | None, vision_observation: dict | None = None,
+    *,
+    model_override: str | None = None,
+    first_token_timeout_s: float | None = None,
 ):
     """Stream a passthrough agent turn token-by-token.
 
@@ -478,6 +481,17 @@ async def run_agent_streamed(
         return
 
     agent = pick_initial_agent(username, hint, transcript)
+    # Phase 11.12 — model override (used by the chat-fallback wrapper to
+    # rebuild the same agent against gpt-4o-mini after a nano timeout).
+    if model_override:
+        from agents import Agent as _Agent
+        agent = _Agent(
+            name=getattr(agent, "name", "agent"),
+            instructions=getattr(agent, "instructions", ""),
+            model=model_override,
+            model_settings=getattr(agent, "model_settings", None),
+            tools=list(getattr(agent, "tools", []) or []),
+        )
     sess = session.get_or_create_session(username)
     ctx = {
         "username": username,
@@ -491,16 +505,42 @@ async def run_agent_streamed(
 
     active_agent = getattr(agent, "name", "agent")
     reply_parts: list[str] = []
+    first_delta_seen = False
+    timeout_task: asyncio.Task | None = None
+    if first_token_timeout_s and first_token_timeout_s > 0:
+        timeout_task = asyncio.create_task(
+            asyncio.sleep(first_token_timeout_s),
+        )
 
     try:
         run = Runner.run_streamed(agent, message, context=ctx, session=sess)
         async for ev in run.stream_events():
+            # Phase 11.12 — first-token deadline check between events.
+            # Runner emits frequent low-level events even before the
+            # model's first text delta, so we get plenty of chances to
+            # notice the timer fired without polling.
+            if (timeout_task is not None
+                    and timeout_task.done()
+                    and not first_delta_seen):
+                yield {"type": "timeout",
+                        "reason": "first_token_timeout",
+                        "limit_s": first_token_timeout_s}
+                try:
+                    run.cancel()
+                except Exception:
+                    pass
+                return
             if ev.type == "raw_response_event":
                 data = ev.data
                 if ResponseTextDeltaEvent is not None and \
                    isinstance(data, ResponseTextDeltaEvent):
                     delta = data.delta or ""
                     if delta:
+                        if not first_delta_seen:
+                            first_delta_seen = True
+                            if timeout_task is not None:
+                                timeout_task.cancel()
+                                timeout_task = None
                         reply_parts.append(delta)
                         yield {"type": "delta", "text": delta}
             elif ev.type == "agent_updated_stream_event":
@@ -516,6 +556,8 @@ async def run_agent_streamed(
         yield {"type": "error", "error": repr(e)}
         return
 
+    if timeout_task is not None:
+        timeout_task.cancel()
     yield {
         "type": "done",
         "reply": final_text,
@@ -523,6 +565,54 @@ async def run_agent_streamed(
         "actions": list(ctx["actions_queue"]),
         "suppress_image": bool(ctx["suppress_image"]),
     }
+
+
+# Phase 11.12 — pure-chat outlier safety valve. Wraps run_agent_streamed
+# with a first-token deadline. If gpt-4.1-nano stalls past the limit,
+# yield a synthetic "filler" event ("One sec.") so the WS handler can
+# emit immediate audio, then start a fallback stream against gpt-4o-mini
+# and pipe its events through transparently. Never used in normal turns
+# — only kicks in on the rare ~2-3% of nano calls that exceed budget.
+async def run_pure_chat_with_fallback(
+    username: str, hint: str | None, transcript: str,
+    image_b64: str | None, vision_observation: dict | None = None,
+    *,
+    first_token_timeout_s: float = 3.5,
+    fallback_model: str = "gpt-4o-mini",
+    filler_text: str = "One sec.",
+):
+    """Pure-chat lane wrapper with first-token timeout + model fallback.
+
+    Yields:
+      Normal nano events ({type:"delta"|"agent"|"done"}), OR
+      {"type":"filler","text":"One sec."}      — on nano timeout
+      followed by mini events transparently.
+
+    The caller treats `filler` like a `delta` for TTS purposes — it's
+    a complete sentence ready to synthesize and play immediately. The
+    stream then continues with the fallback model's tokens.
+    """
+    timed_out = False
+    async for ev in run_agent_streamed(
+            username, hint, transcript, image_b64, vision_observation,
+            first_token_timeout_s=first_token_timeout_s):
+        if ev.get("type") == "timeout":
+            timed_out = True
+            break
+        yield ev
+    if not timed_out:
+        return
+
+    # Filler audio — single short sentence, gets TTS'd immediately by
+    # the WS handler's existing chunker pipeline.
+    yield {"type": "filler", "text": filler_text}
+
+    # Fallback stream on the mini model. No timeout this time —
+    # mini's tail latency is bounded around 3.8 s per the bench.
+    async for ev in run_agent_streamed(
+            username, hint, transcript, image_b64, vision_observation,
+            model_override=fallback_model):
+        yield ev
 
 
 def run_agent(username: str, hint: str | None, transcript: str,
