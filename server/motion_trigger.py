@@ -78,6 +78,28 @@ _TRIGGERS: list[tuple[str, dict, str, list[str]]] = [
         "follow my movement", "mirror me", "copy me", "follow what i do",
     ]),
 
+    # ── Camera consent ──────────────────────────────────────
+    # Action names are server-side identifiers, not NAO motor calls. The
+    # consumer (app_ws.py) flips session.set_camera_consent(...) and emits a
+    # `control { subtype: "camera_state", data: {enabled: ...} }` frame so
+    # the client UI updates immediately. The fast path here exists because
+    # the LLM sometimes mis-routes "stop watching me" to a generic chat
+    # reply instead of calling the tool — a regex match guarantees the
+    # state flip and the canonical ack land on the same turn.
+    ("disable_camera", {}, "Camera off.", [
+        "stop watching me", "stop watching", "don't watch me", "do not watch me",
+        "stop looking at me", "don't look at me", "do not look at me",
+        "turn off the camera", "turn the camera off", "camera off",
+        "disable the camera", "disable camera", "close your eyes",
+        "stop recording me", "stop seeing me",
+    ]),
+    ("enable_camera", {}, "Camera on.", [
+        "you can watch me again", "you can look at me again", "watch me again",
+        "look at me again", "turn on the camera", "turn the camera on",
+        "camera on", "enable the camera", "enable camera", "open your eyes",
+        "you can see me now", "see me again",
+    ]),
+
     # ── LEDs ────────────────────────────────────────────────
     ("change_eye_color", {"color": "red"}, "Eyes red.", [
         "eyes red", "red eyes", "turn your eyes red", "make your eyes red",
