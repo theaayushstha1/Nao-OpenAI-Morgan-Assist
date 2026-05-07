@@ -96,6 +96,14 @@ def migrate_username(old: str, new: str) -> None:
 
 
 def get_camera_consent(username: str) -> bool:
+    """Return camera consent flag for ``username``. Default ON (Phase 6).
+
+    First-time callers get a row inserted with ``camera_consent=1`` so the
+    persisted state matches the in-memory return value. The default is
+    intentionally ON: consent management for Phase 6 lives in the operator
+    policy + the audible "stop watching me" trigger + the green-LED capture
+    cue, not in a silent default-off knob.
+    """
     with _conn() as c:
         row = c.execute(
             "SELECT camera_consent FROM user_prefs WHERE username = ?", (username,)
@@ -107,6 +115,52 @@ def get_camera_consent(username: str) -> bool:
             )
             return True
         return bool(row[0])
+
+
+# ---------------------------------------------------------------------------
+# First-turn tracker (Phase 6 camera-consent first-turn announcement).
+# ---------------------------------------------------------------------------
+#
+# `app_ws.py` plays a one-time spoken heads-up the first time a session sees
+# audio, telling the user the camera is on and how to disable it. We track
+# "have we already announced for this session_id?" in process memory rather
+# than a DB column because session_ids are ephemeral per-WebSocket UUIDs:
+# they don't survive a server restart, and persisting them would just leak
+# rows. The dict is pruned on session close (see ``forget_session``).
+
+_FIRST_TURN_ANNOUNCED: set[str] = set()
+
+
+def is_first_turn(session_id: str) -> bool:
+    """True iff the camera-consent heads-up has not yet been announced for
+    ``session_id``. Idempotent: repeated calls return True until
+    ``mark_first_turn_announced`` flips the flag.
+
+    A falsy ``session_id`` is treated as "not first turn" so callers can't
+    accidentally fire the announce on an unbound session.
+    """
+    if not session_id:
+        return False
+    return session_id not in _FIRST_TURN_ANNOUNCED
+
+
+def mark_first_turn_announced(session_id: str) -> None:
+    """Record that the first-turn camera-consent heads-up has played for
+    ``session_id``. Idempotent on repeated calls.
+    """
+    if not session_id:
+        return
+    _FIRST_TURN_ANNOUNCED.add(session_id)
+
+
+def forget_session(session_id: str) -> None:
+    """Drop ``session_id`` from the first-turn tracker. Called on
+    session_close so the in-memory set doesn't leak across long-lived
+    server uptime. Idempotent.
+    """
+    if not session_id:
+        return
+    _FIRST_TURN_ANNOUNCED.discard(session_id)
 
 
 def set_camera_consent(username: str, enabled: bool) -> None:
