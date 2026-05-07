@@ -338,12 +338,20 @@ class WakeStateMachine(object):
                  aware_timeout_s=8.0, gaze_required_s=1.5,
                  proximity_required_s=1.0, sustained_conf=0.5,
                  sustained_required_s=2.0, sustained_angle_deg=30.0,
-                 vad=None, memory_proxy=None, face_detection_proxy=None):
+                 vad=None, memory_proxy=None, face_detection_proxy=None,
+                 multi_person_callback=None,
+                 multi_person_distance_m=1.5,
+                 returning_user_resolver=None):
         """Construct the state machine.
 
         Parameters mirror ``PHASE_3_TASK_MAP §Public APIs``. The trailing
-        three (``vad``, ``memory_proxy``, ``face_detection_proxy``) are
-        OPTIONAL injection seams for tests + future server-driven hooks.
+        three Phase 3 args (``vad``, ``memory_proxy``,
+        ``face_detection_proxy``) are OPTIONAL injection seams for tests
+        + future server-driven hooks. The Phase 8 trio
+        (``multi_person_callback``, ``multi_person_distance_m``,
+        ``returning_user_resolver``) is also OPTIONAL — every existing
+        Phase 3 caller continues to work without supplying them.
+
         Production callers typically only pass the contract-required args
         and let the state machine create its own naoqi proxies.
 
@@ -362,10 +370,15 @@ class WakeStateMachine(object):
             Optional. If non-None, ``start()`` polls it for the keyword
             engagement gate. The state machine never instantiates one
             itself — main.py decides whether to wire the keyword path.
-        on_engaged : callable(face_id, gate_name, confidence, distance_m)
+        on_engaged : callable(face_id, gate_name, confidence, distance_m
+                              [, returning_user_hint])
             Fired exactly once per IDLE -> AWARE -> ENGAGED transition.
             main.py uses this hook to open the WS session and send the
-            ``wake_event`` control frame.
+            ``wake_event`` control frame. Phase 8 adds an optional
+            ``returning_user_hint`` 5th positional argument; the state
+            machine probes the callback signature and degrades to the
+            Phase 3 4-arg call when the caller doesn't accept the hint
+            (so existing Phase 3 tests keep passing).
         on_lost : callable()
             Fired on AWARE timeout / face-lost-during-AWARE. Used to clean
             up WS state if main.py opened anything optimistically.
@@ -374,6 +387,44 @@ class WakeStateMachine(object):
             user speech or from SPEAKING via server set_state).
         on_speaking_done : callable()
             Fired on SPEAKING -> LISTENING transition (TTS finished).
+
+        Phase 8 extensions
+        ------------------
+        multi_person_callback : callable(faces_list) -> None, optional
+            Fired exactly once on the IDLE -> AWARE transition (and again
+            on AWARE -> ENGAGED if the same condition still holds) when
+            two or more faces are simultaneously visible within
+            ``multi_person_distance_m``. ``faces_list`` is a list of dicts
+            shaped like the per-face payload from
+            ``utils.face_naoqi.detect_faces_with_geometry`` — keys
+            include ``face_id``, ``name``, ``confidence``, ``distance_m``,
+            ``yaw_deg``, ``pitch_deg``. The callback runs on the face
+            loop thread; long-running work belongs on a daemon spawned
+            inside the callback, not in the callback body itself.
+
+            If ``None`` (the Phase 3 default), the multi-person path is
+            inert. The default implementation in the docstring spec is
+            "logs"; main.py is the production source of the actual TTS
+            "Hi everyone — who'd like to chat first?" greeting per
+            PHASE_8_TASK_MAP §Group scenario.
+        multi_person_distance_m : float, default 1.5
+            Distance threshold (in metres) used to decide whether a face
+            counts as "in conversation range" for the multi-person gate.
+            Defaults to the same 1.5 m used by ``face_max_distance_m``
+            so the engagement window and the multi-person window stay
+            aligned.
+        returning_user_resolver : callable(face_id) -> str | dict | None,
+                                  optional
+            Looked up at ENGAGED time to populate the new
+            ``returning_user_hint`` argument on ``on_engaged``. Typical
+            wiring: ``main.py`` passes a closure that consults
+            ``brain_cache.get_user_for_face(face_id)`` and returns the
+            stored display name (or a small dict with extra metadata).
+
+            If ``None`` we still attempt to derive a hint from the live
+            face record — the ``name`` field populated by
+            ``ALFaceDetection`` is itself a returning-user signal — so
+            existing Phase 3 callers see a smooth upgrade path.
 
         Threshold knobs match PHASE_3_TASK_MAP defaults. They can be
         overridden per-deployment via env if a future iteration exposes
@@ -391,6 +442,11 @@ class WakeStateMachine(object):
         self._on_lost = on_lost
         self._on_listening = on_listening
         self._on_speaking_done = on_speaking_done
+
+        # Phase 8: multi-person greeting + returning-user hint.
+        self._multi_person_callback = multi_person_callback
+        self._multi_person_distance_m = float(multi_person_distance_m)
+        self._returning_user_resolver = returning_user_resolver
 
         # Threshold knobs — kept on the instance so external tooling can
         # log them when explaining why a wake fired/didn't fire.
@@ -423,6 +479,17 @@ class WakeStateMachine(object):
         # Telemetry / context — last seen face becomes the wake_event payload.
         self._last_face = None
 
+        # Phase 8: cache of all visible faces from the most recent face-loop
+        # tick. Populated alongside ``_last_face`` so the multi-person
+        # callback has the full set, not just the closest one. Updated under
+        # ``_state_lock`` to keep snapshots consistent across threads.
+        self._last_faces = []
+
+        # Phase 8: latched flag so ``multi_person_callback`` fires at most
+        # once per fresh wake cycle. Reset alongside the speech/keyword gate
+        # flags on entry to IDLE / LISTENING (see ``_transition``).
+        self._multi_person_fired = False
+
         # Worker thread handles. Created in start(), joined in stop().
         self._face_thread = None
         self._vad_thread = None
@@ -443,6 +510,46 @@ class WakeStateMachine(object):
         """Return the current state string. Threadsafe snapshot."""
         with self._state_lock:
             return self._state
+
+    @property
+    def current_face_id(self):
+        """Phase 8: face_id of the most recently engaged / closest face.
+
+        Returns the empty string (NOT None) when no face has been seen
+        yet — keeps callers from having to special-case both None and ""
+        when piping the value into ``learn_new_face_naoqi(name)`` or the
+        ``brain_cache.get_user_for_face(face_id)`` lookup. Use
+        ``bool(wsm.current_face_id)`` for "have we seen anybody?".
+
+        Threadsafe snapshot — reads ``_last_face`` under ``_state_lock``
+        so callers don't observe a half-updated face dict.
+        """
+        with self._state_lock:
+            face = self._last_face or {}
+        try:
+            value = face.get("face_id", "") if isinstance(face, dict) else ""
+        except Exception:
+            return ""
+        if value is None:
+            return ""
+        try:
+            return str(value)
+        except Exception:
+            return ""
+
+    @property
+    def current_faces(self):
+        """Phase 8: list snapshot of all faces from the latest face-loop tick.
+
+        The list is a shallow copy so callers may mutate it without
+        racing the face loop. Returned in the same shape as
+        ``utils.face_naoqi.detect_faces_with_geometry``: a list of dicts
+        with ``face_id``, ``name``, ``confidence``, ``distance_m``,
+        ``yaw_deg``, ``pitch_deg`` keys. Empty list when no face is
+        visible.
+        """
+        with self._state_lock:
+            return [dict(f) for f in (self._last_faces or [])]
 
     def set_state(self, state):
         """External force-transition.
@@ -565,6 +672,14 @@ class WakeStateMachine(object):
         State callbacks are invoked outside the state lock so a slow
         callback (e.g. WS handshake in on_engaged) doesn't block the
         face loop from re-evaluating the next frame.
+
+        Phase 8 additions:
+            * On AWARE / ENGAGED entry, the multi-person callback is
+              fired (at most once per wake cycle) when ≥ 2 faces are
+              within ``multi_person_distance_m`` of the camera.
+            * ``on_engaged`` is invoked with a 5th ``returning_user_hint``
+              argument when the callback signature accepts it; legacy 4-arg
+              callbacks keep working unchanged.
         """
         callback_to_fire = None
         callback_args = ()
@@ -578,6 +693,9 @@ class WakeStateMachine(object):
             face_id = face.get("face_id") or ""
             confidence = float(face.get("confidence", 0.0) or 0.0)
             distance_m = float(face.get("distance_m", 0.0) or 0.0)
+            # Snapshot the visible faces so the multi-person callback
+            # always sees the same list the gate decision used.
+            faces_snapshot = [dict(f) for f in (self._last_faces or [])]
 
         self._log.info("wake_state_transition",
                        prev=prev, next=new_state, source=source, gate=gate)
@@ -596,7 +714,8 @@ class WakeStateMachine(object):
             self._safe_led_call(self._leds, "chime")
             self._safe_led_call(self._leds, "set_engaged")
             callback_to_fire = self._on_engaged
-            callback_args = (face_id, gate or "unknown", confidence, distance_m)
+            callback_args = (face_id, gate or "unknown", confidence,
+                             distance_m, face)
         elif new_state == STATE_LISTENING:
             self._safe_led_call(self._leds, "set_listening")
             if prev == STATE_SPEAKING:
@@ -606,12 +725,22 @@ class WakeStateMachine(object):
         elif new_state == STATE_SPEAKING:
             self._safe_led_call(self._leds, "set_speaking")
 
+        # Phase 8 multi-person check. Fired BEFORE the engaged callback
+        # so main.py's "Hi everyone" greeting can land before the WS
+        # session opens — matches PHASE_8_TASK_MAP §Group scenario where
+        # the multi-person announcement replaces the solo greeting.
+        if new_state in (STATE_AWARE, STATE_ENGAGED):
+            self._maybe_fire_multi_person(faces_snapshot)
+
         # Fire after lock release. Wrap in try/except so a callback raising
         # never corrupts the state machine — the next face frame will
         # still drive the next transition.
         if callback_to_fire is not None and callable(callback_to_fire):
             try:
-                callback_to_fire(*callback_args)
+                if new_state == STATE_ENGAGED:
+                    self._invoke_on_engaged(callback_to_fire, callback_args)
+                else:
+                    callback_to_fire(*callback_args)
             except Exception as exc:
                 self._log.exception("wake_callback_error",
                                     callback=str(callback_to_fire),
@@ -623,6 +752,13 @@ class WakeStateMachine(object):
         if new_state in (STATE_IDLE, STATE_LISTENING):
             self._speech_onset_flag = False
             self._keyword_flag = False
+
+        # Phase 8: latch the multi-person callback on a per-cycle basis.
+        # Reset on IDLE so a fresh AWARE entry can fire it again, and on
+        # LISTENING so the same group standing in front of NAO across a
+        # series of utterances doesn't repeatedly trigger the greeting.
+        if new_state in (STATE_IDLE, STATE_LISTENING):
+            self._multi_person_fired = False
 
     # ------------------------------------------------------------------
     # Internal: face polling loop (the master loop)
@@ -657,6 +793,14 @@ class WakeStateMachine(object):
             picked = self._pick_face(faces)
 
             cur = self.current_state()
+
+            # Phase 8: keep ``_last_faces`` populated every tick so the
+            # ``current_faces`` property + multi-person callback see a
+            # fresh snapshot. We always assign (even when ``faces`` is
+            # empty) so a transient detection dropout isn't reported as a
+            # stale crowd.
+            with self._state_lock:
+                self._last_faces = list(faces or [])
 
             if picked is not None:
                 self._last_face = picked
@@ -776,6 +920,157 @@ class WakeStateMachine(object):
             if self._state != STATE_AWARE:
                 return
         self._transition(STATE_ENGAGED, source="gate", gate=gate_name)
+
+    # ------------------------------------------------------------------
+    # Phase 8 helpers: multi-person callback + on_engaged signature probe
+    # ------------------------------------------------------------------
+    def _maybe_fire_multi_person(self, faces_snapshot):
+        """Fire ``multi_person_callback`` once per cycle when a crowd is here.
+
+        "Crowd" = ≥ 2 faces with ``distance_m`` ≤ ``multi_person_distance_m``
+        (faces with unknown distance — distance_m == 0 — are conservatively
+        excluded so noisy detections don't trigger a false greeting).
+
+        The callback runs on the face-loop thread; long-running work
+        belongs on a daemon spawned inside the callback body, not here.
+        Errors are logged + swallowed so a buggy callback never corrupts
+        the wake cycle.
+        """
+        callback = self._multi_person_callback
+        if callback is None or not callable(callback):
+            return
+        if not faces_snapshot:
+            return
+        # Latch — fire at most once per wake cycle. Reset on IDLE entry.
+        if self._multi_person_fired:
+            return
+
+        nearby = []
+        for face in faces_snapshot:
+            try:
+                distance_m = float(face.get("distance_m", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                continue
+            if distance_m <= 0.0:
+                # Unknown distance — exclude. The fallback ALMemory parser
+                # uses size-based estimation so 0.0 means "no geometry".
+                continue
+            if distance_m <= self._multi_person_distance_m:
+                nearby.append(dict(face))
+
+        if len(nearby) < 2:
+            return
+
+        self._multi_person_fired = True
+        self._log.info("multi_person_detected",
+                       count=len(nearby),
+                       distance_threshold_m=self._multi_person_distance_m)
+        try:
+            callback(nearby)
+        except Exception as exc:
+            self._log.exception("multi_person_callback_error",
+                                err=str(exc))
+
+    def _resolve_returning_user_hint(self, face):
+        """Build the optional ``returning_user_hint`` for ``on_engaged``.
+
+        Resolution order:
+            1. Caller-supplied ``returning_user_resolver(face_id)`` — wins
+               when it returns a truthy value (string OR dict). main.py is
+               expected to wire this against ``brain_cache``.
+            2. The ALFaceDetection ``name`` field on the live face record
+               — non-empty when the face has been previously learned.
+            3. ``None`` — first-time / unknown user. The on_engaged callee
+               will treat this as the "no hint, run the new-user
+               onboarding" signal.
+
+        Returns whatever the resolver gave us (string / dict) OR a string
+        derived from the face name OR ``None``.
+        """
+        face = face or {}
+        face_id = ""
+        try:
+            face_id = str(face.get("face_id", "") or "")
+        except Exception:
+            face_id = ""
+
+        resolver = self._returning_user_resolver
+        if face_id and resolver is not None and callable(resolver):
+            try:
+                hint = resolver(face_id)
+            except Exception as exc:
+                self._log.warn("returning_user_resolver_error",
+                               face_id=face_id, err=str(exc))
+                hint = None
+            if hint:
+                return hint
+
+        # Fall back to the live ALFaceDetection name field if populated.
+        try:
+            live_name = face.get("name", "") if isinstance(face, dict) else ""
+        except Exception:
+            live_name = ""
+        if live_name:
+            try:
+                return str(live_name)
+            except Exception:
+                return None
+        return None
+
+    def _invoke_on_engaged(self, callback, args):
+        """Call ``on_engaged`` with backwards-compatible arg-count probing.
+
+        ``args`` is a 5-tuple: (face_id, gate, confidence, distance_m, face).
+        We resolve a returning_user_hint from ``face`` and try the new
+        5-arg signature first, falling back to 4-arg on TypeError so
+        existing Phase 3 tests / wirings keep passing unchanged.
+        """
+        try:
+            face_id, gate, confidence, distance_m, face = args
+        except Exception:
+            # Defensive: if args don't unpack we still want to try the
+            # legacy 4-arg path with whatever we got.
+            try:
+                callback(*args)
+            except Exception as exc:
+                self._log.exception("on_engaged_legacy_fallback_failed",
+                                    err=str(exc))
+            return
+
+        hint = self._resolve_returning_user_hint(face)
+        legacy_args = (face_id, gate, confidence, distance_m)
+
+        if hint is None:
+            # Even with no hint, prefer the 5-arg signature so callers
+            # that always expect 5 args (Phase 8 main.py) work without
+            # a sentinel default — they explicitly pass returning_user_hint=None.
+            try:
+                callback(face_id, gate, confidence, distance_m, hint)
+                return
+            except TypeError:
+                # 4-arg legacy callback (Phase 3 tests). Fall through.
+                pass
+            callback(*legacy_args)
+            return
+
+        # We have a hint to deliver. Try the 5-arg signature first.
+        try:
+            callback(face_id, gate, confidence, distance_m, hint)
+            return
+        except TypeError as exc:
+            # Distinguish a real signature mismatch (4-arg callback) from
+            # an unrelated TypeError raised inside the callback body. We
+            # can't perfectly tell the two apart on Py2.7 without the
+            # inspect module, but the message contains "argument" only on
+            # signature errors thrown by Python itself.
+            err_text = str(exc)
+            if "argument" not in err_text and "given" not in err_text:
+                # Unrelated — re-raise so the outer handler logs it.
+                raise
+            self._log.debug("on_engaged_legacy_signature",
+                            note="callback rejected returning_user_hint",
+                            err=err_text)
+            callback(*legacy_args)
 
     # ------------------------------------------------------------------
     # Internal: VAD speech-onset watcher
@@ -1088,22 +1383,28 @@ class _ScriptedFaceReader(object):
     test each engagement gate independently. The fallback ALMemory parser
     is exercised separately by the regular parser tests; here we want to
     drive the state machine's own logic.
+
+    Phase 8: also accepts a list of faces via ``set_many`` so the
+    multi-person callback can be exercised against a synthetic crowd.
     """
 
     def __init__(self):
-        self._face = None
+        self._faces = []
 
     def set(self, face):
-        self._face = face
+        self._faces = [face] if face is not None else []
+
+    def set_many(self, faces):
+        self._faces = list(faces or [])
 
     def clear(self):
-        self._face = None
+        self._faces = []
 
     def read(self):
-        if self._face is None:
+        if not self._faces:
             return []
-        # Return a copy so the state machine can mutate without us caring.
-        return [dict(self._face)]
+        # Return copies so the state machine can mutate without us caring.
+        return [dict(f) for f in self._faces]
 
 
 def _build_wsm(reader, leds, **overrides):
@@ -1266,11 +1567,311 @@ def _self_test():
     wsm.stop()
     runner.join(timeout=2.0)
 
+    # ── Phase 8 additions ──────────────────────────────────────────────
+    print("=== Phase 8 onboarding extensions ===")
+    _phase8_multi_person_test()
+    _phase8_returning_user_hint_test()
+    _phase8_legacy_on_engaged_test()
+    _phase8_current_face_id_test()
+
     print("--- summary ---")
     print("transitions: {0}".format(transitions))
     print("led calls   : {0}".format([c[0] for c in leds.calls]))
     print("=== self-test OK ===")
     return 0
+
+
+# ---------------------------------------------------------------------------
+# Phase 8 self-tests. Standalone so each can be run individually if a
+# regression hits one specifically.
+# ---------------------------------------------------------------------------
+
+
+def _phase8_multi_person_test():
+    """Multi-person callback fires once on >=2 faces within 1.5 m."""
+    print("--- phase 8: multi_person_callback fires on >= 2 nearby faces ---")
+    leds = _FakeLeds()
+    reader = _ScriptedFaceReader()
+    multi_calls = []
+
+    def on_multi(faces):
+        multi_calls.append(list(faces))
+        print("[multi_person] count={0}".format(len(faces)))
+
+    wsm, _ = _build_wsm(reader, leds, multi_person_callback=on_multi,
+                        multi_person_distance_m=1.5)
+    runner = threading.Thread(target=wsm.start, name="phase8-multi")
+    runner.daemon = True
+    runner.start()
+    time.sleep(0.15)
+
+    # Two faces in conversation range — should trigger.
+    reader.set_many([
+        {"face_id": "u1", "name": "", "confidence": 0.6,
+         "distance_m": 0.7, "yaw_deg": 4.0, "pitch_deg": 0.0},
+        {"face_id": "u2", "name": "", "confidence": 0.6,
+         "distance_m": 0.9, "yaw_deg": -6.0, "pitch_deg": 0.0},
+    ])
+    # Allow the face loop (~30 fps) one or two ticks AND the AWARE
+    # transition itself before checking.
+    time.sleep(0.3)
+    assert len(multi_calls) >= 1, (
+        "expected multi_person_callback to fire on AWARE transition; "
+        "got {0}".format(multi_calls))
+    assert len(multi_calls[0]) == 2, multi_calls[0]
+    print("[phase8] multi_person fired with {0} faces".format(
+        len(multi_calls[0])))
+
+    # Already latched — calling _maybe_fire_multi_person again must not
+    # re-trigger inside the same wake cycle.
+    fires_before = len(multi_calls)
+    wsm._maybe_fire_multi_person(reader.read())
+    assert len(multi_calls) == fires_before, (
+        "multi_person_callback latch failed; refired without IDLE reset")
+
+    # Reset the cycle (force IDLE) and verify the latch clears.
+    wsm.set_state(STATE_IDLE)
+    time.sleep(0.05)
+    reader.set_many([
+        {"face_id": "u3", "name": "", "confidence": 0.6,
+         "distance_m": 0.6, "yaw_deg": 0.0, "pitch_deg": 0.0},
+        {"face_id": "u4", "name": "", "confidence": 0.6,
+         "distance_m": 0.8, "yaw_deg": 0.0, "pitch_deg": 0.0},
+    ])
+    time.sleep(0.3)
+    assert len(multi_calls) >= fires_before + 1, (
+        "expected multi_person_callback to refire after IDLE reset")
+    print("[phase8] latch resets after IDLE")
+
+    wsm.stop()
+    runner.join(timeout=2.0)
+
+    # Far-away crowd -> should NOT fire. New WSM so the latch is fresh.
+    leds2 = _FakeLeds()
+    reader2 = _ScriptedFaceReader()
+    far_calls = []
+    wsm2, _ = _build_wsm(reader2, leds2,
+                         multi_person_callback=lambda fs: far_calls.append(fs),
+                         multi_person_distance_m=1.5,
+                         face_max_distance_m=4.0)  # let face_idle gate accept
+    runner2 = threading.Thread(target=wsm2.start, name="phase8-multi-far")
+    runner2.daemon = True
+    runner2.start()
+    time.sleep(0.15)
+    reader2.set_many([
+        {"face_id": "u5", "name": "", "confidence": 0.6,
+         "distance_m": 2.5, "yaw_deg": 0.0, "pitch_deg": 0.0},
+        {"face_id": "u6", "name": "", "confidence": 0.6,
+         "distance_m": 3.0, "yaw_deg": 0.0, "pitch_deg": 0.0},
+    ])
+    time.sleep(0.3)
+    assert far_calls == [], (
+        "far-away crowd should not trigger multi_person; got {0}".format(
+            far_calls))
+    print("[phase8] far-away crowd correctly ignored")
+    wsm2.stop()
+    runner2.join(timeout=2.0)
+
+
+def _phase8_returning_user_hint_test():
+    """on_engaged receives returning_user_hint when the resolver returns one."""
+    print("--- phase 8: returning_user_hint flows through on_engaged ---")
+    leds = _FakeLeds()
+    reader = _ScriptedFaceReader()
+    engaged_calls = []
+
+    def on_engaged_5arg(face_id, gate, conf, dist_m, returning_user_hint=None):
+        engaged_calls.append((face_id, gate, conf, dist_m, returning_user_hint))
+        print("[on_engaged 5-arg] hint={0}".format(returning_user_hint))
+
+    def on_lost():
+        pass
+
+    def on_listening():
+        pass
+
+    def on_speaking_done():
+        pass
+
+    # Resolver returns a display name only when the face has been seen.
+    user_db = {"face-known": "Aayush"}
+
+    def resolver(face_id):
+        return user_db.get(face_id)
+
+    wsm = WakeStateMachine(
+        nao_ip="127.0.0.1", nao_port=9559,
+        leds=leds, fallback_word_listener=None,
+        on_engaged=on_engaged_5arg,
+        on_lost=on_lost, on_listening=on_listening,
+        on_speaking_done=on_speaking_done,
+        face_min_conf=0.35, face_max_distance_m=1.5,
+        face_max_angle_deg=60.0,
+        aware_timeout_s=2.0,
+        gaze_required_s=0.3,
+        proximity_required_s=0.3,
+        sustained_conf=0.5,
+        sustained_required_s=0.4,
+        sustained_angle_deg=30.0,
+        returning_user_resolver=resolver,
+    )
+    wsm._read_faces = reader.read
+    runner = threading.Thread(target=wsm.start, name="phase8-hint")
+    runner.daemon = True
+    runner.start()
+    time.sleep(0.15)
+
+    reader.set({
+        "face_id": "face-known",
+        "name": "",
+        "confidence": 0.6,
+        "distance_m": 0.7,
+        "yaw_deg": 25.0,
+        "pitch_deg": 0.0,
+    })
+    # Wait for AWARE then proximity gate.
+    time.sleep(0.6)
+    assert wsm.current_state() == STATE_ENGAGED, wsm.current_state()
+    assert engaged_calls, "expected on_engaged to fire"
+    last = engaged_calls[-1]
+    assert last[0] == "face-known", last
+    assert last[4] == "Aayush", (
+        "expected returning_user_hint='Aayush', got {0!r}".format(last[4]))
+    print("[phase8] returning_user_hint delivered: {0}".format(last[4]))
+
+    wsm.stop()
+    runner.join(timeout=2.0)
+
+    # Unknown face — resolver returns None, ALFaceDetection name field
+    # is also empty, so the hint should be None (new user).
+    leds2 = _FakeLeds()
+    reader2 = _ScriptedFaceReader()
+    engaged_calls2 = []
+
+    wsm2 = WakeStateMachine(
+        nao_ip="127.0.0.1", nao_port=9559,
+        leds=leds2, fallback_word_listener=None,
+        on_engaged=lambda fi, g, c, d, h=None: engaged_calls2.append(
+            (fi, g, c, d, h)),
+        on_lost=lambda: None,
+        on_listening=lambda: None,
+        on_speaking_done=lambda: None,
+        face_min_conf=0.35, face_max_distance_m=1.5,
+        face_max_angle_deg=60.0,
+        aware_timeout_s=2.0,
+        gaze_required_s=0.3,
+        proximity_required_s=0.3,
+        sustained_conf=0.5,
+        sustained_required_s=0.4,
+        sustained_angle_deg=30.0,
+        returning_user_resolver=resolver,
+    )
+    wsm2._read_faces = reader2.read
+    runner2 = threading.Thread(target=wsm2.start, name="phase8-hint-new")
+    runner2.daemon = True
+    runner2.start()
+    time.sleep(0.15)
+    reader2.set({
+        "face_id": "face-unknown",
+        "name": "",
+        "confidence": 0.6,
+        "distance_m": 0.7,
+        "yaw_deg": 25.0,
+        "pitch_deg": 0.0,
+    })
+    time.sleep(0.6)
+    assert wsm2.current_state() == STATE_ENGAGED, wsm2.current_state()
+    assert engaged_calls2, "expected new-user on_engaged to fire"
+    last2 = engaged_calls2[-1]
+    assert last2[4] is None, (
+        "expected hint=None for unknown face; got {0!r}".format(last2[4]))
+    print("[phase8] new-user hint=None as expected")
+    wsm2.stop()
+    runner2.join(timeout=2.0)
+
+
+def _phase8_legacy_on_engaged_test():
+    """4-arg legacy on_engaged keeps working (Phase 3 backwards compat)."""
+    print("--- phase 8: legacy 4-arg on_engaged still fires ---")
+    leds = _FakeLeds()
+    reader = _ScriptedFaceReader()
+    legacy_calls = []
+
+    def legacy_on_engaged(face_id, gate, conf, dist_m):
+        # Note: NO returning_user_hint kwarg/positional — strict 4-arg.
+        legacy_calls.append((face_id, gate, conf, dist_m))
+
+    # Resolver returns a hint, but the callback can't accept it.
+    wsm = WakeStateMachine(
+        nao_ip="127.0.0.1", nao_port=9559,
+        leds=leds, fallback_word_listener=None,
+        on_engaged=legacy_on_engaged,
+        on_lost=lambda: None,
+        on_listening=lambda: None,
+        on_speaking_done=lambda: None,
+        face_min_conf=0.35, face_max_distance_m=1.5,
+        face_max_angle_deg=60.0,
+        aware_timeout_s=2.0,
+        gaze_required_s=0.3,
+        proximity_required_s=0.3,
+        sustained_conf=0.5,
+        sustained_required_s=0.4,
+        sustained_angle_deg=30.0,
+        returning_user_resolver=lambda fid: "Aayush",
+    )
+    wsm._read_faces = reader.read
+    runner = threading.Thread(target=wsm.start, name="phase8-legacy")
+    runner.daemon = True
+    runner.start()
+    time.sleep(0.15)
+    reader.set({
+        "face_id": "legacy-face",
+        "name": "Aayush",
+        "confidence": 0.6,
+        "distance_m": 0.7,
+        "yaw_deg": 25.0,
+        "pitch_deg": 0.0,
+    })
+    time.sleep(0.6)
+    assert wsm.current_state() == STATE_ENGAGED
+    assert legacy_calls, "legacy on_engaged should still fire"
+    last = legacy_calls[-1]
+    assert last == ("legacy-face", GATE_PROXIMITY, 0.6, 0.7), last
+    print("[phase8] legacy 4-arg on_engaged fired: {0}".format(last))
+    wsm.stop()
+    runner.join(timeout=2.0)
+
+
+def _phase8_current_face_id_test():
+    """current_face_id property reflects the latest seen face."""
+    print("--- phase 8: current_face_id property ---")
+    leds = _FakeLeds()
+    reader = _ScriptedFaceReader()
+    wsm, _ = _build_wsm(reader, leds)
+    runner = threading.Thread(target=wsm.start, name="phase8-prop")
+    runner.daemon = True
+    runner.start()
+    time.sleep(0.15)
+    # Initial: no face seen.
+    assert wsm.current_face_id == "", (
+        "expected '' before any face; got {0!r}".format(wsm.current_face_id))
+    reader.set({
+        "face_id": "abc-123",
+        "name": "Test",
+        "confidence": 0.6,
+        "distance_m": 0.7,
+        "yaw_deg": 25.0,
+        "pitch_deg": 0.0,
+    })
+    time.sleep(0.15)
+    assert wsm.current_face_id == "abc-123", wsm.current_face_id
+    snapshot = wsm.current_faces
+    assert isinstance(snapshot, list) and len(snapshot) == 1, snapshot
+    assert snapshot[0]["face_id"] == "abc-123"
+    print("[phase8] current_face_id={0!r}, current_faces[0]={1!r}".format(
+        wsm.current_face_id, snapshot[0]["face_id"]))
+    wsm.stop()
+    runner.join(timeout=2.0)
 
 
 if __name__ == "__main__":
