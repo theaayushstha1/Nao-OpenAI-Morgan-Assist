@@ -149,3 +149,23 @@ WS_RECONNECT_BACKOFF_MS = [
 CS_NAVIGATOR_URL = os.environ.get("CS_NAVIGATOR_URL", "")
 CS_NAVIGATOR_TOKEN = os.environ.get("CS_NAVIGATOR_TOKEN", "")
 CS_NAVIGATOR_TIMEOUT_S = float(os.environ.get("CS_NAVIGATOR_TIMEOUT_S", "30"))
+
+# ───────── Phase 6 (PRD v2): Therapist Vision-On ─────────
+# Vision model used by `server/tools/emotion.py:observe_face` to read the
+# user's face from the per-turn JPEG. Default `gpt-4o`; can be flipped to
+# `gpt-5` (or whatever's GA at deploy time) without a code change.
+VISION_MODEL = os.environ.get("VISION_MODEL", "gpt-4o")
+
+# Default camera-consent for new users. Phase 6 flips this to ON so the
+# therapist can call `observe_face` from turn 1; users opt OUT via the
+# stop-watching pattern triggers or the explicit `set_camera_consent(false)`
+# tool. See docs/PHASE_6_TASK_MAP.md for the full contract.
+CAMERA_DEFAULT_ON = os.environ.get("CAMERA_DEFAULT_ON", "1") == "1"
+
+# First-turn audible heads-up emitted by the WS server when a brand-new
+# session opens with `camera_consent=1`. Plain text — TTS-only, no SSML.
+CAMERA_ANNOUNCE_TEXT = os.environ.get(
+    "CAMERA_ANNOUNCE_TEXT",
+    "Heads up — my camera is on for this conversation. "
+    "Say 'stop watching me' anytime.",
+)
