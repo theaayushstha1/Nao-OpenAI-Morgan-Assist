@@ -33,3 +33,4 @@ logs/
 # SQLite scratch files (never commit these)
 server/nao.db-shm
 server/nao.db-wal
+.claude/
