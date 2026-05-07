@@ -23,6 +23,10 @@ Public surface
     ALModule                     -- ALModule base class for ALAudioDevice
                                     subscribers
 
+Adding new scenarios? Drop a file into ``sim/scenarios/`` exposing a
+``run(driver, telemetry) -> dict`` callable. The discovery in
+``sim.scenarios.list_scenarios`` will pick it up automatically.
+
 Typical usage
 -------------
     from sim import (
