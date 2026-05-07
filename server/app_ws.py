@@ -124,35 +124,28 @@ _VISION_REFRESH_TRIGGERS: tuple[str, ...] = (
     "do you recognize this", "identify this",
 )
 
-# Vision is LAZY — only fires when the user's transcript matches one of
-# the trigger phrases above OR a long time has passed since the last
-# successful vision. This was changed from "fire on first turn + every
-# 45 s" because the operator noticed vision firing on every turn was:
-#   1. Adding ~1.5 s latency to non-visual replies
-#   2. Causing GPT-4o vision to influence chat replies that never asked
-#      about anything visual (model leaks "I see a poster..." randomly)
-#   3. Burning OpenAI credits unnecessarily
-# Cache TTL bumped to 5 min — once we've looked, the description is
-# good for the rest of the session unless explicitly refreshed.
-_VISION_CACHE_TTL_MS: float = 300_000.0
+# Vision is LAZY — fires only when the user's transcript matches one
+# of the trigger phrases above. Every fire is fresh: there is no cache
+# reuse. Caching was removed because if the user asked the same visual
+# question minutes later (or a friend asked it in a different setting)
+# NAO would replay the prior description, even though the scene was
+# completely different. Recomputing per visual question costs ~1.5 s
+# per question, but only on questions that actually need vision.
 
 
 def _should_refresh_vision(sess: Any, transcript: str) -> tuple[bool, str]:
-    """Decide whether to run vision this turn (LAZY policy).
+    """Decide whether to run vision this turn (LAZY policy, no cache).
 
-    Vision is OFF by default. It only fires when:
-      1. The user's transcript matches a vision trigger phrase
-         ("what color is my shirt", "describe me", "look at me", etc.)
-      2. Cached vision is older than the TTL (5 min) AND a trigger
-         phrase asked for fresh data.
-
-    Importantly: NO automatic first-turn fire. The user has to actually
-    ask a visual question for vision to engage. This keeps non-visual
-    chat replies fast (no +1.5 s latency per turn) and stops the agent
-    from leaking "I notice a poster…" into unrelated answers.
+    Vision is OFF by default. It fires only when the user's transcript
+    matches a vision trigger phrase ("what color is my shirt", "describe
+    me", "look at me", "do you see", etc.). Every trigger gets a fresh
+    GPT-4o vision call against the latest image — the previous 5 min
+    cache caused a real bug where if a friend asked the same visual
+    question a few minutes later in a different setting, NAO replied
+    with the cached description of the *previous* user.
 
     Returns ``(refresh, reason)``. ``reason`` lands in the structured
-    log so we can audit when (and why) vision actually fired.
+    log so we can audit when vision actually fired.
     """
     low = (transcript or "").lower()
     matched_trigger = None
@@ -161,21 +154,12 @@ def _should_refresh_vision(sess: Any, transcript: str) -> tuple[bool, str]:
             matched_trigger = phrase
             break
 
-    # No trigger phrase → never fire (regardless of cache state).
+    # No trigger phrase → never fire.
     if matched_trigger is None:
         return False, "no_visual_question"
 
-    # Trigger phrase fired. If we have NO cache, definitely run.
-    if not sess._cached_vision or sess._cached_vision_at_ms <= 0:
-        return True, f"trigger_phrase:{matched_trigger}"
-
-    # Trigger fired AND cache exists. Refresh if cache stale.
-    age_ms = (time.time() * 1000.0) - sess._cached_vision_at_ms
-    if age_ms >= _VISION_CACHE_TTL_MS:
-        return True, f"trigger_phrase:{matched_trigger}_ttl_expired"
-
-    # Trigger fired but cache is recent enough — reuse it.
-    return False, f"trigger_phrase:{matched_trigger}_cache_hit_{age_ms:.0f}ms"
+    # Trigger phrase fired — always refresh. No cache reuse.
+    return True, f"trigger_phrase:{matched_trigger}"
 
 
 def _cancel_pending_vision(sess) -> None:
@@ -946,10 +930,10 @@ class _Session:
         # STT and awaited inside _emit_agent_turn. Cancelled on short-
         # circuit paths (motion_trigger / crisis / echo_reject).
         "_vision_task",
-        # Phase 11.6 — cached vision policy. Avoid running observe_face
-        # on every back-and-forth turn; refresh on first turn, every
-        # ~45 s, on visual-trigger phrases, or after agent handoff.
-        "_cached_vision", "_cached_vision_at_ms", "_therapy_turn_count",
+        # Therapy turn count drives the every-Nth-turn refresh hint
+        # for the therapist agent (vision cache itself was removed —
+        # every visual trigger now runs fresh).
+        "_therapy_turn_count",
         # Phase 11.10 — per-session streaming STT (ElevenLabs Scribe Realtime).
         "_streaming_stt",
     )
@@ -999,11 +983,6 @@ class _Session:
         # _process_turn, awaited just-in-time by _emit_agent_turn, cancelled
         # on short-circuit paths.
         self._vision_task: Any | None = None
-        # Phase 11.6 — vision cache. Per-session memo of the last successful
-        # vision result so we don't burn an API call on every therapy turn.
-        # Refresh policy lives in _should_refresh_vision().
-        self._cached_vision: dict | None = None
-        self._cached_vision_at_ms: float = 0.0
         self._therapy_turn_count: int = 0
         # Phase 11.10 — streaming STT (ElevenLabs Scribe Realtime).
         # Per-session WS that receives PCM frames as they arrive and
@@ -1351,23 +1330,14 @@ async def _emit_agent_turn(ws: WebSocket, sess: _Session,
             )
         finally:
             sess._vision_task = None  # type: ignore[attr-defined]
-        # Refresh path — if the call succeeded, update the cache.
-        if isinstance(vision_observation, dict) and \
-           vision_observation.get("vision_status") == "success":
-            sess._cached_vision = vision_observation  # type: ignore[attr-defined]
-            sess._cached_vision_at_ms = time.time() * 1000.0  # type: ignore[attr-defined]
-    elif sess._cached_vision is not None:  # type: ignore[attr-defined]
-        # Cache hit. Annotate the observation so the prompt can decide
-        # how strongly to lean on it (a 30-second-old read is fine for
-        # "I can see..." but we mark it explicitly).
-        cached = dict(sess._cached_vision)  # type: ignore[attr-defined]
-        cache_age_ms = (time.time() * 1000.0) - sess._cached_vision_at_ms  # type: ignore[attr-defined]
-        cached["vision_age_ms"] = round(cache_age_ms, 1)
-        cached["vision_cached"] = True
-        # Status stays 'success' — the data IS valid, just not freshly
-        # captured this turn. Therapist's Rule 0 still applies.
-        vision_observation = cached
+        # No cache write — every visual question runs fresh vision now.
     else:
+        # No vision task fired this turn (no trigger phrase). Skip
+        # vision entirely — the prompt's Rule 0 will see status=skipped
+        # and won't claim to see anything. We deliberately do NOT fall
+        # back to a stale cached observation: the previous behavior
+        # caused NAO to reuse a description from a prior user / setting
+        # when a friend asked "do you see around me?" minutes later.
         vision_observation = {
             "vision_status": "skipped",
             "vision_model": None,
@@ -1819,16 +1789,13 @@ async def _process_turn(ws: WebSocket, sess: _Session) -> None:
     # motion trigger). The agent turn awaits this task just-in-time.
     # If the user's transcript bounces (rejected / motion-trigger /
     # crisis), the task is cancelled so we don't burn a needless API call.
-    #
-    # Phase 11.6 — cache layer. Skip the API call entirely when the
-    # cached observation is still fresh AND the transcript doesn't
-    # explicitly invite a re-look. The cached observation is reused
-    # via _cached_vision in _emit_agent_turn.
+    # No cache layer: each visual question gets a fresh GPT-4o call so
+    # we never hand back a stale description from a prior user/setting.
     #
     # Phase 11.7 — fast-chat lane. When hint='chat' the agent is the
     # nano-model casual chatbot; vision is unused there and would just
-    # eat 2 s for nothing. Skip the kickoff entirely and clear cache so
-    # the prompt sees vision_status=skipped (its safety rule kicks in).
+    # eat 2 s for nothing. Skip the kickoff entirely so the prompt
+    # sees vision_status=skipped (its safety rule kicks in).
     image_b64 = sess.image_b64
     sess._vision_task = None  # type: ignore[attr-defined]
     is_fast_chat = (sess.hint or "").lower() == "chat"
