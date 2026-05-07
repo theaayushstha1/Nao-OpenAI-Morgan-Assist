@@ -43,25 +43,25 @@ End‑to‑end target: **&lt; 800 ms p50** mouth‑close to first audio.
 sequenceDiagram
     autonumber
     participant U as User
-    participant N as NAO (py 2.7)
-    participant S as Server (FastAPI)
+    participant N as NAO
+    participant S as Server
     participant A as Agents SDK
     participant T as ElevenLabs
 
     U->>N: speech
     N->>S: WS audio_chunk frames
-    S->>S: VAD + Silero gate
-    S->>S: STT (Deepgram / Whisper)
+    S->>S: VAD plus Silero gate
+    S->>S: STT (Deepgram or Whisper)
     S-->>S: Crisis gate (988 hard)
-    S-->>S: Motion trigger (LLM bypass)
-    S->>A: Router -> Specialist
+    S-->>S: Motion trigger short-circuit
+    S->>A: Router to specialist
     A-->>S: streaming token deltas
     S->>S: Sentence chunker
     S->>T: per-sentence synth (parallel)
     T-->>S: MP3 chunks
-    S->>N: WS audio_chunk + action frames
-    N->>N: ALAudioPlayer + gestures
-    N-->>U: speech + motion
+    S->>N: WS audio_chunk plus action frames
+    N->>N: ALAudioPlayer plus gestures
+    N-->>U: speech plus motion
     N->>N: post-playback drain
     N->>S: mic_resumed (clean restart)
 ```
@@ -82,35 +82,35 @@ graph LR
 
     USER([User]):::u
 
-    subgraph NAO["NAO H25 - naoqi 2.7"]
-        WAKE[Wake state machine]:::nao
-        WSC[WS client]:::nao
-        AUD[Audio module<br/>fragment recorder]:::nao
-        TTS[Stream TTS<br/>MP3 to WAV to ALAudioPlayer]:::nao
-        EXEC[Action worker<br/>gestures - dances - motors]:::nao
-        SND[Sound localizer<br/>+ ALTracker face mode]:::nao
-        BRAIN[(Brain cache<br/>64 KB)]:::db
+    subgraph NAO["NAO H25 naoqi 2.7"]
+        WAKE["Wake state machine"]:::nao
+        WSC["WS client"]:::nao
+        AUD["Audio module<br/>fragment recorder"]:::nao
+        TTS["Stream TTS<br/>MP3 to WAV to ALAudioPlayer"]:::nao
+        EXEC["Action worker<br/>gestures, dances, motors"]:::nao
+        SND["Sound localizer<br/>plus ALTracker face mode"]:::nao
+        BRAIN[("Brain cache<br/>64 KB")]:::db
     end
 
-    subgraph SRV["Server - FastAPI + uvicorn"]
-        WSS[WebSocket /ws/:user]:::srv
-        SAFE[Crisis gate]:::gate
-        MTR[Motion trigger]:::srv
-        VAD[Silero VAD]:::srv
-        STT[STT lane:<br/>Deepgram - Whisper - Scribe]:::srv
-        ROUTER[Router]:::ai
-        CHAT[Chat lanes:<br/>pure - embodied]:::ai
-        CHATBOT[Chatbot]:::ai
-        SKILLS[Skills]:::ai
-        THER[Therapist + CBT/Grounding/MI]:::ai
-        VIS[GPT-4o vision<br/>lazy, fresh per Q]:::ai
-        SES[(SQLite session<br/>+ user_prefs)]:::db
-        OBS[/metrics + JSONL/]:::srv
+    subgraph SRV["Server FastAPI plus uvicorn"]
+        WSS["WebSocket ws endpoint"]:::srv
+        SAFE["Crisis gate"]:::gate
+        MTR["Motion trigger"]:::srv
+        VAD["Silero VAD"]:::srv
+        STT["STT lane<br/>Deepgram, Whisper, Scribe"]:::srv
+        ROUTER["Router"]:::ai
+        CHAT["Chat lanes<br/>pure and embodied"]:::ai
+        CHATBOT["Chatbot"]:::ai
+        SKILLS["Skills"]:::ai
+        THER["Therapist plus CBT, Grounding, MI"]:::ai
+        VIS["GPT-4o vision<br/>lazy, fresh per question"]:::ai
+        SES[("SQLite session<br/>plus user_prefs")]:::db
+        OBS["metrics plus JSONL"]:::srv
     end
 
-    EL[(ElevenLabs Flash v2.5)]:::ext
-    OAI[(OpenAI Agents SDK)]:::ext
-    CSN[(CS Navigator API<br/>Cloud Run)]:::ext
+    EL[("ElevenLabs Flash v2.5")]:::ext
+    OAI[("OpenAI Agents SDK")]:::ext
+    CSN[("CS Navigator API<br/>Cloud Run")]:::ext
 
     USER -->|voice| WAKE --> WSC
     USER -->|face/proximity| WAKE
@@ -149,25 +149,25 @@ graph TD
     classDef tool fill:#2e7d32,stroke:#2e7d32,color:#fff
 
     T([turn]) --> CG{crisis check}:::gate
-    CG -- positive --> H[988 hotline<br/>fixed reply, no LLM]:::gate
+    CG -- positive --> H["988 hotline<br/>fixed reply, no LLM"]:::gate
     CG -- clean --> MT{motion trigger}:::route
-    MT -- match --> ACT[short-circuit action]:::route
-    MT -- no match --> R[router<br/>gpt-4.1-nano]:::route
+    MT -- match --> ACT["short-circuit action"]:::route
+    MT -- no match --> R["router<br/>gpt-4.1-nano"]:::route
 
-    R --> CH[chat<br/>pure - embodied]:::spec
-    R --> CB[chatbot]:::spec
-    R --> SK[skills]:::spec
-    R --> TH[therapist<br/>gpt-4.1-mini]:::spec
+    R --> CH["chat<br/>pure and embodied"]:::spec
+    R --> CB["chatbot"]:::spec
+    R --> SK["skills"]:::spec
+    R --> TH["therapist<br/>gpt-4.1-mini"]:::spec
 
-    TH --> CBT[cbt_coach<br/>thought records]:::sub
-    TH --> GR[grounding_coach<br/>5-4-3-2-1, box, scan]:::sub
-    TH -. opt .-> MI[mi_coach<br/>OARS]:::sub
+    TH --> CBT["cbt_coach<br/>thought records"]:::sub
+    TH --> GR["grounding_coach<br/>5-4-3-2-1, box, scan"]:::sub
+    TH -. opt .-> MI["mi_coach<br/>OARS"]:::sub
 
-    CH & TH -.-> NA[(nao_actions)]:::tool
-    CB -.-> CSN[(cs_navigator)]:::tool
-    SK -.-> ST[(skills_tools)]:::tool
-    TH & CBT & GR -.-> EM[(emotion + memory)]:::tool
-    CH -.-> LF[(learn_face)]:::tool
+    CH & TH -.-> NA[("nao_actions")]:::tool
+    CB -.-> CSN[("cs_navigator")]:::tool
+    SK -.-> ST[("skills_tools")]:::tool
+    TH & CBT & GR -.-> EM[("emotion plus memory")]:::tool
+    CH -.-> LF[("learn_face")]:::tool
 ```
 
 | Agent | Role | Default model |
@@ -251,20 +251,20 @@ The old design opened the mic on the server's `tts_ended` frame — but that onl
 sequenceDiagram
     participant Server
     participant Recv as WS recv loop
-    participant Q as _action_queue
-    participant Worker as nao-ws-actions
-    participant NAO as ALMotion + ALBehavior
+    participant Q as Action queue
+    participant Worker as Action worker
+    participant NAO as ALMotion plus ALBehavior
 
-    Server->>Recv: action {name, args}
+    Server->>Recv: action frame
     Recv->>Q: put_nowait
-    Recv-->>Server: (returns immediately)
+    Recv-->>Server: returns immediately
     Worker->>Q: get
-    Worker->>NAO: dispatch(name, args) blocking up to 15 s
+    Worker->>NAO: dispatch, blocking up to 15 s
     NAO-->>Worker: done
     Worker->>Q: get next
 
-    Note over Server,NAO: barge-in / crisis / shutdown
-    Server->>Recv: control: barge_in
+    Note over Server,NAO: barge-in or crisis or shutdown
+    Server->>Recv: control barge_in
     Recv->>Worker: drain queue
     Recv->>NAO: stopAllBehaviors
     NAO-->>Worker: cancelled
@@ -285,16 +285,16 @@ sequenceDiagram
     participant A as Chat agent
 
     U->>W: walks into camera view
-    W->>W: AWARE -> ENGAGED (gate fires)
+    W->>W: AWARE to ENGAGED, gate fires
     N->>S: control session_open
     N->>S: image (reason=session_open)
     N-->>U: "Heads up - my camera is on..."
     par face scan (3 s daemon)
         N->>N: ALFaceDetection.recognize
         alt known face
-            N->>S: control user_identified {name: Aayush, recognized: true}
+            N->>S: user_identified, name Aayush, recognized true
         else unknown
-            N->>S: control user_identified {name: null, face_visible: true}
+            N->>S: user_identified, name null, face_visible true
         end
     end
     U->>S: "hey can you see me"
@@ -377,7 +377,7 @@ flowchart LR
     A["clone repo"]:::step --> B["python -m venv .venv<br/>pip install -r server/requirements.txt"]:::step
     B --> C["cp .env.example .env<br/>fill OPENAI_API_KEY etc."]:::step
     C --> D["./run.sh"]:::step
-    D --> E([uvicorn :5050<br/>+ NAO main.py])
+    D --> E(["uvicorn on 5050<br/>plus NAO main.py"])
 ```
 
 ```bash
