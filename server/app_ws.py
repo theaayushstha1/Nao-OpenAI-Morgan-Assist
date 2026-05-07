@@ -1607,6 +1607,93 @@ async def _handle_wake_event(ws: WebSocket, sess: _Session,
     return True
 
 
+# ───────── Phase 7 — Robot-Side Brain cache sync ─────────
+
+
+async def _maybe_push_brain_sync(ws: WebSocket, sess: _Session,
+                                 data: dict[str, Any]) -> None:
+    """Phase 7 brain-cache delta push.
+
+    The robot ships a small identity/preferences cache (``~/nao_assist/brain.json``)
+    capped at 64 KB. On ``session_open`` it includes its current
+    ``brain_version``; if the server has newer data for this ``face_id``, we
+    push it back via a ``brain_sync`` control frame so the robot can hydrate
+    its cache before the conversation starts.
+
+    Trigger conditions (all must hold):
+    * ``data["face_id"]`` is a non-empty string (legacy clients omit it).
+    * ``data["brain_version"]`` is a non-negative integer (legacy clients omit it).
+    * ``server.session.pull_brain_updates`` returns a non-empty delta.
+
+    The delta is sent as ``control { subtype: "brain_sync", data: {updates: {...}} }``
+    BEFORE any greeting / first-turn announce so apply_updates lands before
+    those would matter. Never raises: any error is logged and swallowed so
+    the rest of session_open still runs.
+    """
+    face_id_raw = data.get("face_id")
+    if not face_id_raw or not isinstance(face_id_raw, str):
+        return
+    face_id = face_id_raw.strip()
+    if not face_id:
+        return
+
+    brain_version_raw = data.get("brain_version")
+    # Both presence and parsability are required — bool would coerce here so
+    # we reject it explicitly. Negative versions are also nonsense.
+    if isinstance(brain_version_raw, bool) or brain_version_raw is None:
+        return
+    try:
+        brain_version = int(brain_version_raw)
+    except (TypeError, ValueError):
+        return
+    if brain_version < 0:
+        return
+
+    try:
+        from server import session as _session
+        updates = await asyncio.to_thread(
+            _session.pull_brain_updates, face_id, brain_version,
+        )
+    except Exception as e:  # noqa: BLE001 — never break session_open on this
+        logger.warning(
+            "brain_sync_pull_failed",
+            user=sess.username, session_id=sess.session_id,
+            face_id=face_id, brain_version=brain_version, error=repr(e),
+        )
+        return
+
+    if not updates:
+        # No-op for unknown / unchanged users; legacy code-path continues.
+        logger.info(
+            "brain_sync_skipped",
+            user=sess.username, session_id=sess.session_id,
+            face_id=face_id, brain_version=brain_version,
+        )
+        return
+
+    try:
+        await _send_json(ws, _control_frame("brain_sync", updates=updates))
+    except Exception as e:  # noqa: BLE001 — send failures never propagate
+        logger.warning(
+            "brain_sync_send_failed",
+            user=sess.username, session_id=sess.session_id,
+            face_id=face_id, brain_version=brain_version, error=repr(e),
+        )
+        return
+
+    # Light-weight log for ops — count user keys rather than dump payloads
+    # so we don't leak display_name / recap text into structured logs.
+    logger.info(
+        "brain_sync_pushed",
+        user=sess.username, session_id=sess.session_id,
+        face_id=face_id, brain_version=brain_version,
+        users_updated=len((updates.get("users") or {})),
+        prompt_fragments_updated=len(
+            (updates.get("system_prompt_fragments") or {})
+        ),
+    )
+
+
 # ───────── Phase 6 — first-turn camera-consent heads-up ─────────
 
 # Default copy if the config knob isn't published yet (the `vision-debug`
@@ -1748,6 +1835,16 @@ async def _ingest_control(ws: WebSocket, sess: _Session,
             user=sess.username, session_id=sess.session_id,
             face_id=sess.face_id, hint=sess.hint,
         )
+        # Phase 7 — Robot-Side Brain cache sync. The robot announces its
+        # current ``brain_version`` in the handshake; if the server has
+        # newer data for this face_id, push it back as a ``brain_sync``
+        # control frame BEFORE any greeting / first-turn announce so the
+        # robot can apply the deltas before they'd matter for the next
+        # spoken interaction. Both ``face_id`` and ``brain_version`` must
+        # be present — older clients that don't carry the brain handshake
+        # fields keep the legacy behavior. Never breaks session_open: any
+        # error here is logged and swallowed.
+        await _maybe_push_brain_sync(ws, sess, data)
         # Phase 6 — first-turn camera-consent heads-up. Runs BEFORE any
         # personalized greeting (wake_event greetings come later in the
         # stream when the engagement gates fire). Gated on the operator

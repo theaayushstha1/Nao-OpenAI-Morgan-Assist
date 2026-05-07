@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 from contextlib import contextmanager
+from datetime import datetime, timezone
 
 from agents import SQLiteSession
 
@@ -204,6 +205,131 @@ def load_recent_recaps(username: str, n: int = 3) -> list[str]:
             (username, n),
         ).fetchall()
         return [r[0] for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Phase 7 — Robot-Side Brain cache sync.
+# ---------------------------------------------------------------------------
+#
+# The robot keeps a small identity/preferences cache (`~/nao_assist/brain.json`)
+# capped at 64 KB. On each WS handshake the robot announces its
+# ``brain_version`` and we push back any deltas it doesn't have. For Phase 7
+# minimum, the deltas are:
+#
+# * ``last_seen_iso``      — derived from the ``users.updated_at`` epoch.
+# * ``display_name``       — from ``users.display_name``.
+# * ``last_recap_summary`` — first body in the ``recaps`` table for this user,
+#                             truncated to 300 chars.
+#
+# Recaps key on ``username`` (the human-readable handle the agent loop uses),
+# while the cache keys on ``face_id``. We use ``display_name`` as the username
+# bridge: when display_name is set, callers like the therapist save recaps
+# under that handle, so it's the right key to look up. If no display_name
+# exists, recap lookup is skipped (face-only users have no therapist history
+# yet by definition).
+#
+# ``pull_brain_updates`` is read-only and never raises — a corrupt DB or
+# missing user just yields ``{}`` so the handshake degrades to "no sync".
+
+_BRAIN_RECAP_TRUNCATE = 300
+
+
+def _epoch_to_iso(epoch: float | None) -> str | None:
+    """Convert a UNIX epoch (REAL column) to an RFC-3339 / ISO-8601 string.
+
+    Returns ``None`` for falsy / invalid inputs so the caller can skip the
+    field entirely rather than emit ``"1970-01-01T00:00:00Z"``.
+    """
+    try:
+        ts = float(epoch or 0.0)
+    except (TypeError, ValueError):
+        return None
+    if ts <= 0.0:
+        return None
+    try:
+        dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+    except (OverflowError, OSError, ValueError):
+        return None
+    # Trim sub-second precision; the brain only needs minute-level "freshness".
+    return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def pull_brain_updates(face_id: str, since_version: int = 2) -> dict:
+    """Return the brain-cache delta for ``face_id`` since ``since_version``.
+
+    For Phase 7 minimum, ``since_version`` is reserved for forward-compat
+    (the brain schema is locked at v2 today; future versions may carry
+    structural rewrites that gate certain fields). We always return the
+    current values for the user; the robot is responsible for ignoring
+    fields it doesn't recognize.
+
+    Returns:
+        ``{}`` if ``face_id`` is empty, the user is unknown, or the row has
+        no fields worth syncing.
+
+        Otherwise, ``{"users": {face_id: {...}}, "system_prompt_fragments": {}}``
+        per the Phase 7 task map. Only fields that exist for the user are
+        included — callers should treat missing keys as "no change".
+
+    Never raises: any DB / I/O failure is caught and returned as ``{}`` so a
+    flaky persistence layer can't break the WS handshake.
+    """
+    fid = (face_id or "").strip().lower()
+    if not fid:
+        return {}
+
+    # All reads in one short-lived sqlite connection. We open it directly
+    # (rather than via ``_conn()``) because the ``users`` table is owned by
+    # ``server/memory.py`` — its DDL lives there, not here, and re-issuing
+    # the side-table CREATE statements on a hot path would be wasteful.
+    user_fields: dict[str, str] = {}
+    display_name: str | None = None
+    try:
+        c = sqlite3.connect(_DB_PATH)
+        try:
+            row = c.execute(
+                "SELECT display_name, updated_at FROM users WHERE face_id = ?",
+                (fid,),
+            ).fetchone()
+        finally:
+            c.close()
+    except sqlite3.Error:
+        return {}
+
+    if row is None:
+        return {}
+
+    raw_name, raw_updated_at = row
+    if raw_name:
+        display_name = str(raw_name).strip() or None
+        if display_name:
+            user_fields["display_name"] = display_name
+
+    iso = _epoch_to_iso(raw_updated_at)
+    if iso:
+        user_fields["last_seen_iso"] = iso
+
+    # Recaps key on ``username``. We use ``display_name`` as the bridge —
+    # it's the same handle the therapist uses when calling ``save_recap``.
+    if display_name:
+        try:
+            recaps = load_recent_recaps(display_name, n=1)
+        except sqlite3.Error:
+            recaps = []
+        if recaps:
+            body = (recaps[0] or "").strip()
+            if body:
+                if len(body) > _BRAIN_RECAP_TRUNCATE:
+                    body = body[: _BRAIN_RECAP_TRUNCATE - 3].rstrip() + "..."
+                user_fields["last_recap_summary"] = body
+
+    if not user_fields:
+        return {}
+
+    return {
+        "users": {fid: user_fields},
+        "system_prompt_fragments": {},
+    }
 
 
 # ---------------------------------------------------------------------------
