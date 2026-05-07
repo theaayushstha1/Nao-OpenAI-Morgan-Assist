@@ -168,6 +168,55 @@ def play_animation(ctx: RunContextWrapper, animation: str) -> str:
     return _enqueue(ctx, "play_animation", {"animation": (animation or "").strip().lower()})
 
 
+# ───────── Phase 4: Body-language gestures ─────────
+#
+# Canonical, fixed-vocabulary gestures from PHASE_4_TASK_MAP.md. These are
+# meant to be called *parallel* to TTS — short, shaped motions that punctuate
+# speech (a nod on reflection, a lean-in on a question) rather than full
+# routines. They append to the same actions_queue as the existing tools;
+# nao_execute.py routes the `gesture` action to a per-intent motion table.
+
+GESTURE_INTENTS: set[str] = {
+    "nod",
+    "shake",
+    "lean_in",
+    "lean_back",
+    "open_arms",
+    "point_self",
+    "point_listener",
+    "shrug",
+    "tilt_curious",
+    "breath_deep",
+}
+
+
+@function_tool
+def gesture(ctx: RunContextWrapper, intent: str) -> str:
+    """Perform a single body-language gesture during the current reply.
+
+    Allowed intents (canonical set):
+      nod            -- 2x head pitch nod, ~600 ms; reflective agreement
+      shake          -- head yaw shake, ~700 ms; gentle disagreement / "no"
+      lean_in        -- torso forward 5 deg, ~1.2 s; curiosity / engaged listening
+      lean_back      -- torso back 3 deg, ~800 ms; giving the user space
+      open_arms      -- both arms outward 30 deg, ~1 s; greeting / affirmation
+      point_self     -- right hand to chest, ~700 ms; "I", introducing self
+      point_listener -- right arm toward last sound source, ~900 ms; "you"
+      shrug          -- shoulders up + head tilt, ~600 ms; uncertainty
+      tilt_curious   -- head roll 12 deg + slight pause, ~500 ms; curious question
+      breath_deep    -- chest breathing 1 cycle, ~3 s; calm / pacing cue
+
+    Call this PARALLEL to speech -- it does not block the audio. You may call
+    multiple gestures in one turn (e.g. nod while reflecting, then lean_in
+    on the follow-up question).
+    """
+    cleaned = (intent or "").strip().lower()
+    if cleaned not in GESTURE_INTENTS:
+        return f"unknown gesture intent: {intent}"
+    _enqueue(ctx, "gesture", {"intent": cleaned})
+    return f"queued gesture: {cleaned}"
+
+
 # ───────── Bundles ─────────
 
 CHAT_ACTIONS = [
@@ -176,6 +225,7 @@ CHAT_ACTIONS = [
     move_forward, move_backward, turn_left, turn_right, spin,
     dance, change_eye_color, follow_movement, stop_follow,
     play_animation,
+    gesture,
 ]
 
 # Therapy mode keeps grounding/empathy gestures plus a few playful actions
@@ -188,6 +238,7 @@ THERAPIST_ACTIONS = [
     dance, follow_movement, stop_follow,
     stand_up, sit_down,
     play_animation,
+    gesture,
 ]
 
 ALL_TOOL_NAMES = {t.name for t in CHAT_ACTIONS} | {"set_led_color"}
