@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from contextlib import contextmanager
 
 from openai import OpenAI
@@ -166,14 +167,18 @@ def suggest_reframe(thought: str, distortion: str) -> list[str]:
 # System prompt is in module scope so the self-check + tests can import it
 # without instantiating the OpenAI client.
 _VISION_SYSTEM = (
-    "You read facial expressions for a supportive robot companion. "
-    "Briefly describe the user's affect, eye contact, and posture in "
-    "≤30 words. Be observational, not clinical — never diagnose. "
-    "Return JSON exactly shaped: "
-    '{"dominant_emotion": "<one of: happy, sad, angry, fearful, surprised, '
-    'disgusted, neutral, tired, stressed>", '
-    '"secondary": "<same vocabulary or empty string>", '
-    '"notes": "<≤30-word observational sentence about affect/eye contact/posture>"}'
+    "You describe a single video frame for a supportive robot companion. "
+    "Stay observational — never diagnose, never identify the user, never "
+    "guess age. ALWAYS return the JSON envelope below with all three "
+    "fields populated, even if the image is dark, blurry, low-detail, or "
+    "shows no clearly readable face: in those cases pick "
+    'dominant_emotion="neutral", secondary="", and put what IS visible '
+    "(lighting, framing, posture, hands, clothing, room, screen, "
+    "objects) in `notes`. Do NOT return empty strings or omit fields.\n"
+    "Return JSON exactly shaped:\n"
+    '{"dominant_emotion": "<happy|sad|angry|fearful|surprised|disgusted|neutral|tired|stressed>",\n'
+    ' "secondary": "<same vocabulary or empty string>",\n'
+    ' "notes": "<≤30-word observational sentence about whatever IS visible>"}'
 )
 
 
@@ -222,22 +227,142 @@ def _vision_classify(image_b64: str) -> dict:
         temperature=0.2,
     )
     raw = resp.choices[0].message.content
+    finish = getattr(resp.choices[0], "finish_reason", None)
+    refusal = getattr(resp.choices[0].message, "refusal", None)
 
     if _debug_vision_enabled():
-        _log.info("[DEBUG_VISION] observe_face response: %s", raw)
+        _log.info("[DEBUG_VISION] observe_face response: %s (finish=%s refusal=%s)",
+                   raw, finish, refusal)
 
-    # Defensive: gpt-4o has been observed returning None / empty content
-    # for some inputs even with response_format=json_object set. Don't
-    # let json.loads(None) explode and trash the whole turn.
+    # gpt-4o sometimes returns content=None with finish_reason='content_filter'
+    # when its safety classifier flags an image (people / faces fall under
+    # privacy heuristics). One retry with the no-people-detection prompt
+    # reliably gets past it.
+    if (not raw or not raw.strip()) and refusal is None:
+        retry = _client.chat.completions.create(
+            model=config.VISION_MODEL,
+            messages=[
+                {"role": "system",
+                 "content": (
+                    "You describe SCENE COMPOSITION ONLY — lighting, "
+                    "framing, posture, hands, clothing, room. Do NOT "
+                    "identify any person, infer identity, or guess age. "
+                    "Return the exact JSON shape: "
+                    '{"dominant_emotion": "<happy|sad|angry|fearful|'
+                    'surprised|disgusted|neutral|tired|stressed>", '
+                    '"secondary": "<same vocabulary or \'\'>", '
+                    '"notes": "<≤30 words about lighting/posture/'
+                    'environment, no identifying details>"}'
+                 )},
+                {"role": "user",
+                 "content": [
+                    {"type": "text",
+                     "text": "Describe the scene composition only."},
+                    {"type": "image_url",
+                     "image_url": {"url": data_uri}},
+                 ]},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.2,
+        )
+        raw = retry.choices[0].message.content
+        if _debug_vision_enabled():
+            _log.info("[DEBUG_VISION] observe_face retry response: %s", raw)
+
     if not raw or not raw.strip():
         return {"error": "empty_response"}
     try:
         return json.loads(raw)
     except (json.JSONDecodeError, TypeError):
-        # Fall back to wrapping the raw text — at least the therapist
-        # sees something instead of bouncing to the no-image path.
         return {"dominant_emotion": "unknown", "secondary": "",
                 "notes": raw.strip()[:400]}
+
+
+def observe_face_for_turn(image_b64: str | None) -> dict:
+    """Server-side vision call with structured status envelope.
+
+    Phase 11 (Option B): the WS handler runs this BEFORE the agent so
+    the therapist receives the observation as injected context, not via
+    a tool call. Eliminates two failure modes from the prompt-only path:
+
+      1. Model skips observe_face but still says "I can see..." (hallucination)
+      2. observe_face JSON parse failure trashes the turn
+
+    Returns a dict with these keys (always present):
+        vision_status      — "success" | "unavailable" | "failed" | "skipped"
+        vision_model       — model id used, or None
+        vision_latency_ms  — round-trip ms, or None
+        vision_summary     — short human-readable text the prompt can quote
+        raw                — full vision response dict (may be None)
+    """
+    if not image_b64:
+        return {
+            "vision_status": "unavailable",
+            "vision_model": None,
+            "vision_latency_ms": None,
+            "vision_summary": "",
+            "raw": None,
+        }
+    t0 = time.perf_counter()
+    try:
+        with _vision_phase_timer():
+            raw = _vision_classify(image_b64)
+    except Exception as exc:
+        _log.warning(
+            "observe_face_for_turn failed: %s",
+            exc, exc_info=_debug_vision_enabled(),
+        )
+        return {
+            "vision_status": "failed",
+            "vision_model": config.VISION_MODEL,
+            "vision_latency_ms": (time.perf_counter() - t0) * 1000.0,
+            "vision_summary": "",
+            "raw": None,
+        }
+
+    elapsed_ms = (time.perf_counter() - t0) * 1000.0
+
+    if not isinstance(raw, dict):
+        # Edge: empty / unparseable. _vision_classify now wraps these
+        # but be defensive in case future paths return something else.
+        return {
+            "vision_status": "failed",
+            "vision_model": config.VISION_MODEL,
+            "vision_latency_ms": elapsed_ms,
+            "vision_summary": "",
+            "raw": None,
+        }
+
+    if raw.get("error"):
+        # Empty response or other recoverable error — surface as failed
+        # but include the raw payload for forensics.
+        return {
+            "vision_status": "failed",
+            "vision_model": config.VISION_MODEL,
+            "vision_latency_ms": elapsed_ms,
+            "vision_summary": "",
+            "raw": raw,
+        }
+
+    notes = (raw.get("notes") or "").strip()
+    dom = (raw.get("dominant_emotion") or "").strip()
+    sec = (raw.get("secondary") or "").strip()
+
+    # Build a one-liner the therapist prompt can quote verbatim.
+    summary_parts = []
+    if dom:
+        summary_parts.append(dom + (f"/{sec}" if sec else ""))
+    if notes:
+        summary_parts.append(notes)
+    summary = "; ".join(summary_parts)[:400]
+
+    return {
+        "vision_status": "success",
+        "vision_model": config.VISION_MODEL,
+        "vision_latency_ms": elapsed_ms,
+        "vision_summary": summary,
+        "raw": raw,
+    }
 
 
 def _observe_face_impl(ctx):

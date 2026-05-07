@@ -366,16 +366,47 @@ def transcribe(path: str) -> str:
 
 # ───────── agent runner ─────────
 
-def _build_user_message(transcript: str, image_b64: str | None):
-    """Build a Runner input. For text-only, return a string. For multimodal,
-    return the Responses-API shape: a single user message with typed content
-    items (input_text / input_image)."""
+def _build_user_message(transcript: str, image_b64: str | None,
+                          vision_observation: dict | None = None):
+    """Build a Runner input.
+
+    When ``vision_observation`` is supplied (Phase 11 Option B path), we
+    prepend a short developer note to the transcript so the therapist
+    agent reads it as context. The agent prompt enforces the rule that
+    visual observations may only be referenced when ``vision_status ==
+    "success"`` -- this builder is the *only* place vision data enters
+    the conversation under Option B, so the therapist can't hallucinate.
+
+    For text-only, return a string. For multimodal, return the
+    Responses-API shape: a single user message with typed content items
+    (input_text / input_image).
+    """
+    vision_prefix = ""
+    if isinstance(vision_observation, dict):
+        status = vision_observation.get("vision_status") or "skipped"
+        summary = (vision_observation.get("vision_summary") or "").strip()
+        if status == "success" and summary:
+            vision_prefix = (
+                "[NAO_VISION vision_status=success vision_summary=\""
+                + summary.replace("\"", "'") + "\"]\n"
+                "(Server-side vision observation. You MAY reference these "
+                "details in your reply per the prompt's Rule 0.)\n"
+            )
+        else:
+            vision_prefix = (
+                "[NAO_VISION vision_status=" + status + " vision_summary=\"\"]\n"
+                "(No usable vision data this turn. Per the prompt's safety "
+                "rule, do NOT reference any visual details about the user "
+                "or their environment in your reply.)\n"
+            )
+
+    text = vision_prefix + (transcript or "")
     if not image_b64:
-        return transcript
+        return text
     return [{
         "role": "user",
         "content": [
-            {"type": "input_text", "text": transcript},
+            {"type": "input_text", "text": text},
             {"type": "input_image",
              "image_url": "data:image/jpeg;base64,{0}".format(image_b64)},
         ],
@@ -383,11 +414,18 @@ def _build_user_message(transcript: str, image_b64: str | None):
 
 
 def run_agent(username: str, hint: str | None, transcript: str,
-              image_b64: str | None) -> tuple[str, str, list[dict], bool]:
+              image_b64: str | None,
+              vision_observation: dict | None = None,
+              ) -> tuple[str, str, list[dict], bool]:
     """Run the agent graph synchronously and return
     (reply, active_agent_name, actions_queue, suppress_image).
 
-    Identical semantics to `server.server._run_agent`.
+    Phase 11 / Option B: callers may pass ``vision_observation`` (the
+    structured envelope from ``server.tools.emotion.observe_face_for_turn``)
+    to inject the result as conversation context. When supplied, the
+    therapist agent reads it as part of the user message; it never has
+    to call ``observe_face`` itself, so the "skipped tool but said 'I can
+    see...'" hallucination path is closed.
     """
     agent = pick_initial_agent(username, hint)
     sess = session.get_or_create_session(username)
@@ -397,8 +435,10 @@ def run_agent(username: str, hint: str | None, transcript: str,
         "emotion_log": [],
         "latest_image_b64": image_b64,
         "suppress_image": False,
+        # Stash for the topology trace + therapist prompt-time inspection.
+        "vision_observation": vision_observation,
     }
-    message = _build_user_message(transcript, image_b64)
+    message = _build_user_message(transcript, image_b64, vision_observation)
     reply, active, _verdict, _metadata = run_topology(
         agent, message, context=ctx, session=sess,
     )

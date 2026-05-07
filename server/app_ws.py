@@ -46,6 +46,26 @@ from fastapi import (
 
 from server import config, motion_trigger, openai_tts, safety
 from server import _legacy_helpers as legacy
+from server.tools import emotion as _emotion_module
+
+
+def _cancel_pending_vision(sess) -> None:
+    """Drop the pending parallel vision task on a short-circuit path.
+
+    Motion-trigger / crisis / echo-reject all skip the agent run, so
+    awaiting the vision result would just burn an API call. Cancel the
+    task quietly; ignore CancelledError on next-loop drain.
+    """
+    task = getattr(sess, "_vision_task", None)
+    if task is not None and not task.done():
+        try:
+            task.cancel()
+        except Exception:
+            pass
+    try:
+        sess._vision_task = None  # type: ignore[attr-defined]
+    except Exception:
+        pass
 
 # ───────── observability adapters ─────────
 #
@@ -782,6 +802,10 @@ class _Session:
         # Phase 10.5: in-flight agent turn task. Spawned so the receive loop
         # keeps draining frames (especially barge_in) during long replies.
         "active_turn_task",
+        # Phase 11 / Option B: parallel vision call task fired right after
+        # STT and awaited inside _emit_agent_turn. Cancelled on short-
+        # circuit paths (motion_trigger / crisis / echo_reject).
+        "_vision_task",
     )
 
     def __init__(self, username: str) -> None:
@@ -825,6 +849,10 @@ class _Session:
         # loop can keep handling control frames (especially barge_in) while
         # the turn is mid-flight.
         self.active_turn_task: Any | None = None
+        # Phase 11 / Option B: pending vision call. Set right after STT in
+        # _process_turn, awaited just-in-time by _emit_agent_turn, cancelled
+        # on short-circuit paths.
+        self._vision_task: Any | None = None
 
     def reset_turn(self) -> None:
         self.audio_buf = bytearray()
@@ -1100,11 +1128,70 @@ async def _emit_agent_turn(ws: WebSocket, sess: _Session,
                  "stt_ms": phase_ms.get("stt", 0)},
     })
 
+    # Phase 11 / Option B: await the parallel vision call (kicked off
+    # right after STT) just-in-time before the agent runs. Bounded by
+    # a 4 s timeout so a slow vision call can't hold up the whole turn.
+    vision_observation = None
+    vision_task = getattr(sess, "_vision_task", None)
+    if vision_task is not None:
+        try:
+            with _phase("vision_call", phase_ms):
+                vision_observation = await asyncio.wait_for(
+                    vision_task, timeout=4.0,
+                )
+        except asyncio.TimeoutError:
+            vision_task.cancel()
+            vision_observation = {
+                "vision_status": "failed",
+                "vision_model": getattr(config, "VISION_MODEL", None),
+                "vision_latency_ms": 4000.0,
+                "vision_summary": "",
+                "raw": None,
+            }
+        except Exception as exc:
+            vision_observation = {
+                "vision_status": "failed",
+                "vision_model": getattr(config, "VISION_MODEL", None),
+                "vision_latency_ms": None,
+                "vision_summary": "",
+                "raw": None,
+            }
+            logger.warning(
+                "vision_task_error", user=sess.username,
+                session_id=sess.session_id, error=repr(exc),
+            )
+        finally:
+            sess._vision_task = None  # type: ignore[attr-defined]
+    else:
+        vision_observation = {
+            "vision_status": "skipped",
+            "vision_model": None,
+            "vision_latency_ms": None,
+            "vision_summary": "",
+            "raw": None,
+        }
+
+    # Audit log: every turn shows whether vision actually fired.
+    logger.info(
+        "turn_vision",
+        user=sess.username, session_id=sess.session_id,
+        turn_idx=sess.turn_idx,
+        vision_status=vision_observation.get("vision_status"),
+        vision_model=vision_observation.get("vision_model"),
+        vision_latency_ms=vision_observation.get("vision_latency_ms"),
+        vision_summary=(vision_observation.get("vision_summary") or "")[:200],
+    )
+
     with _phase("agent_complete", phase_ms):
         # `run_topology` is sync (calls asyncio.run inside) — keep it off the
         # event loop so we can keep handling incoming frames (barge-in).
+        # Pass image_b64=None: vision already ran server-side and the result
+        # is now injected via vision_observation. Sending the bytes again
+        # would just waste tokens on a duplicate input_image attachment.
         reply, active_agent, actions, suppress_image = await asyncio.to_thread(
-            legacy.run_agent, sess.username, sess.hint, transcript, image_b64,
+            legacy.run_agent,
+            sess.username, sess.hint, transcript, None,
+            vision_observation,
         )
 
     # Drain actions BEFORE the first audio chunk so the robot can prep
@@ -1280,6 +1367,20 @@ async def _process_turn(ws: WebSocket, sess: _Session) -> None:
             except Exception:
                 pass
 
+    # Phase 11 / Option B: kick off the vision call IN PARALLEL with the
+    # downstream pipeline (echo guard, crisis check, semantic endpoint,
+    # motion trigger). The agent turn awaits this task just-in-time.
+    # If the user's transcript bounces (rejected / motion-trigger /
+    # crisis), the task is cancelled so we don't burn a needless API call.
+    image_b64 = sess.image_b64
+    sess._vision_task = None  # type: ignore[attr-defined]
+    if image_b64:
+        sess._vision_task = asyncio.create_task(  # type: ignore[attr-defined]
+            asyncio.to_thread(
+                _emotion_module.observe_face_for_turn, image_b64,
+            )
+        )
+
     reason = legacy.transcript_reject_reason(
         sess.username, transcript, asking_name=sess.asking_name,
     )
@@ -1353,6 +1454,9 @@ async def _process_turn(ws: WebSocket, sess: _Session) -> None:
     with _phase("motion_trigger", phase_ms):
         motion = motion_trigger.detect(transcript)
     if motion is not None:
+        # Cancel the parallel vision call — motion path doesn't use it
+        # and we shouldn't burn an API call we won't read.
+        _cancel_pending_vision(sess)
         await _emit_motion(ws, sess, transcript, motion, phase_ms)
         return
 
