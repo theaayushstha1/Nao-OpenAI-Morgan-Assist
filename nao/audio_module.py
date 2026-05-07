@@ -174,8 +174,24 @@ class NaoAudioStreamer(ALModule):
                  chunk_ms=CHUNK_MS):
         # ALModule.__init__ registers the module name with the running
         # broker so the C++ audio device can dispatch processRemote() back
-        # to this instance.
-        ALModule.__init__(self, name)
+        # to this instance. On some NAO firmware revisions (observed on
+        # this V6 head: 2.8.x) the SWIG-generated autoBind chain inside
+        # ALDocable.__init__ raises AttributeError because the metaclass
+        # __getattr__ falls through to object.__getattr__ which doesn't
+        # exist on Python 2.7. We catch it here, mark the module as
+        # "live-stream incapable," and force fragment fallback in start().
+        # That's the documented Phase 0.5 risk path from the PRD.
+        self._module_init_ok = False
+        try:
+            ALModule.__init__(self, name)
+            self._module_init_ok = True
+        except (AttributeError, RuntimeError) as exc:
+            logger.warning(
+                "[audio_module] ALModule.__init__ failed (%s: %s). "
+                "Live-PCM subscriber unavailable on this firmware; will "
+                "use file-fragment fallback.",
+                type(exc).__name__, exc,
+            )
 
         self.module_name = name
         self.broker_ip = broker_ip
@@ -220,8 +236,11 @@ class NaoAudioStreamer(ALModule):
 
         # Register the instance into __main__ so the broker can resolve
         # ``self.module_name`` for processRemote dispatch. This is the
-        # canonical naoqi ALModule pattern.
-        self._register_in_main()
+        # canonical naoqi ALModule pattern. Only useful when ALModule init
+        # actually succeeded; skip it on firmwares where we fell back to
+        # fragment mode (no remote dispatch happens there).
+        if self._module_init_ok:
+            self._register_in_main()
 
     # ── Lifecycle ───────────────────────────────────────────────────────────
     def _register_in_main(self):
@@ -269,24 +288,41 @@ class NaoAudioStreamer(ALModule):
         self._tail = b""
         self._gate_closed = False
 
-        # Try the live subscriber path first.
-        try:
-            self._setup_subscriber()
-            self._do_subscribe()
-            self.mode = "alaudio_device"
-            self._streaming = True
+        # Live subscriber path is only viable when ALModule.__init__ succeeded.
+        # On firmwares where SWIG autoBind broke that init, we skip straight
+        # to the fragment recorder so we don't waste 1-2 s on the ALAudioDevice
+        # round trip we already know will fail.
+        print("[mic_trace] using_almodule_subscriber={0}".format(
+            self._module_init_ok))
+        sys.stderr.flush()
+        if self._module_init_ok:
+            try:
+                self._setup_subscriber()
+                self._do_subscribe()
+                self.mode = "alaudio_device"
+                self._streaming = True
+                logger.info(
+                    "[audio_module] subscribed to ALAudioDevice "
+                    "(rate=%d hz, chunk=%d ms, mode=%s)",
+                    SAMPLE_RATE_HZ, self.chunk_ms, self.mode,
+                )
+                return self.mode
+            except Exception as exc:
+                logger.warning(
+                    "[audio_module] ALAudioDevice subscribe failed (%s): %s — "
+                    "falling back to fragment recorder",
+                    type(exc).__name__, exc,
+                )
+        else:
             logger.info(
-                "[audio_module] subscribed to ALAudioDevice "
-                "(rate=%d hz, chunk=%d ms, mode=%s)",
-                SAMPLE_RATE_HZ, self.chunk_ms, self.mode,
+                "[audio_module] skipping ALAudioDevice subscribe (ALModule "
+                "init failed at construct time); going straight to fragment "
+                "fallback."
             )
-            return self.mode
-        except Exception as exc:
-            logger.warning(
-                "[audio_module] ALAudioDevice subscribe failed (%s): %s — "
-                "falling back to fragment recorder",
-                type(exc).__name__, exc,
-            )
+
+        print("[mic_trace] using_fragment_recorder=true (recorder_proxy={0})".format(
+            self._recorder is not None))
+        sys.stderr.flush()
 
         # Fallback: short-fragment recorder.
         try:
@@ -513,6 +549,12 @@ class NaoAudioStreamer(ALModule):
         except OSError:
             pass  # already exists
 
+        # Stdlib logger has no handler in this process; print to stderr so
+        # the operator can see fragment-mode actually engaged.
+        print("[audio_module] fragment recorder STARTING (dir={0}, fragment_ms={1})".format(
+            FRAGMENT_DIR, FRAGMENT_MS))
+        sys.stderr.flush()
+
         self._fragment_stop.clear()
         self._fragment_thread = threading.Thread(target=self._fragment_worker)
         self._fragment_thread.daemon = True
@@ -529,59 +571,192 @@ class NaoAudioStreamer(ALModule):
         self._fragment_thread = None
 
     def _fragment_worker(self):
-        """Loop: record FRAGMENT_MS, read WAV, push 20 ms slices."""
-        idx = 0
+        """One continuous ALAudioRecorder recording + tail the growing WAV.
+
+        Rapid start/stop (250 ms cycles) does NOT work on this NAO V6
+        firmware — every short recording produced a 44-byte header-only
+        WAV with zero audio frames. ALAudioRecorder needs ~300-500 ms of
+        spin-up time before it actually captures samples.
+
+        Instead we start ONE long recording on engage, then poll the file
+        size every ~50 ms and read whatever new bytes appeared. The WAV
+        writer flushes data to disk continuously while recording, so the
+        file grows in real time. Stopping happens on disengage / shutdown.
+        """
+        print("[audio_module] fragment_worker thread alive (continuous mode)")
+        sys.stderr.flush()
+        big_path = os.path.join(FRAGMENT_DIR, "stream.wav")
+        # Clean any leftover file so we start fresh.
+        try:
+            if os.path.exists(big_path):
+                os.unlink(big_path)
+        except Exception:
+            pass
+        # Stop any prior recording, then start the long one.
+        try:
+            self._recorder.stopMicrophonesRecording()
+        except Exception:
+            pass
+        try:
+            self._recorder.startMicrophonesRecording(
+                big_path, "wav", SAMPLE_RATE_HZ, FRAGMENT_CHANNELS_MASK,
+            )
+            print("[audio_module] continuous recording -> {0}".format(big_path))
+            sys.stderr.flush()
+        except Exception as exc:
+            print("[audio_module] startMicrophonesRecording FAILED: {0}: {1}".format(
+                type(exc).__name__, exc))
+            sys.stderr.flush()
+            return
+
+        # Wait for ALAudioRecorder to spin up + write the WAV header.
+        time.sleep(0.30)
+
+        # Read the WAV header once so we know nchan / width before tailing.
+        nchan = 1
+        width = 2
+        header_size = 44  # standard PCM WAV header
+        try:
+            with open(big_path, "rb") as fh:
+                hdr = fh.read(64)
+            # Parse 'fmt ' chunk: nchan at offset 22, sample width (bytes/sample) at 32
+            if len(hdr) >= 36 and hdr[:4] == b"RIFF" and hdr[8:12] == b"WAVE":
+                import struct as _struct
+                nchan = _struct.unpack("<H", hdr[22:24])[0]
+                bits_per_sample = _struct.unpack("<H", hdr[34:36])[0]
+                width = max(1, bits_per_sample // 8)
+                print("[audio_module] WAV header: nchan={0} width={1}".format(nchan, width))
+                sys.stderr.flush()
+        except Exception as exc:
+            print("[audio_module] WAV header parse failed: {0}".format(exc))
+            sys.stderr.flush()
+
+        sample_stride = nchan * width
+        front_idx = AL_CHANNEL_FRONT - 1  # 0-based
+        if front_idx >= nchan:
+            front_idx = 0
+
+        last_offset = header_size
+        first_pcm_logged = False
+        last_size_check = time.time()
         while not self._fragment_stop.is_set() and self._streaming:
             if self._gate_closed:
                 time.sleep(0.05)
                 continue
-            idx = (idx + 1) % 1000
-            path = os.path.join(FRAGMENT_DIR, "frag_{0}.wav".format(idx))
             try:
-                # Stop any prior recording first; idempotent if none running.
-                try:
-                    self._recorder.stopMicrophonesRecording()
-                except Exception:
-                    pass
-                self._recorder.startMicrophonesRecording(
-                    path, "wav", SAMPLE_RATE_HZ, FRAGMENT_CHANNELS_MASK,
-                )
-                # Sleep for exactly the fragment window; this is the dominant
-                # latency contributor in fallback mode.
-                time.sleep(FRAGMENT_MS / 1000.0)
-                try:
-                    self._recorder.stopMicrophonesRecording()
-                except Exception:
-                    pass
-
-                pcm = self._read_wav_pcm(path)
-                if pcm:
-                    self._slice_and_enqueue(pcm)
+                cur_size = os.path.getsize(big_path)
             except Exception:
-                logger.error(
-                    "[audio_module] fragment worker error:\n%s",
-                    traceback.format_exc(),
-                )
-                # Don't tight-loop on errors.
                 time.sleep(0.05)
-            finally:
-                if os.path.exists(path):
-                    try:
-                        os.unlink(path)
-                    except Exception:
-                        pass
+                continue
+            if cur_size <= last_offset:
+                # Once a second, log if file isn't growing — that means
+                # ALAudioRecorder isn't actually capturing.
+                now = time.time()
+                if now - last_size_check > 1.0:
+                    last_size_check = now
+                    print("[audio_module] WAV not growing (size={0} last={1})".format(
+                        cur_size, last_offset))
+                    sys.stderr.flush()
+                time.sleep(0.02)
+                continue
+            try:
+                with open(big_path, "rb") as fh:
+                    fh.seek(last_offset)
+                    new_bytes = fh.read(cur_size - last_offset)
+            except Exception:
+                time.sleep(0.05)
+                continue
+            # Align to a frame boundary so we don't split a sample.
+            usable = (len(new_bytes) // sample_stride) * sample_stride
+            if usable <= 0:
+                time.sleep(0.02)
+                continue
+            new_bytes = new_bytes[:usable]
+            last_offset += usable
+
+            if nchan == 1:
+                pcm = new_bytes
+            else:
+                # Deinterleave: pull every nchan-th sample starting at front_idx.
+                buf = bytearray()
+                offset = front_idx * width
+                while offset + width <= len(new_bytes):
+                    buf.extend(new_bytes[offset:offset + width])
+                    offset += sample_stride
+                pcm = bytes(buf)
+
+            if pcm:
+                if not first_pcm_logged:
+                    print("[audio_module] FIRST PCM captured: {0} bytes (file size={1})".format(
+                        len(pcm), cur_size))
+                    sys.stderr.flush()
+                    first_pcm_logged = True
+                self._slice_and_enqueue(pcm)
+            time.sleep(0.02)
+
+        # Shutdown: stop the recorder.
+        try:
+            self._recorder.stopMicrophonesRecording()
+        except Exception:
+            pass
+        # Best-effort cleanup of the big file.
+        try:
+            os.unlink(big_path)
+        except Exception:
+            pass
 
     def _read_wav_pcm(self, path):
-        """Read 16 kHz mono PCM16 bytes out of a WAV file."""
+        """Read 16 kHz mono PCM16 bytes out of a WAV file.
+
+        Handles ALAudioRecorder's quirks:
+          - Multi-channel WAVs (NAOqi sometimes ignores the channel mask
+            and writes 4-channel; pull channel 2 = front mic).
+          - File-flush race: stopMicrophonesRecording is async, the file
+            may have only the WAV header when we open it. Caller already
+            has a settle delay; this fn just defends against partial files.
+        """
+        try:
+            file_size = os.path.getsize(path)
+        except Exception:
+            file_size = 0
+        if file_size <= 44:  # 44-byte WAV header with no samples
+            print("[audio_module] WAV too small ({0} bytes) — partial flush?".format(
+                file_size))
+            sys.stderr.flush()
+            return b""
         try:
             wf = wave.open(path, "rb")
             try:
-                if wf.getnchannels() != 1 or wf.getsampwidth() != 2:
+                nchan = wf.getnchannels()
+                width = wf.getsampwidth()
+                if width != 2:
+                    print("[audio_module] WAV bad sampwidth={0} (need 2)".format(width))
+                    sys.stderr.flush()
                     return b""
-                return wf.readframes(wf.getnframes())
+                raw = wf.readframes(wf.getnframes())
+                if not raw:
+                    return b""
+                if nchan == 1:
+                    return raw
+                # Multi-channel: take the FRONT mic (channel index 2 of 4).
+                # NAO V6 channel order is rear-left, rear-right, front, side.
+                # Each frame is `nchan * width` bytes; we copy every (front)
+                # sample out.
+                front_idx = AL_CHANNEL_FRONT - 1  # 0-based
+                if front_idx >= nchan:
+                    front_idx = 0
+                step = nchan * width
+                out = bytearray()
+                offset = front_idx * width
+                while offset + width <= len(raw):
+                    out.extend(raw[offset:offset + width])
+                    offset += step
+                return bytes(out)
             finally:
                 wf.close()
-        except Exception:
+        except Exception as exc:
+            print("[audio_module] WAV read error on {0}: {1}".format(path, exc))
+            sys.stderr.flush()
             return b""
 
     def _slice_and_enqueue(self, pcm):

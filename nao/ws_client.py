@@ -165,6 +165,10 @@ def _audio_chunk_frame(seq, ts_ms, b64_pcm):
     }
 
 
+def _image_frame(b64_jpeg):
+    return {"type": "image", "data": b64_jpeg}
+
+
 def _control_frame(subtype, data=None):
     payload = data if isinstance(data, dict) else {}
     return {
@@ -241,6 +245,54 @@ class NaoWsClient(object):
         self._mic_open_timer = None
         self._mic_timer_lock = threading.Lock()
 
+        # Action worker thread + queue. Body actions (gestures, dances,
+        # follow-me) come in over the WS as `action` frames. The
+        # dispatcher can block for seconds on naoqi joint moves; running
+        # it on the recv thread freezes audio + control reception. We
+        # serialize through a dedicated worker so recv stays hot AND
+        # actions don't trample each other on shared joint resources.
+        self._action_queue = _queue.Queue()
+        self._action_worker_thread = None
+
+        # Post-playback waiter thread. tts_ended from the server only
+        # means "server is done streaming" — it does NOT mean local
+        # playback is finished. The tts_player can still have several
+        # MP3 chunks queued. We poll tts_player.is_playing() until it
+        # returns False, then arm the grace timer, then open the mic.
+        # Without this, the mic was opening while the speaker was still
+        # broadcasting NAO's own voice, which then bounced into the mic
+        # and got transcribed back as "self_echo".
+        self._mic_resume_waiter = None
+        self._mic_resume_waiter_stop = threading.Event()
+
+        # ProcessingAnnouncer — disabled per operator request. The
+        # built-in ALTextToSpeech voice clashed with ElevenLabs and
+        # fillers were firing mid-conversation. Code path stays wired
+        # (transcript handler still checks for non-None announcer,
+        # audio_chunk handler still kills it) so re-enabling is a
+        # one-line flip: instantiate ProcessingAnnouncer here.
+        self._announcer = None
+        # Per-turn flag: was the announcer started for this turn? Reset
+        # when the next transcript arrives. Used to avoid stop()'ing a
+        # never-started announcer (no-op, but cleaner logging).
+        self._announcer_active = False
+        # Per-turn flag flipped True the moment the first reply audio
+        # chunk for the current turn arrives. While True, the filler is
+        # NOT allowed to start (avoids the case where transcript fires,
+        # filler kicks in 1.5 s later, and by then the real reply is
+        # already mid-play). Reset when the next transcript arrives.
+        self._reply_audio_arrived = False
+
+        # Speaking-gesture loop state. While TTS is active, a daemon
+        # thread picks a random body-language gesture from the canonical
+        # 10-intent table every ~2.5 s. ``_speaking_gesture_stop`` is set
+        # on tts_ended / barge to cleanly exit the loop. Stand-up
+        # posture is also fired once when TTS first starts so gestures
+        # have presence (sitting NAO with arm-waving looks weird).
+        self._speaking_gesture_thread = None
+        self._speaking_gesture_stop = threading.Event()
+        self._stood_up_once = False
+
     # ------------------------------------------------------------------
     # External: queue a control frame from anywhere on the robot side
     # (e.g. audio_module pushing wake_event, end_of_utterance from the
@@ -251,6 +303,72 @@ class NaoWsClient(object):
             self._control_queue.put_nowait(_control_frame(subtype, data))
         except _queue.Full:  # bounded queues; we use unbounded but be safe
             self.log.warn("control_queue_full", subtype=subtype)
+
+    def _snap_and_push_image(self, reason="turn"):
+        """Capture a JPEG from NAO's front camera and queue it as an
+        ``image`` frame for the server. Vision auto-runs server-side
+        when ``sess.image_b64`` is set (see app_ws.py:_ingest_frame).
+
+        Runs on a daemon thread so the ~150-300 ms ALPhotoCapture call
+        doesn't block the receiver thread or delay the next audio chunk.
+        Best-effort — failures are debug-logged and non-fatal.
+        """
+        def _do_snap():
+            try:
+                from utils import camera_capture
+                import os as _os
+                ip = _os.environ.get("NAO_IP", "127.0.0.1")
+                # Snap to a tmp path. snap_quick already writes the
+                # JPEG to disk; we read it and base64 it for the WS.
+                path = camera_capture.snap_quick(ip, 9559)
+                if not path:
+                    self.log.debug("snap_image_path_empty", reason=reason)
+                    return
+                try:
+                    with open(path, "rb") as fh:
+                        raw = fh.read()
+                except Exception as exc:
+                    self.log.debug("snap_image_read_failed",
+                                   reason=reason, error=str(exc))
+                    return
+                if not raw:
+                    return
+                b64 = base64.b64encode(raw)
+                if isinstance(b64, bytes):
+                    try:
+                        b64 = b64.decode("ascii")
+                    except Exception:
+                        b64 = str(b64)
+                # Push directly through the WS (not the control queue —
+                # this is a top-level image frame, not a control subframe).
+                ws = None
+                with self._ws_lock:
+                    ws = self._ws
+                if ws is None:
+                    return
+                ok = self._send_json(ws, _image_frame(b64))
+                if ok:
+                    import sys as _sys
+                    print("[vision] image snapped + sent ({0} bytes b64, "
+                          "reason={1})".format(len(b64), reason))
+                    _sys.stderr.flush()
+                else:
+                    self.log.debug("snap_image_send_failed", reason=reason)
+                # Best-effort cleanup of the tmp file.
+                try:
+                    _os.unlink(path)
+                except Exception:
+                    pass
+            except Exception as exc:
+                self.log.debug("snap_image_failed",
+                               reason=reason, error=str(exc))
+
+        try:
+            t = threading.Thread(target=_do_snap, name="nao-snap-image")
+            t.daemon = True
+            t.start()
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Frame send/recv primitives
@@ -335,6 +453,9 @@ class NaoWsClient(object):
     def _handle_audio_chunk(self, frame):
         """Server sent us a sentence-chunk MP3. Hand to the TTS player."""
         if self.tts_player is None:
+            import sys as _sys
+            print("[tts_trace] audio_chunk_received_from_server but tts_player is None — DROPPED")
+            _sys.stderr.flush()
             return
         b64 = frame.get("data") or ""
         text = frame.get("text") or ""
@@ -343,29 +464,143 @@ class NaoWsClient(object):
         except Exception as exc:
             self.log.warn("audio_chunk_b64_decode_failed", error=str(exc))
             return
+        import sys as _sys
+        print("[tts_trace] audio_chunk_received_from_server bytes={0} text_preview={1!r}".format(
+            len(mp3_bytes), (text or "")[:40]))
+        _sys.stderr.flush()
+        # Real reply audio arrived → block any future filler and kill
+        # the in-flight one if there is one. interrupt=True makes
+        # ProcessingAnnouncer call our stop_all helper, which calls
+        # ALTextToSpeech.stopAll() — that's the ONLY way to cut a
+        # naoqi say() mid-word. Without it, the filler finishes the
+        # phrase even after stop_event is set, and the user hears
+        # "Hmm let me…" overlapping with the real reply.
+        self._reply_audio_arrived = True
+        if self._announcer_active and self._announcer is not None:
+            try:
+                self._announcer.stop(interrupt=True)
+            except Exception:
+                pass
+            self._announcer_active = False
+        # Belt-and-braces: also stop any ALTTS directly in case the
+        # announcer hadn't initialized stop_all yet.
+        try:
+            self._announcer_stop_all()
+        except Exception:
+            pass
+        # Embodiment: server doesn't always emit a tts_started control
+        # frame before the first audio_chunk, so kick stand-up + the
+        # speaking-gesture loop here too. Both are idempotent
+        # (_kick_stand_up checks _stood_up_once, _start_speaking_gestures
+        # is a no-op if the thread is already running).
+        if not self._tts_active.is_set():
+            self._tts_active.set()
+        try:
+            self._kick_stand_up()
+        except Exception:
+            pass
+        try:
+            self._start_speaking_gestures()
+        except Exception:
+            pass
         try:
             self.tts_player.enqueue(text, mp3_bytes)
         except Exception as exc:
+            print("[tts_trace] tts_player.enqueue raised: {0}: {1}".format(
+                type(exc).__name__, exc))
+            _sys.stderr.flush()
             self.log.error("tts_enqueue_failed", error=str(exc))
 
     def _handle_action(self, frame):
-        """Body action — dispatch immediately, do not wait on TTS audio."""
+        """Body action — hand off to the action worker thread.
+
+        The dispatcher can call blocking naoqi APIs (motion.moveTo,
+        posture.goToPosture, motion.angleInterpolation) that take
+        seconds to return. Calling them on the WS receive thread
+        starves audio chunk decoding and control frame handling,
+        which is exactly the bug the user flagged. Pushing the
+        action onto a single-worker queue means recv stays hot.
+        """
         if self.action_dispatcher is None:
             return
         name = frame.get("name")
         args = frame.get("args") or {}
         try:
-            self.action_dispatcher(name, args)
-        except TypeError:
-            # Some dispatcher signatures take a single dict — fall back
-            # rather than crash the receiver loop.
+            self._action_queue.put_nowait((name, args))
+        except Exception as exc:
+            # Queue should never reject (unbounded), but if it does
+            # we'd rather log + drop than block the recv loop.
+            self.log.error("action_enqueue_failed", name=name, error=str(exc))
+
+    def _cancel_actions(self, reason="cancel"):
+        """Drop all pending queued actions and stop any NAOqi behaviors
+        currently running. Called on barge-in and crisis-lock so a
+        long-running dance / follow-me / animation can't keep playing
+        after the user has interrupted.
+
+        Best-effort: we open a fresh ALBehaviorManager proxy here to
+        avoid coupling to whatever the dispatcher's closure captured.
+        ``stopAllBehaviors`` is idempotent and safe to call when nothing
+        is running.
+        """
+        # 1. Drop queued actions so the worker doesn't start another
+        #    behavior right after we stop the current one.
+        dropped = 0
+        try:
+            while True:
+                self._action_queue.get_nowait()
+                dropped += 1
+        except Exception:
+            pass
+
+        # 2. Stop any in-flight behavior on the robot.
+        try:
+            from naoqi import ALProxy as _ALProxy  # type: ignore
             try:
-                self.action_dispatcher({"name": name, "args": args})
+                from . import config as _config  # py3 dev
+            except Exception:
+                import config as _config  # py2.7 robot path
+            mgr = _ALProxy("ALBehaviorManager",
+                           _config.NAO_IP, _config.NAO_PORT)
+            try:
+                mgr.stopAllBehaviors()
+            except Exception:
+                pass
+        except Exception:
+            # naoqi unavailable on dev box — silently skip.
+            pass
+
+        if dropped:
+            self.log.info("actions_cancelled",
+                          dropped=dropped, reason=reason)
+
+    def _action_worker_loop(self):
+        """Single-worker thread that drains _action_queue and runs the
+        dispatcher. Sequencing actions through one worker matches what
+        naoqi expects (most behaviors take exclusive resource locks)
+        and means we never have two body moves racing for HeadYaw.
+        """
+        while not self.shutdown_event.is_set():
+            try:
+                item = self._action_queue.get(timeout=0.2)
+            except Exception:
+                continue
+            if item is None:
+                # Sentinel from shutdown — exit cleanly.
+                return
+            name, args = item
+            try:
+                self.action_dispatcher(name, args)
+            except TypeError:
+                # Legacy dispatcher signatures take a single dict.
+                try:
+                    self.action_dispatcher({"name": name, "args": args})
+                except Exception as exc:
+                    self.log.error("action_dispatch_failed", name=name,
+                                   error=str(exc))
             except Exception as exc:
                 self.log.error("action_dispatch_failed", name=name,
                                error=str(exc))
-        except Exception as exc:
-            self.log.error("action_dispatch_failed", name=name, error=str(exc))
 
     def _handle_control(self, frame):
         sub = frame.get("subtype")
@@ -386,6 +621,33 @@ class NaoWsClient(object):
             self.log.info("transcript",
                           transcript=data.get("transcript", ""),
                           stt_ms=data.get("stt_ms"))
+            # Legacy self-echo path: the server's `_legacy_helpers`
+            # bigram check sends a `transcript` control with
+            # reject_reason=self_echo (the newer Phase-2 substring
+            # check sends a dedicated `echo_reject` frame, handled
+            # separately). Either way we need a recorder restart so
+            # the tail of NAO's own voice doesn't keep getting
+            # re-uploaded.
+            reject_reason = (data.get("reject_reason") or "").strip()
+            if reject_reason == "self_echo":
+                self._on_echo_reject(data)
+                return
+            # Fire the processing announcer: server has the user's words
+            # and is now generating + synthesizing TTS. We bridge that gap
+            # with short filler ("Hmm.", "One sec.") so the user doesn't
+            # stare at a silent robot. Stopped as soon as the first real
+            # audio_chunk arrives in _handle_audio_chunk.
+            # New turn — reset the "audio arrived" guard.
+            self._reply_audio_arrived = False
+            tx = (data.get("transcript") or "").strip()
+            if tx and self._announcer is not None:
+                try:
+                    self._announcer.start()
+                    self._announcer_active = True
+                except Exception as exc:
+                    self.log.debug("announcer_start_failed", error=str(exc))
+        elif sub == "echo_reject":
+            self._on_echo_reject(data)
         elif sub == "session_end":
             self.log.info("server_session_end", reason=data.get("reason"))
         elif sub == "agent_handoff":
@@ -485,41 +747,138 @@ class NaoWsClient(object):
     def _on_tts_started(self, data):
         self._tts_active.set()
         self._cancel_pending_mic_open()
+        # Server is now streaming TTS — block any further filler and
+        # cut a filler that's mid-utterance.
+        self._reply_audio_arrived = True
+        if self._announcer_active and self._announcer is not None:
+            try:
+                self._announcer.stop(interrupt=True)
+            except Exception:
+                pass
+            self._announcer_active = False
+        try:
+            self._announcer_stop_all()
+        except Exception:
+            pass
         try:
             if self.audio_streamer is not None:
                 self.audio_streamer.gate(True)  # close mic
         except Exception as exc:
             self.log.error("mic_gate_close_failed", error=str(exc))
+        # Posture: stand up before speaking so NAO has presence and the
+        # gestures don't look weird from a sitting/crouched stance.
+        # Best-effort, non-blocking — fire-and-forget on a daemon thread
+        # so we don't delay TTS playback by the ~3 s standUp animation.
+        self._kick_stand_up()
+        # Speaking-gesture loop: pick a random body-language intent every
+        # 2.5 s while TTS is playing. Stops on tts_ended or barge.
+        self._start_speaking_gestures()
         self.log.info("tts_started", text_preview=str(data.get("text") or "")[:80])
 
     def _on_tts_ended(self, data):
+        # IMPORTANT: tts_ended from the server only signals that the
+        # server has finished SENDING audio chunks. The robot's local
+        # tts_player queue can still hold several MP3s being decoded +
+        # blocking_play_done'd over the next several seconds. We must NOT
+        # open the mic here on a fixed timer — the speaker would still be
+        # broadcasting NAO's voice and the mic would record it.
+        #
+        # New behavior: clear the server-intent flag, stop gestures,
+        # snap an image (cheap), and then SPAWN a waiter thread that
+        # polls tts_player.is_playing() until the queue is fully drained.
+        # Only then arm the grace timer and reopen the mic.
         self._tts_active.clear()
-        grace_s = _grace_seconds()
+        self._stop_speaking_gestures()
+        try:
+            self._snap_and_push_image(reason="post_tts")
+        except Exception:
+            pass
 
-        def _open_mic():
+        # Cancel any timer-based reopen that an older _on_tts_ended may
+        # have scheduled. Then spawn the playback-aware waiter.
+        self._cancel_pending_mic_open()
+        self._spawn_mic_resume_waiter()
+
+    def _spawn_mic_resume_waiter(self):
+        """Background thread: wait until local TTS playback is fully
+        drained, then add a post-playback grace, THEN open the mic.
+
+        Idempotent — a second tts_ended (from a follow-up sentence
+        chunk) just refreshes the existing waiter's deadline by
+        re-spawning it; the prior thread sees its stop event and
+        exits cleanly.
+        """
+        # Stop any previous waiter so back-to-back tts_ended frames
+        # coalesce. The new waiter will see the same is_playing() truth.
+        prev_stop = self._mic_resume_waiter_stop
+        prev_thread = self._mic_resume_waiter
+        prev_stop.set()
+        if prev_thread is not None and prev_thread.is_alive() \
+                and prev_thread is not threading.current_thread():
+            try:
+                prev_thread.join(timeout=0.05)
+            except Exception:
+                pass
+
+        new_stop = threading.Event()
+        self._mic_resume_waiter_stop = new_stop
+
+        grace_s = _grace_seconds()
+        # Outer cap on how long we'll wait for playback to drain. If the
+        # tts_player gets wedged (rare, but possible on naoqi MP3 errors)
+        # we still want the mic to come back so the user isn't stuck.
+        max_wait_s = 30.0
+        poll_s = 0.1
+
+        def _waiter():
+            t0 = time.time()
+            # 1. Wait for the local player to truly finish — both
+            #    "currently playing" AND "queue empty".
+            while not new_stop.is_set():
+                try:
+                    playing = bool(self.tts_player.is_playing()) \
+                        if self.tts_player is not None else False
+                except Exception:
+                    playing = False
+                if not playing:
+                    self.log.info("local_tts_queue_empty",
+                                  elapsed_ms=int((time.time() - t0) * 1000))
+                    break
+                if time.time() - t0 > max_wait_s:
+                    self.log.warn("local_tts_drain_timeout",
+                                  elapsed_ms=int((time.time() - t0) * 1000))
+                    break
+                if new_stop.wait(poll_s):
+                    return  # superseded by a newer waiter
+
+            if new_stop.is_set():
+                return
+
+            self.log.info("playback_all_done")
+
+            # 2. Post-playback grace — lets reverb / speaker cone tail
+            #    decay so the mic doesn't catch the last echo.
+            if grace_s > 0 and new_stop.wait(grace_s):
+                return
+
+            if new_stop.is_set():
+                return
+
+            # 3. Reopen the mic and notify the server.
             try:
                 if self.audio_streamer is not None:
-                    self.audio_streamer.gate(False)  # open mic
+                    self.audio_streamer.gate(False)
                 self.push_control("mic_resumed",
                                   {"grace_ms": int(grace_s * 1000)})
-                self.log.info("mic_resumed", grace_ms=int(grace_s * 1000))
+                self.log.info("mic_resume_after_playback",
+                              grace_ms=int(grace_s * 1000))
             except Exception as exc:
                 self.log.error("mic_gate_open_failed", error=str(exc))
 
-        if grace_s <= 0:
-            _open_mic()
-            return
-
-        # Schedule the reopen so the tail-end of TTS audio (already queued
-        # in ALAudioPlayer) has time to drain through the speaker before
-        # the mic is live again. Cancel any prior pending timer first so
-        # back-to-back sentence chunks coalesce into a single reopen.
-        self._cancel_pending_mic_open()
-        timer = threading.Timer(grace_s, _open_mic)
-        timer.daemon = True
-        with self._mic_timer_lock:
-            self._mic_open_timer = timer
-        timer.start()
+        t = threading.Thread(target=_waiter, name="nao-mic-resume-waiter")
+        t.daemon = True
+        self._mic_resume_waiter = t
+        t.start()
 
     def _cancel_pending_mic_open(self):
         with self._mic_timer_lock:
@@ -530,6 +889,48 @@ class NaoWsClient(object):
                 timer.cancel()
             except Exception:
                 pass
+
+    def _on_echo_reject(self, data):
+        """Server rejected a transcript as self-echo (NAO heard itself).
+
+        Force a clean recorder restart so any tail audio still in the
+        fragment .wav doesn't keep getting re-uploaded. Sequence:
+          1. Close gate (stops fragment recorder, stops feeding the
+             upload buffer).
+          2. Brief pause so the speaker cone settles.
+          3. Reopen gate (spins a fresh fragment recorder writing a
+             new stream.wav, resetting all tail offsets).
+        """
+        reason = data.get("reason") if isinstance(data, dict) else None
+        self.log.warn("echo_reject_received", reason=reason)
+
+        # Cancel any pending mic-open timer / drain waiter so they can't
+        # race the manual restart below.
+        self._cancel_pending_mic_open()
+        try:
+            self._mic_resume_waiter_stop.set()
+        except Exception:
+            pass
+
+        if self.audio_streamer is None:
+            return
+
+        try:
+            self.audio_streamer.gate(True)  # stop recorder
+        except Exception as exc:
+            self.log.error("echo_reject_gate_close_failed", error=str(exc))
+            return
+
+        # Small settle window before re-arming. Speaker cone + alsa
+        # buffer flush — 250 ms is comfortably more than one fragment.
+        time.sleep(0.25)
+
+        try:
+            self.audio_streamer.gate(False)  # fresh stream.wav
+            self.log.info("recorder_restart_after_self_echo")
+            self.push_control("mic_resumed", {"grace_ms": 0})
+        except Exception as exc:
+            self.log.error("echo_reject_gate_open_failed", error=str(exc))
 
     def _on_crisis_lock(self, data):
         """Server flagged a crisis. End the local turn immediately.
@@ -548,6 +949,9 @@ class NaoWsClient(object):
         # Drop any pending mic-open timer so we don't accidentally reopen
         # the mic in 200ms.
         self._cancel_pending_mic_open()
+        # Stop any body action mid-flight — a crisis-mode 988 reply
+        # should not be paired with NAO finishing a dance move.
+        self._cancel_actions(reason="crisis_lock")
 
     # ------------------------------------------------------------------
     # Sender thread: mic chunks + queued control frames
@@ -591,6 +995,463 @@ class NaoWsClient(object):
             if not self._send_json(ws, frame):
                 return
 
+    # ------------------------------------------------------------------
+    # ProcessingAnnouncer adapters: speak short filler phrases via the
+    # robot's built-in ALTextToSpeech. We deliberately don't route these
+    # through the same ElevenLabs MP3 path the real reply uses — fillers
+    # are < 1 s, and queuing them through the chunk player would either
+    # delay the real reply or fight with it for the speaker. ALTTS is
+    # fast, free, and conveniently muted by stop_all() on barge.
+    # ------------------------------------------------------------------
+    def _announcer_say(self, phrase):
+        """Speak ``phrase`` via ALTextToSpeech. Best-effort, never raises.
+        Three guard rails — if ANY trip, we silently skip:
+          1. Reply audio already arrived for this turn.
+          2. tts_player is currently playing real reply audio.
+          3. tts_active server flag set (server says it's now sending TTS).
+        """
+        if getattr(self, "_reply_audio_arrived", False):
+            return
+        try:
+            if self._tts_active.is_set():
+                return
+        except Exception:
+            pass
+        try:
+            if self.tts_player is not None and self.tts_player.is_playing():
+                return
+        except Exception:
+            pass
+        try:
+            from naoqi import ALProxy
+            import os as _os
+            ip = _os.environ.get("NAO_IP", "127.0.0.1")
+            tts = ALProxy("ALTextToSpeech", ip, 9559)
+            tts.say(str(phrase or "").encode("utf-8") if isinstance(phrase, unicode) else str(phrase or ""))  # noqa: F821
+        except NameError:
+            # py3 path (no `unicode` builtin) — should never hit on robot
+            try:
+                from naoqi import ALProxy as _AL
+                import os as _os2
+                ip = _os2.environ.get("NAO_IP", "127.0.0.1")
+                _AL("ALTextToSpeech", ip, 9559).say(str(phrase or ""))
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------
+    # Embodiment: stand-up posture + random gestures during TTS playback
+    # ------------------------------------------------------------------
+    # Speaking-gesture pool. Mix of:
+    #   - "stock" — gestures from nao_execute._GESTURE_TABLE (proven,
+    #     tested, auto-restoring or paired with neutral reset).
+    #   - "custom_*" — inline mini-gestures defined in this class.
+    #     Built directly via ALMotion.angleInterpolation so we can ship
+    #     more variety without touching the central gesture table.
+    # Weighted so conversational moves dominate (nod, open_arms, head
+    # tilts) and dramatic/large moves (full-body) appear rarely.
+    _SPEAKING_GESTURE_POOL = (
+        # Stock — well-tested
+        "nod", "nod", "nod",
+        "open_arms", "open_arms",
+        "point_self", "point_self",
+        "point_listener",
+        "tilt_curious", "tilt_curious",
+        "shake",
+        # Custom — inline mini-gestures (see _run_custom_gesture)
+        "custom_head_tilt_right", "custom_head_tilt_right",
+        "custom_head_tilt_left", "custom_head_tilt_left",
+        "custom_wave_right",
+        "custom_wave_left",
+        "custom_palms_up", "custom_palms_up",
+        "custom_arm_sweep_right",
+        "custom_arm_sweep_left",
+        "custom_shoulder_shrug_quick",
+        "custom_chest_breath",
+        "custom_hand_circle_right",
+        "custom_point_up",
+        "custom_head_bow_slight",
+        "custom_both_hands_forward",
+    )
+
+    def _kick_stand_up(self):
+        """Fire ALRobotPosture.goToPosture('Stand', 0.7) once per session
+        on the first tts_started. Runs on a daemon thread so the 2-3 s
+        animation never blocks audio playback. No-op if naoqi is missing
+        or the robot is already standing.
+        """
+        if self._stood_up_once:
+            return
+        self._stood_up_once = True
+
+        def _do_stand():
+            try:
+                from naoqi import ALProxy
+                import os as _os
+                ip = _os.environ.get("NAO_IP", "127.0.0.1")
+                # Wake actuators so motion calls actually move joints.
+                try:
+                    ALProxy("ALMotion", ip, 9559).wakeUp()
+                except Exception:
+                    pass
+                # Posture goes through ALRobotPosture (smoother than
+                # raw angleInterpolation). 0.7 = 70 % speed — bal between
+                # snappy and stable.
+                try:
+                    ALProxy("ALRobotPosture", ip, 9559).goToPosture("Stand", 0.7)
+                except Exception:
+                    pass
+            except Exception:
+                # naoqi missing (off-robot dev) — silent.
+                pass
+
+        try:
+            t = threading.Thread(target=_do_stand, name="nao-stand-up")
+            t.daemon = True
+            t.start()
+        except Exception:
+            pass
+
+    def _start_speaking_gestures(self):
+        """Spin a daemon thread that fires a random gesture every ~2.5 s
+        while TTS is active. Idempotent — restarting before stop is a
+        no-op (so back-to-back tts_started frames don't spawn N threads).
+        """
+        if self._speaking_gesture_thread is not None and \
+                self._speaking_gesture_thread.is_alive():
+            return
+        self._speaking_gesture_stop.clear()
+        try:
+            t = threading.Thread(target=self._speaking_gesture_loop,
+                                 name="nao-speak-gesture")
+            t.daemon = True
+            self._speaking_gesture_thread = t
+            t.start()
+        except Exception as exc:
+            self.log.debug("speaking_gesture_start_failed", error=str(exc))
+
+    def _stop_speaking_gestures(self):
+        """Signal the loop to exit. Thread joins itself on stop event;
+        we don't block here so tts_ended stays snappy.
+        """
+        self._speaking_gesture_stop.set()
+
+    # Inline mini-gesture table. Each entry is a tuple:
+    #   (joint_names, angle_lists, time_lists)
+    # passed straight to motion.angleInterpolation(... isAbsolute=True).
+    # Joints not listed stay where they are (the neutral-reset between
+    # gestures handles the cleanup). ~0.6-1.0 s per gesture.
+    #
+    # NOTE: NAO H25 head is 2-DOF (HeadYaw + HeadPitch only — there is
+    # NO HeadRoll). "head tilt" gestures use HeadYaw (turn left/right).
+    _CUSTOM_GESTURES = {
+        "custom_head_tilt_right": (
+            ["HeadYaw"],
+            [[-0.35, 0.0]],
+            [[0.40, 0.80]],
+        ),
+        "custom_head_tilt_left": (
+            ["HeadYaw"],
+            [[0.35, 0.0]],
+            [[0.40, 0.80]],
+        ),
+        "custom_head_bow_slight": (
+            ["HeadPitch"],
+            [[0.18, 0.0]],
+            [[0.40, 0.80]],
+        ),
+        "custom_point_up": (
+            # Right hand pointing up
+            ["RShoulderPitch", "RShoulderRoll", "RElbowYaw", "RElbowRoll"],
+            [[-0.5, 1.5],   # shoulder up over ~0.5 s, hold, then back
+             [-0.2, -0.15],
+             [1.0, 1.2],
+             [0.3, 0.5]],
+            [[0.50, 1.30],
+             [0.50, 1.30],
+             [0.50, 1.30],
+             [0.50, 1.30]],
+        ),
+        "custom_wave_right": (
+            # Right hand wave: shoulder out, elbow bent, side-to-side
+            ["RShoulderPitch", "RShoulderRoll", "RElbowYaw", "RElbowRoll", "RWristYaw"],
+            [[0.1, 0.1, 0.1, 1.5],
+             [-0.4, -0.4, -0.4, -0.15],
+             [1.5, 1.5, 1.5, 1.2],
+             [0.8, 0.8, 0.8, 0.5],
+             [0.3, -0.3, 0.3, 0.0]],
+            [[0.30, 0.55, 0.80, 1.20],
+             [0.30, 0.55, 0.80, 1.20],
+             [0.30, 0.55, 0.80, 1.20],
+             [0.30, 0.55, 0.80, 1.20],
+             [0.30, 0.55, 0.80, 1.20]],
+        ),
+        "custom_wave_left": (
+            ["LShoulderPitch", "LShoulderRoll", "LElbowYaw", "LElbowRoll", "LWristYaw"],
+            [[0.1, 0.1, 0.1, 1.5],
+             [0.4, 0.4, 0.4, 0.15],
+             [-1.5, -1.5, -1.5, -1.2],
+             [-0.8, -0.8, -0.8, -0.5],
+             [-0.3, 0.3, -0.3, 0.0]],
+            [[0.30, 0.55, 0.80, 1.20],
+             [0.30, 0.55, 0.80, 1.20],
+             [0.30, 0.55, 0.80, 1.20],
+             [0.30, 0.55, 0.80, 1.20],
+             [0.30, 0.55, 0.80, 1.20]],
+        ),
+        "custom_palms_up": (
+            # Both forearms rotate up — explanatory "this is the deal"
+            ["LShoulderPitch", "RShoulderPitch",
+             "LElbowRoll", "RElbowRoll",
+             "LWristYaw", "RWristYaw"],
+            [[0.6, 1.5],  [0.6, 1.5],
+             [-1.2, -0.5], [1.2, 0.5],
+             [-1.5, 0.0],  [1.5, 0.0]],
+            [[0.50, 1.10]] * 6,
+        ),
+        "custom_arm_sweep_right": (
+            ["RShoulderPitch", "RShoulderRoll", "RElbowRoll"],
+            [[0.3, 0.7, 1.5],
+             [-0.6, -0.2, -0.15],
+             [0.6, 0.4, 0.5]],
+            [[0.40, 0.80, 1.20],
+             [0.40, 0.80, 1.20],
+             [0.40, 0.80, 1.20]],
+        ),
+        "custom_arm_sweep_left": (
+            ["LShoulderPitch", "LShoulderRoll", "LElbowRoll"],
+            [[0.3, 0.7, 1.5],
+             [0.6, 0.2, 0.15],
+             [-0.6, -0.4, -0.5]],
+            [[0.40, 0.80, 1.20],
+             [0.40, 0.80, 1.20],
+             [0.40, 0.80, 1.20]],
+        ),
+        "custom_shoulder_shrug_quick": (
+            # Quick shoulder lift then drop — "I dunno"
+            ["LShoulderPitch", "RShoulderPitch",
+             "LShoulderRoll",  "RShoulderRoll"],
+            [[1.0, 1.5], [1.0, 1.5],
+             [0.4, 0.15], [-0.4, -0.15]],
+            [[0.30, 0.70]] * 4,
+        ),
+        "custom_chest_breath": (
+            # Subtle shoulder lift then drop — visible "deep breath"
+            # (HipPitch isn't a valid NAO joint name on H25 — pelvis
+            # is per-leg via LHipPitch/RHipPitch — just use shoulders).
+            ["LShoulderPitch", "RShoulderPitch"],
+            [[1.3, 1.5], [1.3, 1.5]],
+            [[0.50, 1.20]] * 2,
+        ),
+        "custom_hand_circle_right": (
+            # Right hand draws a small circle in the air
+            ["RShoulderPitch", "RShoulderRoll", "RElbowYaw", "RElbowRoll"],
+            [[0.5, 0.3, 0.5, 0.7, 1.5],
+             [-0.5, -0.3, -0.1, -0.3, -0.15],
+             [1.0, 0.8, 1.0, 1.2, 1.2],
+             [0.6, 0.4, 0.6, 0.8, 0.5]],
+            [[0.30, 0.55, 0.80, 1.05, 1.40]] * 4,
+        ),
+        "custom_both_hands_forward": (
+            # Both hands extend forward — "here, look at this"
+            ["LShoulderPitch", "RShoulderPitch",
+             "LElbowYaw", "RElbowYaw",
+             "LElbowRoll", "RElbowRoll"],
+            [[0.4, 1.5], [0.4, 1.5],
+             [-0.5, -1.2], [0.5, 1.2],
+             [-0.5, -0.5], [0.5, 0.5]],
+            [[0.40, 1.10]] * 6,
+        ),
+    }
+
+    # Joints we explicitly reset to neutral between gestures so each
+    # new gesture starts from the same known pose — without this, a
+    # `nod` after a `point_self` looks invisible because the head and
+    # arms haven't returned to neutral. Values are NAOqi standard
+    # "StandInit" angles for these joints (radians).
+    _NEUTRAL_POSE = {
+        "HeadYaw":         0.0,
+        "HeadPitch":       0.0,
+        "LShoulderPitch":  1.5,   # arms hanging naturally
+        "LShoulderRoll":   0.15,
+        "LElbowYaw":      -1.2,
+        "LElbowRoll":     -0.5,
+        "RShoulderPitch":  1.5,
+        "RShoulderRoll":  -0.15,
+        "RElbowYaw":       1.2,
+        "RElbowRoll":      0.5,
+        # NOTE: NAO H25 has no HipPitch joint (legs are LHipPitch /
+        # RHipPitch separately). We don't reset hips in the neutral
+        # pose — fine in practice because none of our gestures touch
+        # hip joints, so they stay at whatever stand-init set them to.
+    }
+
+    def _speaking_gesture_loop(self):
+        """Loop: pick a random gesture, fire it, reset to neutral, repeat.
+
+        Architecture (each iteration):
+            1. Pin upper-body stiffness so motors actually move (NAO
+               drops stiffness on idle joints to save power).
+            2. Run the gesture function directly against ALMotion.
+            3. Wait ~0.8 s for the gesture animation to play out.
+            4. Reset head + arms to neutral so the NEXT gesture starts
+               from a known pose (without this, a 'nod' after a
+               'point_self' looks invisible — the head's already off
+               center and the small nod delta is barely visible).
+            5. Wait ~1.5 s before the next gesture so consecutive
+               moves don't blur into each other.
+
+        Total cadence: ~2.5 s per gesture cycle, same as before, but
+        with deterministic per-gesture reset.
+        """
+        try:
+            import random as _random
+        except Exception:
+            return
+        # Build motion / posture / leds proxies once.
+        motion = posture = leds = None
+        try:
+            from naoqi import ALProxy
+            import os as _os
+            ip = _os.environ.get("NAO_IP", "127.0.0.1")
+            try:
+                motion = ALProxy("ALMotion", ip, 9559)
+            except Exception:
+                motion = None
+            try:
+                posture = ALProxy("ALRobotPosture", ip, 9559)
+            except Exception:
+                posture = None
+            try:
+                leds = ALProxy("ALLeds", ip, 9559)
+            except Exception:
+                leds = None
+        except Exception:
+            return
+        if motion is None:
+            self.log.debug("speak_gesture_no_motion_proxy")
+            return
+        try:
+            from utils.nao_execute import _GESTURE_TABLE
+        except Exception as exc:
+            self.log.debug("speak_gesture_table_import_failed",
+                           error=str(exc))
+            return
+
+        import sys as _sys
+        # Initial delay so a 1 s reply isn't gestured over.
+        if self._speaking_gesture_stop.wait(timeout=0.6):
+            return
+        print("[speaking_gesture] loop active (motion=%s)" % (motion is not None,))
+        _sys.stderr.flush()
+
+        # Wake actuators + pin stiffness on the upper body once. This is
+        # the load-bearing fix — without stiffness on the head/arm chains,
+        # angleInterpolation calls return immediately but no joint moves.
+        try:
+            motion.wakeUp()
+        except Exception:
+            pass
+        # NAOqi expands chain names internally, so passing a list of
+        # chain names with a same-length list of values fails ("expected
+        # the number of stiffnesses to equal the number of joints"
+        # because Head=2 joints, LArm=6, RArm=6 = 14 joints, not 3
+        # values). Issue per-chain calls so each chain expands to its
+        # own joint set and applies the single value to all of them.
+        for _chain in ("Head", "LArm", "RArm"):
+            try:
+                motion.setStiffnesses(_chain, 1.0)
+            except Exception as exc:
+                self.log.debug("speak_gesture_stiffness_failed",
+                               chain=_chain, error=str(exc))
+        print("[speaking_gesture] stiffness pinned on Head + arms")
+        _sys.stderr.flush()
+
+        neutral_names = list(self._NEUTRAL_POSE.keys())
+        neutral_angles = [self._NEUTRAL_POSE[n] for n in neutral_names]
+
+        while not self._speaking_gesture_stop.is_set() and \
+                self._tts_active.is_set():
+            # Avoid back-to-back identical picks — feels more natural.
+            for _retry in range(3):
+                intent = _random.choice(self._SPEAKING_GESTURE_POOL)
+                if intent != getattr(self, "_last_gesture_intent", None):
+                    break
+            self._last_gesture_intent = intent
+
+            # Re-pin stiffness EACH iteration — naoqi can drop it after
+            # ~5 s of inactivity on a chain, and we want every gesture
+            # to actually actuate. Per-chain calls (chain expansion
+            # mismatches the values list when batched).
+            for _chain in ("Head", "LArm", "RArm"):
+                try:
+                    motion.setStiffnesses(_chain, 1.0)
+                except Exception:
+                    pass
+
+            # Dispatch: custom_* gestures use the inline table; everything
+            # else hits the stock _GESTURE_TABLE.
+            print("[speaking_gesture] -> {0}".format(intent))
+            _sys.stderr.flush()
+            if intent.startswith("custom_"):
+                cg = self._CUSTOM_GESTURES.get(intent)
+                if cg is not None:
+                    names, angles, times = cg
+                    try:
+                        motion.angleInterpolation(names, angles, times, True)
+                    except Exception as exc:
+                        self.log.debug("speak_custom_gesture_failed",
+                                       intent=intent, error=str(exc))
+                else:
+                    self.log.debug("speak_custom_gesture_unknown",
+                                   intent=intent)
+            else:
+                fn = _GESTURE_TABLE.get(intent)
+                if fn is not None:
+                    try:
+                        fn(motion, posture, leds)
+                    except Exception as exc:
+                        self.log.debug("speak_gesture_failed",
+                                       intent=intent, error=str(exc))
+            # Wait for the gesture itself to complete (~0.6-0.8 s for
+            # most). Bail early if stop event fires.
+            if self._speaking_gesture_stop.wait(timeout=0.8):
+                return
+            # Reset head + arms to a known neutral pose so the next
+            # gesture starts from a clean baseline. Use angleInterpolation
+            # over 0.6 s — slow enough to look natural, fast enough to
+            # not stretch the cadence. Skip if shutdown landed during
+            # the previous wait.
+            if self._speaking_gesture_stop.is_set() or \
+                    not self._tts_active.is_set():
+                break
+            try:
+                motion.angleInterpolation(
+                    neutral_names,
+                    [[a] for a in neutral_angles],
+                    [[0.6] for _ in neutral_angles],
+                    True,  # absolute
+                )
+            except Exception as exc:
+                self.log.debug("speak_gesture_neutral_reset_failed",
+                               error=str(exc))
+            # Brief pause so back-to-back gestures don't blur together.
+            if self._speaking_gesture_stop.wait(timeout=1.1):
+                return
+
+    def _announcer_stop_all(self):
+        """Stop any in-flight ALTextToSpeech utterance. Used by
+        ProcessingAnnouncer.stop(interrupt=True) on barge.
+        """
+        try:
+            from naoqi import ALProxy
+            import os as _os
+            ip = _os.environ.get("NAO_IP", "127.0.0.1")
+            ALProxy("ALTextToSpeech", ip, 9559).stopAll()
+        except Exception:
+            pass
+
     def _drain_control_queue(self, ws):
         # Non-blocking drain: send everything currently buffered, but
         # don't block on more arriving — that's what the audio loop is for.
@@ -609,6 +1470,19 @@ class NaoWsClient(object):
             # floor by the gate). Skip silently — DEBUG log already at
             # streamer side.
             return True
+        # Print on first chunk + every 50th to prove send loop is alive.
+        import sys as _sys
+        if not hasattr(self, "_first_audio_logged"):
+            self._first_audio_logged = True
+            self._audio_send_count = 0
+            print("[mic_trace] first_audio_frame_sent_to_ws bytes_b64={0} seq={1}".format(
+                len(b64_pcm or ""), seq))
+            _sys.stderr.flush()
+        self._audio_send_count = getattr(self, "_audio_send_count", 0) + 1
+        if self._audio_send_count % 50 == 0:
+            print("[mic_trace] ws_audio_chunk_sent count={0}".format(
+                self._audio_send_count))
+            _sys.stderr.flush()
         return self._send_json(ws, _audio_chunk_frame(seq, ts_ms, b64_pcm))
 
     @staticmethod
@@ -661,6 +1535,21 @@ class NaoWsClient(object):
                     self.tts_player.stop()
                 except Exception as exc:
                     self.log.error("tts_stop_failed", error=str(exc))
+                # Also kill any in-flight filler utterance so the user
+                # isn't talking over a half-finished "Hmm, let me…".
+                if self._announcer is not None:
+                    try:
+                        self._announcer.stop(interrupt=True)
+                    except Exception:
+                        pass
+                    self._announcer_active = False
+                # And stop the speaking-gesture loop so NAO doesn't keep
+                # waving while the user is now talking.
+                self._stop_speaking_gestures()
+                # Cancel any pending queued actions + stop currently
+                # running NAOqi behaviors so a multi-second dance/pose
+                # doesn't keep going after the user has interrupted.
+                self._cancel_actions(reason="barge_in")
                 self.log.info("barge_in_local")
             time.sleep(0.05)
 
@@ -692,6 +1581,17 @@ class NaoWsClient(object):
             self.log.warn("ws_connect_failed",
                           url=self.server_url, error=str(exc))
             return False
+
+        # The 10 s above is the *connect* timeout. After handshake we need
+        # to drop the read timeout to None (block forever) so the recv loop
+        # doesn't kill the session while server is doing slow work
+        # (vision call, LLM streaming, STT). Without this the recv socket
+        # raises socket.timeout after 10 s of server silence and we
+        # reconnect mid-turn — the exact bug we were seeing.
+        try:
+            ws.settimeout(None)
+        except Exception as exc:
+            self.log.warn("ws_settimeout_failed", error=str(exc))
 
         self.log.info("ws_connected", url=self.server_url, user=self.username)
         with self._ws_lock:
@@ -731,13 +1631,36 @@ class NaoWsClient(object):
         self._barge_thread.daemon = True
         self._barge_thread.start()
 
+        # Action worker — drains queued body actions off the recv thread.
+        # Daemon so we don't have to coordinate exit on a hard shutdown.
+        self._action_worker_thread = threading.Thread(
+            target=self._action_worker_loop, name="nao-ws-actions")
+        self._action_worker_thread.daemon = True
+        self._action_worker_thread.start()
+
     def _join_workers(self):
         # 1s join — threads are daemon and will get nuked on process exit
         # if they refuse to wake up, but in practice the recv loop exits
         # on first failed recv() and the sender exits when its iterator
         # closes (audio_streamer should propagate the shutdown via its own
         # gate/close).
-        for t in (self._sender_thread, self._receiver_thread, self._barge_thread):
+
+        # Drain the pending action queue before tear-down so a half-
+        # processed gesture doesn't leave the robot mid-pose. We drop
+        # rather than execute pending items here — the session is dying.
+        try:
+            while True:
+                self._action_queue.get_nowait()
+        except Exception:
+            pass
+        # Sentinel wakes the worker so it exits its blocking get().
+        try:
+            self._action_queue.put_nowait(None)
+        except Exception:
+            pass
+
+        for t in (self._sender_thread, self._receiver_thread,
+                  self._barge_thread, self._action_worker_thread):
             if t is None:
                 continue
             try:
@@ -747,6 +1670,7 @@ class NaoWsClient(object):
         self._sender_thread = None
         self._receiver_thread = None
         self._barge_thread = None
+        self._action_worker_thread = None
 
     def _teardown_ws(self):
         with self._ws_lock:
@@ -779,7 +1703,16 @@ class NaoWsClient(object):
         summary = self._brain_summary()
         if summary is not None:
             data["brain_summary"] = summary
-        return self._send_json(ws, _control_frame("session_open", data))
+        ok = self._send_json(ws, _control_frame("session_open", data))
+        # Kick off a fresh image snap right away so the very FIRST turn
+        # of this session has vision available (post_tts hook only fires
+        # after the first reply). Best-effort, non-blocking.
+        if ok:
+            try:
+                self._snap_and_push_image(reason="session_open")
+            except Exception:
+                pass
+        return ok
 
     def _brain_summary(self):
         """Best-effort fetch of ``brain_cache.summary()``.
@@ -870,6 +1803,12 @@ class NaoWsClient(object):
         """Public helper so main.py can signal a clean exit."""
         self.shutdown_event.set()
         self._cancel_pending_mic_open()
+        # Stop any in-flight body action so disengage doesn't leave NAO
+        # halfway through a dance pose or with follow-me still running.
+        try:
+            self._cancel_actions(reason="shutdown")
+        except Exception:
+            pass
         # Push a session_close hint so the server can finalize the
         # transcript / save recap before the socket closes.
         self.push_control("session_close", {"reason": "shutdown"})

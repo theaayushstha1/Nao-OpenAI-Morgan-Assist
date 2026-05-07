@@ -249,16 +249,85 @@ nohup python -u /home/nao/nao_assist/main.py \
 do_tail() {
     log "killing any stale local log tails"
     kill_local_tails
-    log "tailing logs (Ctrl-C to stop, server keeps running)"
+    log "tailing logs — Ctrl-C to stop, server keeps running"
+    log "(set RAW_LOGS=1 in env to see all log lines incl. per-chunk debug)"
     echo
     local server_prefix="${CYAN}[server]${NC} "
     local robot_prefix="${YELLOW}[robot]${NC}  "
+
+    # ────────────────────────────────────────────────────────────────
+    # ALLOWLIST log filter — only signal lines, no per-chunk noise.
+    # Set RAW_LOGS=1 to disable filtering and see everything raw.
+    #
+    # We KEEP a line if it matches any of these patterns (egrep OR):
+    #   • transcript=                  user speech (STT result)
+    #   • reply_preview=               NAO's text reply
+    #   • [stream_tts] enqueue:        what NAO is about to speak
+    #   • [tts_trace] play_done|...    audio playback timing/result
+    #   • [speaking_gesture] ->        gesture firing
+    #   • wake_event / wake_engaged    engagement
+    #   • voice_profile_set            voice changed
+    #   • motion_match                 short-circuit motion command
+    #   • [vision] / [vision_trace]    image pipeline
+    #   • vision_status=               vision result
+    #   • mic_resumed / camera_announce
+    #   • session_open / ws_connected / ws_closed / ws_reconnect
+    #   • outcome=ok/rejected/client_dropped
+    #   • crisis / safety
+    #   • Error|ERROR|Traceback|Exception|Warning
+    #   • [volume] / [audio_module]    hardware issues
+    #   • [wake_state]                 wake state machine events
+    #   • boot_start / broker_ready    startup
+    #   • Application startup / Uvicorn / GET /health (uvicorn boot)
+    if [[ "${RAW_LOGS:-0}" == "1" ]]; then
+        local _filter_cmd='cat'
+    else
+        # Pre-stage: drop ALL `[nao.ws_client] {…}` JSON lines (robot's
+        # own structured-log mirror — every event is also logged on the
+        # server side in human-readable form). Then run the allowlist.
+        # Two-stage so the allowlist regex stays readable.
+        local _prefilter='grep --line-buffered -v "\[nao\.ws_client\] {"'
+        # ALLOWLIST — only truly essential signal lines.
+        #
+        # Tier 1 — must-have (one line per real event):
+        #   • stt_legacy ... transcript=...     user speech
+        #   • turn_complete ... reply_preview=...  NAO's text reply
+        #   • [stream_tts] enqueue: ...         NAO about to speak
+        #   • [tts_trace] play_done|play_failed audio playback timing
+        #   • [speaking_gesture] -> name        gesture firing
+        #   • wake_engaged                      engagement fired
+        #   • voice_profile_set                 voice changed
+        #   • motion_match                      short-circuit motion
+        #   • [vision_trace] image stashed      image arrived at server
+        #   • vision_status=success|failed      vision result
+        #
+        # Tier 2 — startup confirmations (fire once each, then never):
+        #   • Application startup / Uvicorn running   server up
+        #   • [wake_state] face|touch ... active      wake machine ready
+        #   • [audio_module] FIRST PCM captured       mic working
+        #   • [stream_tts] amixer pin                 hw mixer pinned
+        #
+        # Tier 3 — errors/warnings always shown:
+        #   • Error|ERROR|Traceback|Exception|Warning
+        #   • reject_reason=                         turn rejected (echo, etc.)
+        #
+        # Everything else (per-chunk JSON, mp3_probe, audio.start_ok, etc.)
+        # is dropped. Set RAW_LOGS=1 to disable filtering.
+        local _filter_cmd='grep --line-buffered -E "transcript=.*[a-zA-Z]|reply_preview=.*[a-zA-Z]|\[stream_tts\] enqueue:|\[tts_trace\] (blocking_play_done|play_done|play_failed)|\[speaking_gesture\] ->|wake_engaged|voice_profile_set|motion_match|\[vision_trace\] image stashed|\[vision\] image snapped|vision_status=(success|failed)|reject_reason=|Error |ERROR|Traceback|Exception|^[^[]*[Ww]arning[: ]|Application startup complete|Uvicorn running on|FIRST PCM captured|amixer pin Master|face subscription active|touch loop active"'
+    fi
+
+    # Build the per-side filter pipeline: prefilter (drop json mirror)
+    # → allowlist (keep signal). When RAW_LOGS=1 both stages are 'cat'.
+    local _pipeline="${_prefilter:-cat} | $_filter_cmd"
+
     (tail -f "$SERVER_LOG" 2>/dev/null \
+        | eval "$_pipeline" \
         | awk -v p="$server_prefix" '{ print p $0; fflush(); }' \
         || cat "$SERVER_LOG") &
     SERVER_TAIL_PID=$!
     sshpass -p "$NAO_PASSWORD" ssh -o ConnectTimeout=8 -o StrictHostKeyChecking=no \
         "nao@$NAO_IP" "tail -f $ROBOT_LOG_REMOTE" 2>/dev/null \
+        | eval "$_pipeline" \
         | awk -v p="$robot_prefix" '{ print p $0; fflush(); }' &
     ROBOT_TAIL_PID=$!
     # Trap Ctrl+C: kill BOTH tail pipelines and any awk children. Without

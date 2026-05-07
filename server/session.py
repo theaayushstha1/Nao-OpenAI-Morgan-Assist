@@ -136,29 +136,51 @@ def get_camera_consent(username: str) -> bool:
 # they don't survive a server restart, and persisting them would just leak
 # rows. The dict is pruned on session close (see ``forget_session``).
 
+import time as _time
+
 _FIRST_TURN_ANNOUNCED: set[str] = set()
+# Keyed by username -> last announce timestamp (seconds, monotonic).
+# Used to suppress re-announcing the camera heads-up on every WS reconnect
+# of the same user. WS connections drop every few seconds during long TTS
+# playbacks (5+ s elapsed_s blocks the recv loop on the robot), and each
+# reconnect mints a fresh session_id — without this we'd re-greet the
+# user "Heads up — my camera is on..." every 10 s.
+_LAST_ANNOUNCE_BY_USER: dict[str, float] = {}
+_ANNOUNCE_COOLDOWN_S = 300.0  # 5 minutes — long enough to silence reconnects
 
 
-def is_first_turn(session_id: str) -> bool:
-    """True iff the camera-consent heads-up has not yet been announced for
-    ``session_id``. Idempotent: repeated calls return True until
-    ``mark_first_turn_announced`` flips the flag.
+def is_first_turn(session_id: str, username: str = "") -> bool:
+    """True iff the camera-consent heads-up should fire for this engagement.
+
+    Two conditions must both hold:
+      1. We haven't fired for this exact session_id yet.
+      2. We haven't fired for this username in the last
+         ``_ANNOUNCE_COOLDOWN_S`` seconds (suppresses reconnect storms).
 
     A falsy ``session_id`` is treated as "not first turn" so callers can't
     accidentally fire the announce on an unbound session.
     """
     if not session_id:
         return False
-    return session_id not in _FIRST_TURN_ANNOUNCED
+    if session_id in _FIRST_TURN_ANNOUNCED:
+        return False
+    if username:
+        last = _LAST_ANNOUNCE_BY_USER.get(username, 0.0)
+        if _time.time() - last < _ANNOUNCE_COOLDOWN_S:
+            return False
+    return True
 
 
-def mark_first_turn_announced(session_id: str) -> None:
+def mark_first_turn_announced(session_id: str, username: str = "") -> None:
     """Record that the first-turn camera-consent heads-up has played for
-    ``session_id``. Idempotent on repeated calls.
+    ``session_id`` and stamp the username's last-announce time.
+    Idempotent on repeated calls.
     """
     if not session_id:
         return
     _FIRST_TURN_ANNOUNCED.add(session_id)
+    if username:
+        _LAST_ANNOUNCE_BY_USER[username] = _time.time()
 
 
 def forget_session(session_id: str) -> None:

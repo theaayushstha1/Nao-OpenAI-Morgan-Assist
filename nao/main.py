@@ -25,6 +25,7 @@ Python 2.7 compatible - runs under naoqi on the robot.
 from __future__ import print_function
 
 import os
+import sys
 import threading
 import time
 import traceback
@@ -44,11 +45,36 @@ from utils import nao_execute, user_cache  # `user_cache` doubles as the brain
 # naoqi proxy is robot-only. Guarded so this module can be byte-compiled and
 # unit-imported on a developer laptop without naoqi installed.
 try:
-    from naoqi import ALProxy  # type: ignore  # noqa: F401
+    from naoqi import ALProxy, ALBroker  # type: ignore  # noqa: F401
     _HAS_NAOQI = True
 except ImportError:
     ALProxy = None
+    ALBroker = None
     _HAS_NAOQI = False
+
+
+# ---------------------------------------------------------------------------
+# ALBroker singleton - REQUIRED before any ALModule subclass can be
+# instantiated. Without a broker registered as Python's "current broker",
+# inaoqi.module.__init__ raises "Could not create a module, as there is no
+# current broker in Python's world." Phase 1 missed this; we mint it once
+# here at boot and reuse for the lifetime of the process.
+# ---------------------------------------------------------------------------
+_BROKER = None
+
+
+def _ensure_broker(nao_ip, nao_port):
+    """Create an ALBroker if one isn't already registered. Idempotent."""
+    global _BROKER
+    if not _HAS_NAOQI or ALBroker is None:
+        return None
+    if _BROKER is not None:
+        return _BROKER
+    # ("name", listen_ip, listen_port=0 -> auto, parent_ip, parent_port).
+    # listen_ip "0.0.0.0" lets the broker bind any local interface.
+    _BROKER = ALBroker("nao_assist_broker", "0.0.0.0", 0,
+                       nao_ip, int(nao_port))
+    return _BROKER
 
 
 # ---------------------------------------------------------------------------
@@ -60,14 +86,30 @@ except ImportError:
 
 def _set_volume(ip, port, level=100):
     """Pin NAO's master speaker output high so OpenAI TTS MP3 is audible
-    in a noisy classroom. setOutputVolume takes 0-100. Best-effort.
+    in a noisy classroom. setOutputVolume takes 0-100. Also nudge the
+    input gain so the mic actually picks up the user's voice.
+    Best-effort.
     """
     if not _HAS_NAOQI:
         return
     try:
-        ALProxy("ALAudioDevice", ip, port).setOutputVolume(int(level))
+        ad = ALProxy("ALAudioDevice", ip, port)
     except Exception as exc:
-        print("[volume] setOutputVolume failed:", exc)
+        print("[volume] ALAudioDevice proxy failed:", exc)
+        ad = None
+    if ad is not None:
+        try:
+            ad.setOutputVolume(int(level))
+        except Exception as exc:
+            print("[volume] setOutputVolume failed:", exc)
+        # Mic input gain — some NAO V6 ship with input volume at 0 which
+        # makes ALAudioRecorder capture pure silence. setInputVolume is the
+        # NAOqi 2.5+ API; older firmware uses the same call.
+        try:
+            ad.setInputVolume(int(level))
+            print("[volume] mic input volume set to {0}".format(level))
+        except Exception as exc:
+            print("[volume] setInputVolume failed (older firmware?):", exc)
     try:
         ALProxy("ALTextToSpeech", ip, port).setVolume(min(1.0, level / 100.0))
     except Exception:
@@ -150,7 +192,13 @@ def _build_audio_streamer(log):
     fires (saves ~1% CPU and avoids surfacing user audio before consent).
     """
     from audio_module import NaoAudioStreamer  # Phase 1 sibling
-    return NaoAudioStreamer("NaoAudioStream", config.NAO_IP, config.NAO_PORT)
+    return NaoAudioStreamer(
+        broker_ip="0.0.0.0",
+        broker_port=0,
+        nao_ip=config.NAO_IP,
+        nao_port=config.NAO_PORT,
+        name="NaoAudioStream",
+    )
 
 
 def _build_tts_player(log):
@@ -213,6 +261,54 @@ def _build_wake_listener(log):
     return None
 
 
+def _build_action_dispatcher(log):
+    """Construct a `(name, args) -> dispatch(...)` callable with naoqi
+    proxies (motion, posture, leds, behav_mgr, tts) baked in. Without
+    this, ws_client called nao_execute.dispatch with all proxies = None,
+    so body actions like `follow_movement` and `play_animation` would
+    silently no-op while TTS still played the ack ("Following you now."
+    with no actual following).
+    """
+    if not _HAS_NAOQI:
+        log.info("action_dispatcher_skipped_no_naoqi")
+        # Stub: still callable but a no-op, so callers don't need to
+        # branch on dev-box vs robot.
+        return lambda name, args=None: None
+
+    ip, port = config.NAO_IP, config.NAO_PORT
+    proxies = {}
+    for key, svc in (
+        ("motion",   "ALMotion"),
+        ("posture",  "ALRobotPosture"),
+        ("leds",     "ALLeds"),
+        ("behav_mgr", "ALBehaviorManager"),
+        ("tts",      "ALTextToSpeech"),
+    ):
+        try:
+            proxies[key] = ALProxy(svc, ip, port)
+        except Exception as exc:
+            log.warn("action_proxy_failed", svc=svc, error=str(exc))
+            proxies[key] = None
+
+    def _dispatcher(name, args=None):
+        try:
+            return nao_execute.dispatch(
+                name, args or {},
+                motion=proxies.get("motion"),
+                posture=proxies.get("posture"),
+                leds=proxies.get("leds"),
+                behav_mgr=proxies.get("behav_mgr"),
+                tts=proxies.get("tts"),
+            )
+        except Exception as exc:
+            log.error("action_dispatch_error", name=name, error=str(exc))
+            return False
+
+    log.info("action_dispatcher_ready",
+             have=sorted(k for k, v in proxies.items() if v is not None))
+    return _dispatcher
+
+
 def _build_ws_client(log, audio, tts, brain):
     """Construct the long-lived WS client. Owned by Phase 1 sibling
     ``nao-ws-client``. We build a fresh instance per ENGAGED transition so
@@ -227,11 +323,13 @@ def _build_ws_client(log, audio, tts, brain):
             os.environ.get("USER_NAME", "guest"),
         ),
     )
-    # Resolve dispatcher: prefer ``dispatch`` per spec, fall back to ``run``
-    # (the existing public symbol) so we work with whatever the sibling
-    # agent settles on without a coordination round-trip.
-    dispatcher = getattr(nao_execute, "dispatch", None) \
-        or getattr(nao_execute, "run", None)
+    # Build a proxy-bound dispatcher so body actions actually fire.
+    # Previously this was a bare `nao_execute.dispatch` reference, which
+    # ws_client invoked as `dispatcher(name, args)` — leaving every
+    # naoqi proxy at its default `None`. That made follow_movement,
+    # play_animation, dance, etc. silent no-ops even though the server
+    # was sending the action frame and TTS played the ack.
+    dispatcher = _build_action_dispatcher(log)
     return NaoWsClient(
         server_url=ws_url,
         username=os.environ.get("USER_NAME", "guest"),
@@ -307,6 +405,11 @@ class _SessionController(object):
         self._client = None
         self._thread = None
         self._lock = threading.Lock()
+        # Lifelike head behavior: SoundLocalizer turns the head toward
+        # whoever just spoke (auto_track=True), and ALTracker locks the
+        # head onto the closest visible face the rest of the time.
+        self._sound_localizer = None
+        self._face_tracker = None
 
     def engage(self, face_id, gate, confidence, distance_m):
         """Open the audio subscriber + spawn WS client + send wake_event."""
@@ -330,10 +433,19 @@ class _SessionController(object):
                 return
 
             # 1. Start mic subscription (deferred from boot until wake).
+            print("[mic_trace] audio.start_called audio_present={0}".format(
+                self._audio is not None))
+            sys.stderr.flush()
             try:
                 if self._audio is not None:
-                    self._audio.start()
+                    mode = self._audio.start()
+                    print("[mic_trace] audio.start_ok mode={0}".format(mode))
+                    sys.stderr.flush()
+                    self._log.info("audio_start_ok", mode=mode)
             except Exception as exc:
+                print("[mic_trace] audio.start_failed err={0}: {1}".format(
+                    type(exc).__name__, exc))
+                sys.stderr.flush()
                 self._log.exception("audio_start_failed_on_engage",
                                     error=str(exc))
                 # Bail without spawning the client so the WSM falls back to
@@ -395,6 +507,169 @@ class _SessionController(object):
                 distance_m=float(distance_m or 0.0),
             )
 
+            # 5b. Start lifelike head behavior:
+            #   • SoundLocalizer auto-tracks who just spoke (turns head
+            #     toward sound source within ~300 ms of speech onset).
+            #   • ALTracker face mode locks onto the closest visible
+            #     face when no recent sound event — this is what makes
+            #     conversation feel like NAO is *looking at you* rather
+            #     than staring straight ahead.
+            self._start_head_behaviors()
+
+            # 6. Onboarding face-recognition scan. Runs ~3 s after engage
+            # on a daemon thread so the camera_announce + first turn
+            # aren't blocked. If a known face is in frame, server gets
+            # the user's name and greets them. If unknown, server gets
+            # `name=None` and the chat agent will introduce NAO + ask
+            # for their name (the user can say "remember me as X" to
+            # trigger the learn_face tool).
+            self._spawn_face_recognition()
+
+    def _spawn_face_recognition(self):
+        """Run a quick (~3 s) face-recognition scan on a daemon thread.
+
+        Pushes a ``user_identified`` control frame to the server with:
+            { name: <str|null>, recognized: <bool>, source: "face"|"unknown" }
+
+        Server uses ``name`` to greet returning users by name and to seed
+        ``sess.username`` for the agent context. If no face was learned
+        for this user yet, the chat agent prompt instructs NAO to ask
+        for their name and then call the ``learn_face`` tool.
+        """
+        def _do_scan():
+            # Tiny initial delay so camera_announce (~600 ms TTS) gets
+            # to play before we burn CPU on face recognition.
+            time.sleep(2.0)
+            recognized_name = None
+            face_visible = False
+            try:
+                import qi as _qi
+                qi_session = _qi.Session()
+                try:
+                    qi_session.connect(
+                        "tcp://" + str(config.NAO_IP) + ":"
+                        + str(config.NAO_PORT))
+                except Exception as exc:
+                    self._log.debug("face_qi_connect_failed", error=str(exc))
+                    qi_session = None
+            except Exception as exc:
+                self._log.debug("face_qi_import_failed", error=str(exc))
+                qi_session = None
+
+            if qi_session is not None:
+                try:
+                    from utils.face_naoqi import recognize_face_naoqi
+                    res = recognize_face_naoqi(
+                        qi_session, None,
+                        subscriber_name="OnboardScan",
+                        timeout=3.0,
+                        return_seen=True,
+                    )
+                    if isinstance(res, tuple):
+                        recognized_name, face_visible = res
+                    else:
+                        recognized_name = res
+                except Exception as exc:
+                    self._log.debug("face_recognize_failed", error=str(exc))
+
+            payload = {
+                "name": recognized_name or None,
+                "recognized": bool(recognized_name),
+                "face_visible": bool(face_visible),
+                "source": "face" if recognized_name else "unknown",
+            }
+            self._log.info("user_identified_scan",
+                           name=recognized_name,
+                           face_visible=face_visible)
+            import sys as _sys
+            print("[onboarding] user_identified={0}".format(payload))
+            _sys.stderr.flush()
+
+            # Push to server. Best-effort — if WS already closed, skip.
+            try:
+                if self._client is not None:
+                    self._client.push_control("user_identified", payload)
+            except Exception as exc:
+                self._log.debug("user_identified_push_failed",
+                               error=str(exc))
+
+        try:
+            t = threading.Thread(target=_do_scan,
+                                 name="nao-onboard-face-scan")
+            t.daemon = True
+            t.start()
+        except Exception as exc:
+            self._log.debug("face_scan_thread_failed", error=str(exc))
+
+    def _start_head_behaviors(self):
+        """Spin up SoundLocalizer (auto-track) + ALTracker face mode.
+        Best-effort. Each piece logs and continues if construction fails.
+        """
+        if not _HAS_NAOQI:
+            return
+
+        # Sound localizer — turns the head toward whoever just spoke.
+        try:
+            from sound_localize import SoundLocalizer
+            sl = SoundLocalizer(
+                nao_ip=config.NAO_IP,
+                nao_port=config.NAO_PORT,
+                max_yaw_deg=55.0,
+                max_pitch_deg=18.0,
+                turn_speed_dps=45.0,    # snappier than default 30 — feels alive
+                confidence_min=0.35,
+                auto_track=True,
+            )
+            sl.start()
+            self._sound_localizer = sl
+            self._log.info("sound_localizer_started")
+        except Exception as exc:
+            self._log.warn("sound_localizer_start_failed", error=str(exc))
+            self._sound_localizer = None
+
+        # ALTracker face mode — keeps eyes on the closest face when no
+        # recent sound event drives a re-aim. NAOqi's tracker handles
+        # smoothing + reacquire on its own; we just turn it on.
+        try:
+            tracker = ALProxy("ALTracker", config.NAO_IP, config.NAO_PORT)
+            try:
+                tracker.stopTracker()
+            except Exception:
+                pass
+            tracker.setMode("Head")
+            try:
+                # 0.15 m face size hint helps the tracker estimate distance.
+                tracker.registerTarget("Face", 0.15)
+            except Exception as exc:
+                self._log.warn("tracker_register_failed", error=str(exc))
+            tracker.track("Face")
+            self._face_tracker = tracker
+            self._log.info("face_tracker_started")
+        except Exception as exc:
+            self._log.warn("face_tracker_start_failed", error=str(exc))
+            self._face_tracker = None
+
+    def _stop_head_behaviors(self):
+        sl = self._sound_localizer
+        self._sound_localizer = None
+        if sl is not None:
+            try:
+                sl.stop()
+            except Exception:
+                pass
+
+        tracker = self._face_tracker
+        self._face_tracker = None
+        if tracker is not None:
+            try:
+                tracker.stopTracker()
+            except Exception:
+                pass
+            try:
+                tracker.unregisterAllTargets()
+            except Exception:
+                pass
+
     def disengage(self, reason):
         """Shut the WS client down and join the run thread. Idempotent."""
         with self._lock:
@@ -413,6 +688,13 @@ class _SessionController(object):
                 self._vad.ws_client = None
         except Exception:
             pass
+
+        # Stop head-tracking before tearing down the WS so the head
+        # doesn't keep tracking after we're done.
+        try:
+            self._stop_head_behaviors()
+        except Exception as exc:
+            self._log.debug("head_behaviors_stop_failed", error=str(exc))
 
         if client is not None:
             try:
@@ -467,6 +749,18 @@ def main():
 
     _disable_autonomous(config.NAO_IP, config.NAO_PORT)
     _set_volume(config.NAO_IP, config.NAO_PORT, level=100)
+
+    # ALBroker MUST exist before any ALModule subclass is constructed
+    # (NaoAudioStreamer is one). Failure here means ALModule creation will
+    # raise "no current broker in Python's world" - we want that surfaced
+    # at boot, not buried in the streamer's __init__.
+    try:
+        _ensure_broker(config.NAO_IP, config.NAO_PORT)
+        log.info("broker_ready", nao_ip=config.NAO_IP, nao_port=config.NAO_PORT)
+    except Exception as exc:
+        log.exception("broker_create_failed", error=str(exc))
+        # Without a broker, NaoAudioStreamer will crash anyway; bail loudly.
+        raise
 
     brain = user_cache  # placeholder for the brain cache (Phase 7 replaces
                         # this with nao/utils/brain.py - capped 64 KB JSON)
@@ -543,6 +837,30 @@ def main():
                 log, leds, fallback, vad,
                 on_engaged, on_lost, on_listening, on_speaking_done,
             )
+
+            # Head-touch barge-in: when the user touches NAO's head while
+            # TTS is playing, stop the audio immediately so they can speak.
+            def on_barge():
+                log.info("wake_barge_requested")
+                try:
+                    if tts is not None:
+                        tts.stop()
+                except Exception as exc:
+                    log.warn("tts_stop_on_barge_failed", error=str(exc))
+                # Also push a barge_in control frame to the server so it
+                # cancels any in-flight TTS chunks queued for send.
+                try:
+                    cli = session._client if session is not None else None
+                    if cli is not None:
+                        cli.push_control("barge_in", {"source": "touch"})
+                except Exception as exc:
+                    log.debug("barge_control_push_failed", error=str(exc))
+
+            try:
+                if hasattr(wsm, "set_barge_callback"):
+                    wsm.set_barge_callback(on_barge)
+            except Exception as exc:
+                log.warn("barge_callback_wire_failed", error=str(exc))
 
             log.info("wake_state_machine_start")
             # Idle LED before we hand control to the WSM, in case its own

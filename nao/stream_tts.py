@@ -65,6 +65,117 @@ _POLL_S = 0.05
 _MAX_MP3_BYTES = 4 * 1024 * 1024
 
 
+# ── ffmpeg helpers ──────────────────────────────────────────────────────────
+# NAO V6 ships ffmpeg 4.1.3 at /usr/bin/ffmpeg. ALAudioPlayer is picky about
+# MP3 containers (ElevenLabs Flash output is often rejected silently — the
+# call returns instantly with no audio out). When the first blocking play
+# returns suspiciously fast we transcode to NAO-safe WAV (16 kHz, mono,
+# S16LE) and retry. Both helpers are best-effort; failures are logged and
+# the caller falls through.
+import subprocess as _subprocess
+
+_FFMPEG_BIN = "/usr/bin/ffmpeg"
+_FFPROBE_BIN = "/usr/bin/ffprobe"
+
+
+def _ffprobe_audio(path):
+    """Best-effort ffprobe of `path`. Returns a short string like
+    'mp3 22050Hz mono 32k' or 'probe_failed'. Never raises."""
+    if not os.path.exists(_FFPROBE_BIN):
+        # Fallback: parse first few bytes for codec hint.
+        try:
+            with open(path, "rb") as fh:
+                head = fh.read(10)
+            if head.startswith(b"ID3") or head[:2] == b"\xff\xfb" or head[:2] == b"\xff\xf3":
+                return "mp3 (no_ffprobe)"
+            if head[:4] == b"RIFF":
+                return "wav (no_ffprobe)"
+            return "unknown (no_ffprobe)"
+        except Exception:
+            return "probe_failed"
+    try:
+        out = _subprocess.check_output(
+            [_FFPROBE_BIN, "-v", "error", "-show_entries",
+             "stream=codec_name,sample_rate,channels,bit_rate",
+             "-of", "default=noprint_wrappers=1", path],
+            stderr=_subprocess.STDOUT,
+        )
+        if isinstance(out, bytes):
+            out = out.decode("utf-8", "ignore")
+        return out.strip().replace("\n", " ")
+    except Exception as exc:
+        return "probe_failed:{0}".format(exc)
+
+
+def _convert_mp3_to_wav(mp3_path, wav_path):
+    """Transcode `mp3_path` to NAO-safe WAV at `wav_path`, with loudness boost.
+
+    Target format: 16 kHz mono signed 16-bit PCM (s16le) — what
+    ALAudioPlayer reliably accepts on this firmware.
+
+    Loudness: ``loudnorm`` two-stage normalization to ~ -10 LUFS, then a
+    final ``volume=2.0`` (+6 dB) sweetener. ElevenLabs Flash output runs
+    a few dB quieter than OpenAI tts-1; combined with NAO's small speakers
+    in a noisy classroom this comes out around 50 % perceived loudness
+    without amplification. ``loudnorm`` is preferred over a flat
+    multiplier because it dodges clipping while still pulling quiet TTS up
+    near the ceiling.
+
+    Returns True on success, False otherwise.
+    """
+    if not os.path.exists(_FFMPEG_BIN):
+        print("[tts_trace] ffmpeg not found at {0}".format(_FFMPEG_BIN))
+        sys.stderr.flush()
+        return False
+    try:
+        # MAX-loudness chain tuned for NAO V6 speakers. Each filter
+        # exists for a specific reason — they compound, you can't
+        # drop any of them without losing dB:
+        #
+        #   1. highpass=180 — strip everything below 180 Hz that NAO
+        #      can't reproduce anyway. Frees +3-6 dB of headroom for
+        #      the speech band.
+        #   2. dynaudnorm=p=0.95:m=20 — dynamic range compressor with
+        #      MAX gain factor 20× (+26 dB). Crushes quiet voices
+        #      (cloned voices ship 6-10 dB quieter than ElevenLabs
+        #      stock) up to the same envelope as loud voices. WITHOUT
+        #      this, loudnorm's single-pass undershoots on quiet
+        #      sources because the integrated LUFS measurement is
+        #      pulled down by long quiet stretches.
+        #   3. equalizer f=2200:g=4 — +4 dB presence boost where
+        #      speech intelligibility lives.
+        #   4. loudnorm=I=-6 — final LUFS target. After dynaudnorm
+        #      has flattened the dynamics, loudnorm reliably hits the
+        #      hot -6 LUFS target on every voice (girl/man/neutral/my).
+        #   5. volume=14dB — flat 5× sweetener.
+        #   6. alimiter limit=0.99 — true-peak ceiling.
+        cmd = [
+            _FFMPEG_BIN, "-y", "-loglevel", "error",
+            "-i", mp3_path,
+            "-af",
+            "highpass=f=180,"
+            "dynaudnorm=p=0.95:m=20:s=10:g=15,"
+            "equalizer=f=2200:t=q:w=1.4:g=4,"
+            "loudnorm=I=-6:TP=-1.0:LRA=7,"
+            "volume=14dB,"
+            "alimiter=limit=0.99",
+            "-ar", "16000", "-ac", "1", "-sample_fmt", "s16",
+            "-f", "wav",
+            wav_path,
+        ]
+        rv = _subprocess.call(cmd)
+        if rv != 0:
+            print("[tts_trace] ffmpeg returned non-zero: {0}".format(rv))
+            sys.stderr.flush()
+            return False
+        return os.path.exists(wav_path) and os.path.getsize(wav_path) > 44
+    except Exception as exc:
+        print("[tts_trace] ffmpeg conversion error: {0}: {1}".format(
+            type(exc).__name__, exc))
+        sys.stderr.flush()
+        return False
+
+
 def _try_import_naoqi():
     """Import naoqi.ALProxy or return None.
 
@@ -196,9 +307,18 @@ class StreamTtsPlayer(object):
 
         path = self._spool_to_disk(mp3_bytes)
         if path is None:
+            print("[tts_trace] mp3_written FAILED (spool returned None)")
+            sys.stderr.flush()
             return
         with self._tmp_paths_lock:
             self._tmp_paths.add(path)
+        try:
+            on_disk_size = os.path.getsize(path)
+        except Exception:
+            on_disk_size = -1
+        print("[tts_trace] mp3_written path={0} bytes={1} on_disk_size={2}".format(
+            path, len(mp3_bytes), on_disk_size))
+        sys.stderr.flush()
         try:
             preview = (text or "")
             if isinstance(preview, bytes):
@@ -294,6 +414,9 @@ class StreamTtsPlayer(object):
 
     def _worker_loop(self):
         """Daemon: dequeue jobs, play sequentially, delete files."""
+        print("[tts_trace] worker_loop_started player_present={0} audio_dev_present={1}".format(
+            self._player is not None, self._audio_dev is not None))
+        sys.stderr.flush()
         while not self._shutdown_event.is_set():
             try:
                 job = self._queue.get(timeout=0.25)
@@ -326,9 +449,30 @@ class StreamTtsPlayer(object):
         # speaker at whatever volume the OS picked).
         self._pin_volumes()
 
+        # Snapshot the current output volume so we can verify it actually
+        # took effect (some firmwares silently ignore setOutputVolume when
+        # the audio device is busy).
+        cur_out_vol = "?"
+        cur_master_vol = "?"
+        try:
+            if self._audio_dev is not None:
+                cur_out_vol = self._audio_dev.getOutputVolume()
+        except Exception as exc:
+            cur_out_vol = "err:{0}".format(exc)
+        try:
+            if self._player is not None:
+                cur_master_vol = self._player.getMasterVolume()
+        except Exception as exc:
+            cur_master_vol = "err:{0}".format(exc)
+        print("[tts_trace] play_start path={0} output_vol={1} master_vol={2}".format(
+            path, cur_out_vol, cur_master_vol))
+        sys.stderr.flush()
+
         if self._player is None:
             # Dev mode without naoqi: simulate playback time so callers
             # that drive the player in tests can see is_playing() flip.
+            print("[tts_trace] play_failed reason=player_proxy_None (dev/inert mode)")
+            sys.stderr.flush()
             time.sleep(0.05)
             with self._state_lock:
                 self._playing = False
@@ -336,46 +480,76 @@ class StreamTtsPlayer(object):
             return
 
         try:
-            # playFile is BLOCKING on this firmware (it waits for the file
-            # to finish), so we don't actually need to poll getNumOfChannels.
-            # But the spec calls for the poll-based readiness check so the
-            # worker stays responsive to stop() even if a future naoqi rev
-            # makes playFile non-blocking. We post asynchronously instead:
-            #   - post.playFile returns a task id
-            #   - poll getNumOfChannels until it drops to 0
-            #   - safe to call ALAudioPlayer.stop(<id>) on barge
-            try:
-                task_id = self._player.post.playFile(path)
-            except Exception:
-                # post API not available — fall back to blocking play.
-                task_id = None
+            # Probe the MP3 first (NAO ALAudioPlayer is picky about MP3
+            # containers; ElevenLabs Flash output isn't always playable).
+            mp3_info = _ffprobe_audio(path)
+            print("[tts_trace] mp3_probe path={0} info={1!r}".format(path, mp3_info))
+            sys.stderr.flush()
 
-            if task_id is None:
-                # Blocking fallback. We lose poll-based responsiveness but
-                # gain compatibility with older naoqi.
-                try:
-                    self._player.playFile(path)
-                except Exception as e:
-                    print("[stream_tts] playFile failed:", e)
-            else:
-                # Poll until idle or until shutdown/stop interrupts.
-                while True:
-                    if self._shutdown_event.is_set():
-                        break
-                    with self._state_lock:
-                        if not self._playing:
-                            # stop() was called externally.
-                            break
+            # Try blocking playFile with the original MP3 first.
+            t0 = time.time()
+            try:
+                print("[tts_trace] blocking_play_start path={0} (mp3)".format(path))
+                sys.stderr.flush()
+                rv = self._player.playFile(path)
+                elapsed = time.time() - t0
+                print("[tts_trace] blocking_play_done path={0} rv={1!r} elapsed_s={2:.2f}".format(
+                    path, rv, elapsed))
+                sys.stderr.flush()
+            except Exception as e:
+                elapsed = time.time() - t0
+                rv = None
+                print("[tts_trace] blocking_play FAILED on mp3 path={0} err={1}: {2} elapsed_s={3:.2f}".format(
+                    path, type(e).__name__, e, elapsed))
+                sys.stderr.flush()
+
+            # If playback returned suspiciously fast (< 0.3 s for any non-trivial
+            # MP3), assume the firmware silently rejected the format. Convert
+            # to a NAO-safe WAV and retry.
+            try:
+                file_bytes = os.path.getsize(path)
+            except Exception:
+                file_bytes = 0
+            if elapsed < 0.30 and file_bytes > 4096:
+                wav_path = path.rsplit(".", 1)[0] + ".wav"
+                t1 = time.time()
+                ok = _convert_mp3_to_wav(path, wav_path)
+                conv_elapsed = time.time() - t1
+                if ok:
                     try:
-                        n = self._player.getNumOfChannels()
+                        wav_size = os.path.getsize(wav_path)
                     except Exception:
-                        n = 0
-                    if n is None or int(n) <= 0:
-                        # Player idle — chunk done.
-                        break
-                    time.sleep(_POLL_S)
+                        wav_size = -1
+                    # 16 kHz mono S16LE → 32_000 bytes/s; estimate duration.
+                    duration_s = max(0.0, (wav_size - 44) / 32000.0)
+                    print("[tts_trace] wav_converted path={0} bytes={1} duration_s={2:.2f} conv_elapsed_s={3:.2f}".format(
+                        wav_path, wav_size, duration_s, conv_elapsed))
+                    sys.stderr.flush()
+                    with self._tmp_paths_lock:
+                        self._tmp_paths.add(wav_path)
+                    t2 = time.time()
+                    try:
+                        print("[tts_trace] blocking_play_start path={0} (wav)".format(wav_path))
+                        sys.stderr.flush()
+                        rv2 = self._player.playFile(wav_path)
+                        wav_elapsed = time.time() - t2
+                        print("[tts_trace] blocking_play_done path={0} rv={1!r} elapsed_s={2:.2f}".format(
+                            wav_path, rv2, wav_elapsed))
+                        sys.stderr.flush()
+                    except Exception as e:
+                        wav_elapsed = time.time() - t2
+                        print("[tts_trace] wav play FAILED path={0} err={1}: {2} elapsed_s={3:.2f}".format(
+                            wav_path, type(e).__name__, e, wav_elapsed))
+                        sys.stderr.flush()
+                else:
+                    print("[tts_trace] wav_convert FAILED conv_elapsed_s={0:.2f}".format(
+                        conv_elapsed))
+                    sys.stderr.flush()
 
         except Exception as e:
+            print("[tts_trace] play_failed path={0} unexpected={1}: {2}".format(
+                path, type(e).__name__, e))
+            sys.stderr.flush()
             print("[stream_tts] _play_one error:", e)
         finally:
             with self._state_lock:
@@ -385,11 +559,15 @@ class StreamTtsPlayer(object):
     # ---- helpers --------------------------------------------------------
 
     def _pin_volumes(self):
-        """Force speaker output volume to 100 and master volume to 1.0.
+        """Force speaker output to 100 across every layer of the stack.
 
-        Same idiom as the legacy `_play_mp3_b64`. Called both from
-        enqueue() (before the chunk reaches the worker) and from
-        _play_one() (right before naoqi's playFile). Idempotent.
+        On NAO V6 the audio path is:
+            ffmpeg gain  →  ALAudioPlayer.masterVolume  →
+            ALAudioDevice.outputVolume  →  ALSA mixer  →  amplifier  →  speaker
+
+        Each layer can clamp the signal. We pin all four so nothing in
+        the path is the bottleneck. Idempotent + best-effort — every
+        call is wrapped so a single failure can't silence playback.
         """
         if self._audio_dev is not None:
             try:
@@ -401,6 +579,29 @@ class StreamTtsPlayer(object):
                 self._player.setMasterVolume(1.0)
             except Exception:
                 pass
+        try:
+            from naoqi import ALProxy as _ALProxy  # noqa
+            _ALProxy("ALTextToSpeech", self._nao_ip, self._nao_port).setVolume(1.0)
+        except Exception:
+            pass
+        # ALSA hardware mixer — sits ABOVE NAOqi's setOutputVolume on
+        # this firmware. Default ships at ~80 %; pushing to 100 % buys
+        # ~2 dB of additional analog gain. Done via a one-shot subprocess
+        # the first time _pin_volumes runs (no point spamming amixer
+        # 50× per turn). The control name is "Master" on V6 — we also
+        # try "PCM" and "Speaker" as fallbacks for older firmwares.
+        if not getattr(self, "_alsa_pinned", False):
+            self._alsa_pinned = True
+            for ctl in ("Master", "PCM", "Speaker"):
+                try:
+                    rv = _subprocess.call(
+                        ["amixer", "-q", "set", ctl, "100%"],
+                    )
+                    if rv == 0:
+                        print("[stream_tts] amixer pin {0}=100% OK".format(ctl))
+                        sys.stderr.flush()
+                except Exception:
+                    pass
 
     def _spool_to_disk(self, mp3_bytes):
         """Write MP3 bytes to /tmp/nao_tts_<seq>.mp3 and return the path.

@@ -98,42 +98,84 @@ def _synth_for(username: str, text: str) -> bytes | None:
 # Phase 11.6 — vision refresh policy. Visual-trigger phrases that
 # unconditionally force a fresh observation regardless of cache age.
 _VISION_REFRESH_TRIGGERS: tuple[str, ...] = (
-    "look at me", "look at my", "do i look", "how do i look",
-    "i'm crying", "im crying", "i am crying",
+    # "look at me" family
+    "look at me", "look at my", "look at this",
+    "do i look", "how do i look", "how am i looking",
+    # "see" family
     "can you see", "do you see", "what do you see",
-    "see my face", "see my", "watch me",
+    "see my", "see how i", "see the way",
+    "see what i", "watch me", "are you watching",
+    "see right now", "see now",
+    # affective / posture cues (legacy therapy)
+    "i'm crying", "im crying", "i am crying",
     "i'm smiling", "im smiling",
     "i'm tired", "you can tell", "do i seem",
-    "see how i", "see the way",
+    # what-am-i-wearing family
+    "what am i wearing", "what color is my", "what color shirt",
+    "what color am i", "describe my outfit", "describe what i am",
+    "describe what im", "describe me",
+    # describe-the-room family
+    "what do you notice", "what's around", "whats around",
+    "describe the room", "describe what you see",
+    "tell me what you see", "what's in front", "whats in front",
+    "what's behind", "whats behind",
+    # holding objects
+    "what am i holding", "what is this", "what's this",
+    "do you recognize this", "identify this",
 )
 
-# How long a cached observation stays usable before the next turn
-# silently re-runs vision. 45 s is a sweet spot per the operator's
-# spec — long enough to skip vision on rapid back-and-forth, short
-# enough to catch significant posture/affect changes.
-_VISION_CACHE_TTL_MS: float = 45_000.0
+# Vision is LAZY — only fires when the user's transcript matches one of
+# the trigger phrases above OR a long time has passed since the last
+# successful vision. This was changed from "fire on first turn + every
+# 45 s" because the operator noticed vision firing on every turn was:
+#   1. Adding ~1.5 s latency to non-visual replies
+#   2. Causing GPT-4o vision to influence chat replies that never asked
+#      about anything visual (model leaks "I see a poster..." randomly)
+#   3. Burning OpenAI credits unnecessarily
+# Cache TTL bumped to 5 min — once we've looked, the description is
+# good for the rest of the session unless explicitly refreshed.
+_VISION_CACHE_TTL_MS: float = 300_000.0
 
 
 def _should_refresh_vision(sess: Any, transcript: str) -> tuple[bool, str]:
-    """Decide whether to re-run vision this turn.
+    """Decide whether to run vision this turn (LAZY policy).
+
+    Vision is OFF by default. It only fires when:
+      1. The user's transcript matches a vision trigger phrase
+         ("what color is my shirt", "describe me", "look at me", etc.)
+      2. Cached vision is older than the TTL (5 min) AND a trigger
+         phrase asked for fresh data.
+
+    Importantly: NO automatic first-turn fire. The user has to actually
+    ask a visual question for vision to engage. This keeps non-visual
+    chat replies fast (no +1.5 s latency per turn) and stops the agent
+    from leaking "I notice a poster…" into unrelated answers.
 
     Returns ``(refresh, reason)``. ``reason`` lands in the structured
     log so we can audit when (and why) vision actually fired.
     """
-    # First therapy turn of the session — always fresh.
-    if not sess._cached_vision or sess._cached_vision_at_ms <= 0:
-        return True, "first_turn"
-
-    age_ms = (time.time() * 1000.0) - sess._cached_vision_at_ms
-    if age_ms >= _VISION_CACHE_TTL_MS:
-        return True, "ttl_expired"
-
     low = (transcript or "").lower()
+    matched_trigger = None
     for phrase in _VISION_REFRESH_TRIGGERS:
         if phrase in low:
-            return True, f"trigger_phrase:{phrase}"
+            matched_trigger = phrase
+            break
 
-    return False, f"cache_hit_age_{age_ms:.0f}ms"
+    # No trigger phrase → never fire (regardless of cache state).
+    if matched_trigger is None:
+        return False, "no_visual_question"
+
+    # Trigger phrase fired. If we have NO cache, definitely run.
+    if not sess._cached_vision or sess._cached_vision_at_ms <= 0:
+        return True, f"trigger_phrase:{matched_trigger}"
+
+    # Trigger fired AND cache exists. Refresh if cache stale.
+    age_ms = (time.time() * 1000.0) - sess._cached_vision_at_ms
+    if age_ms >= _VISION_CACHE_TTL_MS:
+        return True, f"trigger_phrase:{matched_trigger}_ttl_expired"
+
+    # Trigger fired but cache is recent enough — reuse it.
+    return False, f"trigger_phrase:{matched_trigger}_cache_hit_{age_ms:.0f}ms"
 
 
 def _cancel_pending_vision(sess) -> None:
@@ -274,6 +316,17 @@ class _StdLogger:
 
 
 logger = _structlog_logger if _structlog_logger is not None else _StdLogger()
+
+# Module-level scratch space for mic_trace prints. _Session uses __slots__
+# so per-instance trace state needs to live outside the session object.
+_MIC_TRACE_STATE: dict[str, dict[str, Any]] = {}
+
+# Session-scoped identification result from the robot's onboarding face
+# scan. Keyed by session_id. Read by `format_user_message` (legacy
+# helpers) to inject a `[USER name=X returning=true]` block into the
+# agent's user-message prefix on the FIRST turn of each new session.
+# Cleared on session_close.
+_IDENTIFIED_USERS: dict[str, dict[str, Any]] = {}
 
 
 # ───────── env-driven knobs ─────────
@@ -960,7 +1013,12 @@ class _Session:
 
     def reset_turn(self) -> None:
         self.audio_buf = bytearray()
-        self.image_b64 = None
+        # Do NOT clear image_b64 here — the robot snaps a fresh image on
+        # session_open + every tts_ended, but those snaps may not arrive
+        # before the next user utterance triggers vision kickoff. Keeping
+        # the previous image means the agent gets at-worst a slightly
+        # stale frame instead of `vision_status=skipped`. The image gets
+        # overwritten when the next snap arrives at the WS frame handler.
         self.robot_eou_hint = False
         self.utterance_start_ms = 0.0
         self.had_speech = False
@@ -1360,11 +1418,30 @@ async def _emit_agent_turn(ws: WebSocket, sess: _Session,
     _q: "asyncio.Queue[dict]" = asyncio.Queue()
     _loop = asyncio.get_running_loop()
 
+    # Build per-turn identity payload from the most recent
+    # user_identified scan + first-turn flag. _IDENTIFIED_USERS is
+    # written by _ingest_control when the robot pushes user_identified.
+    # `first_turn` is true only for the FIRST agent run after the scan;
+    # we mark `greeted=True` after consuming so subsequent turns don't
+    # re-prepend the greeting note.
+    _identity = None
+    _id_state = _IDENTIFIED_USERS.get(sess.session_id)
+    if _id_state is not None:
+        _identity = {
+            "name": _id_state.get("name"),
+            "recognized": bool(_id_state.get("recognized")),
+            "face_visible": bool(_id_state.get("face_visible")),
+            "first_turn": not _id_state.get("greeted", False),
+        }
+        # Mark greeted so the next turn's identity payload has
+        # first_turn=False (prevents re-greeting on every turn).
+        _id_state["greeted"] = True
+
     async def _drive_agent():
         try:
             async for ev in legacy.run_agent_streamed(
                 sess.username, sess.hint, transcript, None,
-                vision_observation,
+                vision_observation, _identity,
             ):
                 await _q.put(ev)
         except Exception as e:
@@ -1400,7 +1477,7 @@ async def _emit_agent_turn(ws: WebSocket, sess: _Session,
             try:
                 async for ev in stream_fn(
                     sess.username, sess.hint, transcript, None,
-                    vision_observation,
+                    vision_observation, _identity,
                 ):
                     asyncio.run_coroutine_threadsafe(
                         _q.put(ev), _loop).result()
@@ -1755,6 +1832,9 @@ async def _process_turn(ws: WebSocket, sess: _Session) -> None:
     image_b64 = sess.image_b64
     sess._vision_task = None  # type: ignore[attr-defined]
     is_fast_chat = (sess.hint or "").lower() == "chat"
+    print("[vision_trace] kickoff decision is_fast_chat={0} image_b64_present={1} hint={2!r}".format(
+        is_fast_chat, image_b64 is not None,
+        sess.hint), flush=True)
     if is_fast_chat:
         logger.info(
             "vision_decision",
@@ -1949,6 +2029,28 @@ async def _ingest_frame(ws: WebSocket, sess: _Session,
             )
             return True
 
+        # mic_trace: visible proof on stderr that audio is reaching the server.
+        # _Session uses __slots__, so we can't attach trace state to the
+        # instance. Use a module-level dict keyed by session_id instead.
+        sid = getattr(sess, "session_id", "?")
+        _trace_state = _MIC_TRACE_STATE.setdefault(sid, {"count": 0, "logged": False})
+        if not _trace_state["logged"]:
+            _trace_state["logged"] = True
+            print(
+                "[mic_trace] server_audio_chunk_received user={0} bytes={1}".format(
+                    sess.username, len(pcm)
+                ),
+                flush=True,
+            )
+        _trace_state["count"] += 1
+        if _trace_state["count"] % 50 == 0:
+            print(
+                "[mic_trace] server_audio_chunk_received count={0} buf_bytes={1}".format(
+                    _trace_state["count"], len(sess.audio_buf)
+                ),
+                flush=True,
+            )
+
         # Phase 11.10 — also forward the PCM to the streaming STT WS
         # if it's open. We keep buffering into sess.audio_buf for the
         # legacy fallback path; double-feeding both is cheap (one is
@@ -1999,6 +2101,8 @@ async def _ingest_frame(ws: WebSocket, sess: _Session,
         b64 = frame.get("data") or ""
         if b64:
             sess.image_b64 = b64
+            print("[vision_trace] image stashed user={0} bytes_b64={1}".format(
+                sess.username, len(b64)), flush=True)
         return True
 
     if ftype == "control":
@@ -2308,7 +2412,7 @@ async def _maybe_announce_camera_consent(ws: WebSocket, sess: _Session) -> None:
     except Exception:  # noqa: BLE001 — should never happen in practice
         return
 
-    if not _session.is_first_turn(sess.session_id):
+    if not _session.is_first_turn(sess.session_id, sess.username):
         return
 
     # Read consent off-loop so a slow SQLite call doesn't stall the
@@ -2344,7 +2448,7 @@ async def _maybe_announce_camera_consent(ws: WebSocket, sess: _Session) -> None:
     # Mark BEFORE the send so a transient send error doesn't cause us to
     # double-announce on the next session_open. Idempotency wins over a
     # one-time miss.
-    _session.mark_first_turn_announced(sess.session_id)
+    _session.mark_first_turn_announced(sess.session_id, sess.username)
 
     if mp3:
         # Echo-guard hooks — keep the sentence list aligned with the
@@ -2501,6 +2605,43 @@ async def _ingest_control(ws: WebSocket, sess: _Session,
     if sub == "mic_resumed":
         logger.info(
             "mic_resumed", user=sess.username, session_id=sess.session_id,
+        )
+        return True
+
+    if sub == "user_identified":
+        # Robot's onboarding face-recognition scan completed. Payload:
+        #   { name: <str|null>, recognized: <bool>,
+        #     face_visible: <bool>, source: "face"|"unknown" }
+        # Stash on session so the next turn can:
+        #   • Greet returning user by name in the agent prompt
+        #   • Prompt unknown user for their name + suggest `learn_face`
+        face_name = (data.get("name") or "").strip() or None
+        recognized = bool(data.get("recognized"))
+        face_visible = bool(data.get("face_visible"))
+        # Store on session — tolerated even though _Session uses __slots__
+        # because we go through a module-level dict (same trick the
+        # mic_trace counters use).
+        _IDENTIFIED_USERS[sess.session_id] = {
+            "name": face_name,
+            "recognized": recognized,
+            "face_visible": face_visible,
+            "ts": time.time(),
+            "greeted": False,
+        }
+        # If we recognized the user, set sess.username so SQLite-backed
+        # memory + voice-profile-prefs persist correctly across sessions.
+        if face_name and recognized:
+            try:
+                sess.username = face_name.lower()
+            except Exception:
+                pass
+        logger.info(
+            "user_identified",
+            session_id=sess.session_id,
+            user=sess.username,
+            face_name=face_name,
+            recognized=recognized,
+            face_visible=face_visible,
         )
         return True
 

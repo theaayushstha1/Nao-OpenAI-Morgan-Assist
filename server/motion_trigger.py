@@ -74,8 +74,26 @@ _TRIGGERS: list[tuple[str, dict, str, list[str]]] = [
         "give me a dance", "can you dance", "could you dance", "let's dance",
         "do a robot dance", "do the robot",
     ]),
-    ("follow_movement", {}, "Mirroring you now.", [
+    ("follow_movement", {}, "Following you now.", [
+        # Canonical short form — fires the Choregraphe `follow-me` pack.
+        # Bare "follow" alone is omitted on purpose — too greedy
+        # ("follow up on what we said" would mis-fire).
+        "follow me", "come follow me", "follow me around",
+        "start following me", "follow me now",
+        # Tracking semantics (these are unambiguous robot commands)
+        "track me", "stay close", "stay with me",
+        # Mirror-me semantics (legacy — copies user's pose)
         "follow my movement", "mirror me", "copy me", "follow what i do",
+    ]),
+    # Stop the follow behavior. NOTE: avoid single-word "stop" / "halt"
+    # here because triggers match on word boundaries, and a bare "stop"
+    # would mis-fire on phrases like "stop watching me" (camera-off
+    # trigger) or "stop talking". Use multi-word phrases only.
+    ("stop_follow", {}, "Stopping.", [
+        "stop following me", "stop following", "don't follow me",
+        "do not follow me", "stop tracking me", "stop tracking",
+        "stay there", "stay here", "stay still", "freeze",
+        "enough following",
     ]),
 
     # ── Camera consent ──────────────────────────────────────
@@ -120,6 +138,13 @@ _TRIGGERS: list[tuple[str, dict, str, list[str]]] = [
         "use the neutral voice", "use neutral voice", "neutral voice",
         "switch to neutral voice", "switch to the neutral voice",
         "use voice three", "voice three", "voice 3", "third voice",
+    ]),
+    ("set_voice_profile", {"profile": "my"}, "Switching to your voice.", [
+        "switch to my voice", "use my voice", "my voice",
+        "switch to your voice", "use your voice", "your voice",
+        "switch to aayush voice", "aayush voice", "use aayush voice",
+        "switch to operator voice", "operator voice",
+        "use voice four", "voice four", "voice 4", "fourth voice",
     ]),
 
     # ── LEDs ────────────────────────────────────────────────

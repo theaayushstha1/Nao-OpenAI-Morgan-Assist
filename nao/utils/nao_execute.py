@@ -29,16 +29,154 @@ _EYE_COLORS = {
 # requests like "dance hiphop" don't silently fail just because the optional
 # Choregraphe pack isn't on the robot.
 _DANCE_BEHAVIORS = {
-    "taichi":   "taichi-dance-free",
-    "tai-chi":  "taichi-dance-free",
-    "tai chi":  "taichi-dance-free",
-    "slide":    "animations/Stand/Waiting/FunnySlide_1",
-    "robot":    "animations/Stand/Waiting/FunnyDancer_1",
-    "funny":    "animations/Stand/Waiting/FunnyDancer_1",
-    "hiphop":   "animations/Stand/Waiting/FunnyDancer_1",
-    "salsa":    "animations/Stand/Waiting/FunnyDancer_1",
+    "taichi":     "taichi-dance-free",
+    "tai-chi":    "taichi-dance-free",
+    "tai chi":    "taichi-dance-free",
+    "slide":      "animations/Stand/Waiting/FunnySlide_1",
+    "funnyslide": "animations/Stand/Waiting/FunnySlide_1",
+    "robot":      "animations/Stand/Waiting/Robot_1",
+    "funny":      "animations/Stand/Waiting/FunnyDancer_1",
+    "hiphop":     "animations/Stand/Waiting/FunnyDancer_1",
+    "salsa":      "animations/Stand/Waiting/FunnyDancer_1",
+    "kungfu":     "animations/Stand/Waiting/KungFu_1",
+    "kung-fu":    "animations/Stand/Waiting/KungFu_1",
+    "headbang":   "animations/Stand/Waiting/Headbang_1",
+    "metal":      "animations/Stand/Waiting/Headbang_1",
+    "guitar":     "animations/Stand/Waiting/AirGuitar_1",
+    "airguitar":  "animations/Stand/Waiting/AirGuitar_1",
+    "bandmaster": "animations/Stand/Waiting/Bandmaster_1",
+    "conduct":    "animations/Stand/Waiting/Bandmaster_1",
+    "fitness":    "animations/Stand/Waiting/Fitness_1",
+    "workout":    "animations/Stand/Waiting/Fitness_2",
+    "monster":    "animations/Stand/Waiting/Monster_1",
+    "mystic":     "animations/Stand/Waiting/MysticalPower_1",
+    "magic":      "animations/Stand/Waiting/MysticalPower_1",
+    "knight":     "animations/Stand/Waiting/Knight_1",
+    "zombie":     "animations/Stand/Waiting/Zombie_1",
+    "helicopter": "animations/Stand/Waiting/Helicopter_1",
+    "spaceship":  "animations/Stand/Waiting/SpaceShuttle_1",
+    "rocket":     "animations/Stand/Waiting/SpaceShuttle_1",
+    "happy_birthday": "animations/Stand/Waiting/HappyBirthday_1",
+    "birthday":   "animations/Stand/Waiting/HappyBirthday_1",
+    "waddle":     "animations/Stand/Waiting/Waddle_1",
+    "playhands":  "animations/Stand/Waiting/PlayHands_1",
+    "showmuscles": "animations/Stand/Waiting/ShowMuscles_1",
+    "muscles":    "animations/Stand/Waiting/ShowMuscles_1",
+    "flex":       "animations/Stand/Waiting/ShowMuscles_2",
 }
 _DANCE_FALLBACK = "animations/Stand/Waiting/FunnyDancer_1"
+
+
+# ---------------------------------------------------------------------------
+# Gesture intent -> native NAOqi behavior path map.
+#
+# Every short conversational gesture has a much-more-lifelike Aldebaran
+# behavior installed. Prefer those over our home-grown angleInterpolation
+# moves: the Choregraphe animations include shoulder/torso/finger sub-moves,
+# easing curves and head sway that we'd never get right hand-coding joint
+# arrays. _run_gesture() consults this table FIRST; if no listed behavior
+# is installed (or behav_mgr is None), it falls back to the custom
+# `_gesture_*` callable in `_GESTURE_TABLE`.
+#
+# Each value is a list, tried in priority order. All entries here have been
+# verified against this NAO V6's `getInstalledBehaviors()` snapshot
+# (915 behaviors, captured 2026-05-07).
+# ---------------------------------------------------------------------------
+_GESTURE_BEHAVIOR_MAP = {
+    # Existing core 10 — back the custom interpolation moves with stock
+    # animations whose body language reads cleaner from across the room.
+    "nod":            ["animations/Stand/Gestures/Yes_1",
+                       "animations/Stand/Gestures/Yes_2",
+                       "animations/Stand/Gestures/Yes_3"],
+    "shake":          ["animations/Stand/Gestures/No_1",
+                       "animations/Stand/Gestures/No_2",
+                       "animations/Stand/Gestures/No_3"],
+    "lean_in":        ["animations/Stand/Gestures/YouKnowWhat_1",
+                       "animations/Stand/Gestures/YouKnowWhat_2"],
+    "lean_back":      ["animations/Stand/Gestures/CalmDown_1",
+                       "animations/Stand/Gestures/CalmDown_2"],
+    "open_arms":      ["animations/Stand/Gestures/Hey_1",
+                       "animations/Stand/Gestures/Hey_3",
+                       "animations/Stand/Gestures/Hey_4"],
+    "point_self":     ["animations/Stand/Gestures/Me_1",
+                       "animations/Stand/Gestures/Me_2",
+                       "animations/Stand/Gestures/Me_3"],
+    "point_listener": ["animations/Stand/Gestures/You_1",
+                       "animations/Stand/Gestures/You_2",
+                       "animations/Stand/Gestures/You_3"],
+    "shrug":          ["animations/Stand/Gestures/IDontKnow_1",
+                       "animations/Stand/Gestures/IDontKnow_3",
+                       "animations/Stand/Gestures/IDontKnow_5"],
+    "tilt_curious":   ["animations/Stand/Gestures/Thinking_3",
+                       "animations/Stand/Gestures/Thinking_4",
+                       "animations/Stand/Gestures/Thinking_8"],
+    "breath_deep":    ["animations/Stand/Emotions/Positive/Peaceful_1",
+                       "animations/Stand/Waiting/Relaxation_1"],
+
+    # ── New conversational intents ─────────────────────────────────────
+    "wave":           ["animations/Stand/Gestures/Hey_1",
+                       "animations/Stand/Gestures/Hey_3"],
+    "applause":       ["animations/Stand/Gestures/Applause_1"],
+    "clap":           ["animations/Stand/Gestures/Applause_1"],
+    "salute":         ["animations/Stand/Gestures/Salute_1",
+                       "animations/Stand/Gestures/Salute_2"],
+    "bow":            ["animations/Stand/Gestures/BowShort_1"],
+    "kiss":           ["animations/Stand/Gestures/Kisses_1"],
+    "joy":            ["animations/Stand/Gestures/Joy_1",
+                       "animations/Stand/Emotions/Positive/Happy_4"],
+    "excited":        ["animations/Stand/Emotions/Positive/Excited_1",
+                       "animations/Stand/Emotions/Positive/Enthusiastic_1"],
+    "enthusiastic":   ["animations/Stand/Gestures/Enthusiastic_1",
+                       "animations/Stand/Gestures/Enthusiastic_3"],
+    "confused":       ["animations/Stand/Gestures/Confused_1",
+                       "animations/Stand/Gestures/Confused_2"],
+    "thinking":       ["animations/Stand/Gestures/Thinking_1",
+                       "animations/Stand/Gestures/Thinking_5"],
+    "explain":        ["animations/Stand/Gestures/Explain_3",
+                       "animations/Stand/Gestures/Explain_5",
+                       "animations/Stand/Gestures/Explain_8"],
+    "calm_down":      ["animations/Stand/Gestures/CalmDown_3",
+                       "animations/Stand/Gestures/CalmDown_5"],
+    "please":         ["animations/Stand/Gestures/Please_1",
+                       "animations/Stand/Gestures/Please_3"],
+    "reject":         ["animations/Stand/Gestures/Reject_1",
+                       "animations/Stand/Gestures/Reject_3"],
+    "yes":            ["animations/Stand/Gestures/Yes_1",
+                       "animations/Stand/Gestures/Yes_3"],
+    "no":             ["animations/Stand/Gestures/No_1",
+                       "animations/Stand/Gestures/No_4"],
+    "great":          ["animations/Stand/Gestures/Great_1"],
+    "give":           ["animations/Stand/Gestures/Give_1",
+                       "animations/Stand/Gestures/Give_3"],
+    "take":           ["animations/Stand/Gestures/Take_1"],
+    "show_floor":     ["animations/Stand/Gestures/ShowFloor_1",
+                       "animations/Stand/Gestures/ShowFloor_3"],
+    "show_sky":       ["animations/Stand/Gestures/ShowSky_1",
+                       "animations/Stand/Gestures/ShowSky_4"],
+    "stretch":        ["animations/Stand/Gestures/Stretch_1",
+                       "animations/Stand/Gestures/Stretch_2"],
+    "freeze":         ["animations/Stand/Gestures/Freeze_1"],
+    "shy":            ["animations/Stand/Gestures/Shy_1",
+                       "animations/Stand/Emotions/Positive/Shy_1"],
+    "surprised":      ["animations/Stand/Gestures/Surprised_1",
+                       "animations/Stand/Emotions/Negative/Surprise_1"],
+    "proud":          ["animations/Stand/Emotions/Positive/Proud_1",
+                       "animations/Stand/Emotions/Positive/Proud_3"],
+    "winner":         ["animations/Stand/Emotions/Positive/Winner_1"],
+    "laugh":          ["animations/Stand/Emotions/Positive/Laugh_1",
+                       "animations/Stand/Emotions/Positive/Laugh_3"],
+    "sad":            ["animations/Stand/Emotions/Negative/Sad_1"],
+    "angry":          ["animations/Stand/Emotions/Negative/Angry_1"],
+    "sorry":          ["animations/Stand/Emotions/Negative/Sorry_1"],
+    "what_is_this":   ["animations/Stand/Gestures/WhatSThis_1",
+                       "animations/Stand/Gestures/WhatSThis_5"],
+    "this":           ["animations/Stand/Gestures/This_1",
+                       "animations/Stand/Gestures/This_5"],
+    "count_one":      ["animations/Stand/Gestures/CountOne_1"],
+    "count_two":      ["animations/Stand/Gestures/CountTwo_1"],
+    "count_three":    ["animations/Stand/Gestures/CountThree_1"],
+    "count_more":     ["animations/Stand/Gestures/CountMore_1"],
+}
 
 _FOLLOW_BEHAVIOR = "follow-me"
 
@@ -141,12 +279,20 @@ _ANIMATION_MAP = {
 }
 
 
-def _run_first_available(behav_mgr, candidates, blocking=True):
-    """Try each behavior name in order; run the first one installed.
+def _run_first_available(behav_mgr, candidates, blocking=False):
+    """Try each behavior name in order; start the first one installed.
 
-    Returns the name that ran, or None if none were installed. Avoids
-    runBehavior on a missing package, which throws and shows up as an
-    error in nao.log every time the LLM picks an unsupported style.
+    Always uses non-blocking ``startBehavior`` regardless of the legacy
+    ``blocking`` kwarg. Reason: blocking ``runBehavior`` calls stall the
+    caller thread for the whole animation duration (sometimes 5-15 s for
+    full Choregraphe dances), and the dispatcher is invoked from the WS
+    receive loop. A blocking dance would freeze inbound audio chunks +
+    control frames for the duration of the move. The ``blocking`` arg is
+    kept on the signature so older call sites don't break, but it is now
+    a no-op — caller threads should never wait on a behavior to finish.
+
+    Returns the name of the started behavior, or None if none were
+    installed.
     """
     try:
         installed = set(behav_mgr.getInstalledBehaviors() or [])
@@ -155,13 +301,10 @@ def _run_first_available(behav_mgr, candidates, blocking=True):
     for cand in candidates:
         if cand in installed:
             try:
-                if blocking:
-                    behav_mgr.runBehavior(cand)
-                else:
-                    behav_mgr.startBehavior(cand)
+                behav_mgr.startBehavior(cand)
                 return cand
             except Exception as e:
-                print("[nao_execute] runBehavior {0!r} failed: {1}".format(cand, e))
+                print("[nao_execute] startBehavior {0!r} failed: {1}".format(cand, e))
     print("[nao_execute] none of {0} installed".format(candidates))
     return None
 
@@ -458,20 +601,60 @@ _GESTURE_TABLE = {
 }
 
 
-def _run_gesture(args, motion, posture, leds, sound_localize=None):
-    """Look up an intent and execute the matching ``_gesture_*`` callable.
+def _try_native_gesture(intent, behav_mgr):
+    """If the gesture intent has a native NAOqi behavior path that's
+    actually installed, fire it non-blocking and return True. Otherwise
+    return False so the caller falls back to the custom angle-interp move.
+    """
+    if behav_mgr is None:
+        return False
+    candidates = _GESTURE_BEHAVIOR_MAP.get(intent)
+    if not candidates:
+        return False
+    try:
+        installed = set(behav_mgr.getInstalledBehaviors() or [])
+    except Exception:
+        return False
+    for cand in candidates:
+        if cand in installed:
+            try:
+                # startBehavior is non-blocking; gestures should run in
+                # parallel with TTS, not stall the speech queue.
+                behav_mgr.startBehavior(cand)
+                _log("gesture native -> {0}".format(cand))
+                return True
+            except Exception as e:
+                _log("gesture native runBehavior {0!r} failed: {1}".format(cand, e))
+    return False
 
-    Unknown intent -> warning + no-op (per spec). Returns True on success,
-    False otherwise — never raises so the conversation loop is unaffected.
+
+def _run_gesture(args, motion, posture, leds, sound_localize=None,
+                 behav_mgr=None):
+    """Look up an intent and execute it.
+
+    Order of preference:
+      1. Native NAOqi behavior from `_GESTURE_BEHAVIOR_MAP` (highest
+         quality — full Choregraphe animation with shoulders/torso/eyes).
+      2. Custom angle-interpolation callable from `_GESTURE_TABLE`
+         (always present, dev-box safe).
+
+    Unknown intent -> warning + no-op. Never raises.
     """
     intent = (args or {}).get("intent")
     if not intent:
         _log("gesture: missing 'intent' arg; got args={0!r}".format(args))
         return False
+
+    # 1. Native behavior path — preferred when the proxy + animation exist.
+    if _try_native_gesture(intent, behav_mgr):
+        return True
+
+    # 2. Custom angle-interp fallback.
     fn = _GESTURE_TABLE.get(intent)
     if fn is None:
-        _log("gesture: unknown intent {0!r}; allowed={1}".format(
-            intent, sorted(_GESTURE_TABLE.keys())))
+        _log("gesture: unknown intent {0!r}; allowed_native={1} allowed_custom={2}".format(
+            intent, sorted(_GESTURE_BEHAVIOR_MAP.keys()),
+            sorted(_GESTURE_TABLE.keys())))
         return False
     try:
         return bool(fn(motion, posture, leds, sound_localize=sound_localize))
@@ -502,11 +685,14 @@ def run(action, session, motion, posture, leds, behav_mgr, tts,
             posture.goToPosture("Crouch", 0.6)
         elif name == "wave_hand":
             hand = args.get("hand", "right")
-            behav_mgr.runBehavior("animations/Stand/Gestures/Hey_{0}".format(
+            # Non-blocking; gestures should run parallel to TTS.
+            behav_mgr.startBehavior("animations/Stand/Gestures/Hey_{0}".format(
                 "1" if hand == "right" else "3"))
         elif name == "wave_both_hands":
-            behav_mgr.runBehavior("animations/Stand/Gestures/Hey_1")
-            behav_mgr.runBehavior("animations/Stand/Gestures/Hey_3")
+            behav_mgr.startBehavior("animations/Stand/Gestures/Hey_1")
+            # Slight stagger so both arms don't stomp each other if naoqi
+            # serializes; cheap sleep in caller's worker thread.
+            behav_mgr.startBehavior("animations/Stand/Gestures/Hey_3")
         elif name == "nod_head":
             n = int(args.get("times", 2))
             for _ in range(n):
@@ -516,9 +702,11 @@ def run(action, session, motion, posture, leds, behav_mgr, tts,
             for _ in range(n):
                 motion.angleInterpolation(["HeadYaw"], [0.5, -0.5], [0.4, 0.8], True)
         elif name == "clap_hands":
-            n = int(args.get("times", 2))
-            for _ in range(n):
-                behav_mgr.runBehavior("animations/Stand/Emotions/Positive/Happy_4")
+            # Non-blocking. The Happy_4 animation already includes a
+            # repeating clap; the previous loop on top of it produced
+            # nothing useful and just stalled the caller for ~6 s per
+            # iteration. One startBehavior is enough.
+            behav_mgr.startBehavior("animations/Stand/Gestures/Applause_1")
         elif name == "move_forward":
             motion.moveTo(float(args.get("meters", 0.3)), 0.0, 0.0)
         elif name == "move_backward":
@@ -570,6 +758,63 @@ def run(action, session, motion, posture, leds, behav_mgr, tts,
                 print("[nao_execute] no animation available for {0!r}".format(anim))
         elif name == "gesture":
             _run_gesture(args, motion, posture, leds, sound_localize=sound_localize)
+        elif name == "learn_face":
+            # Teach NAOqi's persistent face DB to recognize the user.
+            # Stored across reboots — next time face is detected the
+            # `name` field of FaceDetected ALMemory record will be set.
+            face_name = (args or {}).get("name") or ""
+            face_name = str(face_name).strip()
+            if not face_name:
+                print("[nao_execute] learn_face: missing name arg")
+            else:
+                try:
+                    # qi.Session is the modern way to grab services; fall
+                    # back to ALProxy if the global qi session isn't set.
+                    import qi as _qi
+                    qi_session = _qi.Session()
+                    try:
+                        ip = (motion.getIP() if motion is not None
+                              else "127.0.0.1")
+                    except Exception:
+                        ip = "127.0.0.1"
+                    qi_session.connect("tcp://" + ip + ":9559")
+                except Exception:
+                    qi_session = None
+                if qi_session is not None:
+                    try:
+                        from utils.face_naoqi import learn_new_face_naoqi
+                        ok = learn_new_face_naoqi(
+                            qi_session, tts, face_name,
+                        )
+                        print("[nao_execute] learn_face({0!r}) -> {1}".format(
+                            face_name, ok))
+                    except Exception as e:
+                        print("[nao_execute] learn_face error:", e)
+                else:
+                    # Fallback: bypass the qi.Session helper and call
+                    # ALFaceDetection.learnFace() directly via ALProxy.
+                    try:
+                        ip = (motion.getIP() if motion is not None
+                              else "127.0.0.1")
+                    except Exception:
+                        ip = "127.0.0.1"
+                    try:
+                        fd = ALProxy("ALFaceDetection", ip, 9559)
+                        try:
+                            fd.subscribe("LearnFaceTool")
+                        except Exception:
+                            pass
+                        try:
+                            ret = fd.learnFace(face_name)
+                            print("[nao_execute] learnFace({0!r}) -> {1}".format(
+                                face_name, ret))
+                        finally:
+                            try:
+                                fd.unsubscribe("LearnFaceTool")
+                            except Exception:
+                                pass
+                    except Exception as e:
+                        print("[nao_execute] learn_face fallback error:", e)
         else:
             print("[nao_execute] unknown action:", name)
     except Exception as e:
@@ -586,7 +831,9 @@ def dispatch(action_name, args=None, motion=None, posture=None, leds=None,
     new callers get the gesture path without anyone changing imports.
     """
     if action_name == "gesture":
-        return _run_gesture(args or {}, motion, posture, leds, sound_localize=sound_localize)
+        return _run_gesture(args or {}, motion, posture, leds,
+                            sound_localize=sound_localize,
+                            behav_mgr=behav_mgr)
     # Reuse the legacy dispatch for everything else — single source of truth
     # for the 18 existing actions. ``run`` already handles the env where any
     # of motion/posture/etc may be None on the dev box, but we still wrap it

@@ -186,6 +186,16 @@ GATE_PROXIMITY = "proximity"
 GATE_SUSTAINED_FACE = "sustained_face"
 GATE_SPEECH = "speech"
 GATE_KEYWORD = "keyword"
+GATE_TOUCH = "touch"  # head tactile sensor — manual wake bypass
+
+# ALMemory keys for the three NAO V6 head tactile sensors. Any of them
+# touched fires the touch gate (we don't care which — front/middle/rear
+# all mean "user wants my attention").
+_HEAD_TOUCH_KEYS = (
+    "FrontTactilTouched",
+    "MiddleTactilTouched",
+    "RearTactilTouched",
+)
 
 # Internal cadence knobs. 30 fps face polling matches PHASE_3_TASK_MAP and
 # matches what ALFaceDetection delivers when subscribed at ``period=100`` ms
@@ -442,6 +452,11 @@ class WakeStateMachine(object):
         self._on_lost = on_lost
         self._on_listening = on_listening
         self._on_speaking_done = on_speaking_done
+        # Optional barge callback: fires when the user touches the head
+        # tactile sensors while the robot is in SPEAKING state. main.py
+        # wires this to tts_player.stop() so the user can cut NAO off
+        # mid-reply just by tapping its head.
+        self._on_barge = None
 
         # Phase 8: multi-person greeting + returning-user hint.
         self._multi_person_callback = multi_person_callback
@@ -494,6 +509,7 @@ class WakeStateMachine(object):
         self._face_thread = None
         self._vad_thread = None
         self._keyword_thread = None
+        self._touch_thread = None
 
         # Track whether we own the ALFaceDetection subscription so stop()
         # can unsubscribe cleanly without tripping over an injected proxy
@@ -510,6 +526,13 @@ class WakeStateMachine(object):
         """Return the current state string. Threadsafe snapshot."""
         with self._state_lock:
             return self._state
+
+    def set_barge_callback(self, cb):
+        """Wire a callable to fire when the user touches NAO's head while
+        TTS is playing (SPEAKING state). Used for head-touch barge-in.
+        Pass None to clear. Idempotent.
+        """
+        self._on_barge = cb if callable(cb) else None
 
     @property
     def current_face_id(self):
@@ -622,6 +645,16 @@ class WakeStateMachine(object):
             self._keyword_thread.daemon = True
             self._keyword_thread.start()
 
+        # Head tactile sensor -> touch gate. Always-on, no setup required —
+        # ALMemory exposes the keys directly. This is the manual override
+        # path: a user can touch any of the three head pads to skip the
+        # face-detection warm-up entirely.
+        self._touch_thread = threading.Thread(
+            target=self._touch_loop, name="wake-touch-loop"
+        )
+        self._touch_thread.daemon = True
+        self._touch_thread.start()
+
         self._log.info("wake_state_started",
                        state=self._state,
                        face_min_conf=self._face_min_conf,
@@ -650,7 +683,8 @@ class WakeStateMachine(object):
 
         self._stop_event.set()
 
-        for th in (self._face_thread, self._vad_thread, self._keyword_thread):
+        for th in (self._face_thread, self._vad_thread,
+                   self._keyword_thread, self._touch_thread):
             if th is None:
                 continue
             try:
@@ -1180,6 +1214,74 @@ class WakeStateMachine(object):
             self._stop_event.wait(timeout=_KEYWORD_POLL_INTERVAL_S)
 
     # ------------------------------------------------------------------
+    # Touch gate: poll the head tactile sensors via ALMemory at 10 Hz.
+    # A touch on any of the three head pads is a deterministic engagement
+    # signal that bypasses face detection entirely — useful when the user
+    # is right in front of the robot but ALFaceDetection hasn't warmed up
+    # yet, or in poor lighting where face detection won't fire at all.
+    # Touch promotes IDLE -> AWARE -> ENGAGED in one shot.
+    # ------------------------------------------------------------------
+    def _touch_loop(self):
+        if self._memory_proxy is None:
+            self._log.warn("touch_loop_skipped",
+                           reason="no_memory_proxy")
+            return
+        import sys as _sys
+        print("[wake_state] touch loop active (head tactile sensors)")
+        _sys.stderr.flush()
+        # Edge-detect: only fire on a 0->1 transition so a held touch
+        # doesn't spam engagements every poll.
+        prev_touched = False
+        while not self._stop_event.is_set():
+            touched = False
+            for key in _HEAD_TOUCH_KEYS:
+                try:
+                    val = self._memory_proxy.getData(key)
+                except Exception:
+                    continue
+                # NAOqi returns 1.0 for touched, 0.0 otherwise. Coerce
+                # tolerantly: any truthy non-zero counts.
+                try:
+                    if float(val) >= 0.5:
+                        touched = True
+                        break
+                except Exception:
+                    if val:
+                        touched = True
+                        break
+            if touched and not prev_touched:
+                cur = self.current_state()
+                if cur in (STATE_IDLE, STATE_AWARE):
+                    print("[wake_state] head touch detected → engage")
+                    _sys.stderr.flush()
+                    # Promote through AWARE if needed, then ENGAGED.
+                    if cur == STATE_IDLE:
+                        self._transition(STATE_AWARE, source="touch")
+                    self._transition(STATE_ENGAGED, source="gate",
+                                     gate=GATE_TOUCH)
+                else:
+                    # Touch in any post-engagement state (ENGAGED,
+                    # LISTENING, SPEAKING) → fire barge. The WS-driven
+                    # architecture doesn't transition us into
+                    # STATE_SPEAKING reliably (TTS playback runs on a
+                    # separate thread that the WSM doesn't observe), so
+                    # we can't gate on STATE_SPEAKING alone — we'd
+                    # never fire. The barge callback in main.py
+                    # short-circuits to no-op if nothing is actually
+                    # playing, so over-firing is safe.
+                    print("[wake_state] head touch during conversation "
+                          "(state={0}) → barge".format(cur))
+                    _sys.stderr.flush()
+                    if self._on_barge is not None:
+                        try:
+                            self._on_barge()
+                        except Exception as exc:
+                            self._log.warn("barge_callback_failed",
+                                           err=str(exc))
+            prev_touched = touched
+            self._stop_event.wait(timeout=0.1)
+
+    # ------------------------------------------------------------------
     # Internal: face I/O helpers
     # ------------------------------------------------------------------
     def _read_faces(self):
@@ -1256,15 +1358,50 @@ class WakeStateMachine(object):
                 self._face_detection = ALProxy(
                     "ALFaceDetection", self._nao_ip, self._nao_port
                 )
+            # Best-effort unsubscribe first — if the prior main.py died
+            # without cleaning up, NAOqi will reject the next subscribe()
+            # under the same name and ALFaceDetection stops writing to
+            # ALMemory at all. Ignoring this exception is critical.
+            try:
+                self._face_detection.unsubscribe(self._face_subscriber_name)
+                import sys as _sys
+                print("[wake_state] cleaned up stale face subscription "
+                      "'{0}'".format(self._face_subscriber_name))
+                _sys.stderr.flush()
+            except Exception:
+                pass
             try:
                 # 100 ms period -> ~10 events/s from ALFaceDetection; we
                 # poll faster (33 ms) so the wake transition is not gated
                 # by ALMemory write latency.
                 self._face_detection.subscribe(self._face_subscriber_name, 100, 0.0)
                 self._owns_face_subscription = True
+                import sys as _sys
+                print("[wake_state] face subscription active name='{0}' "
+                      "period=100ms".format(self._face_subscriber_name))
+                _sys.stderr.flush()
             except Exception as exc:
-                # Already subscribed under that name — try to take it over.
+                # Subscribe still failed even after the cleanup — try a
+                # process-unique name as a last resort so we definitely
+                # get our own ALMemory writer attached.
                 self._log.warn("face_subscribe_warn", err=str(exc))
+                import os as _os
+                fallback_name = "WakeFaceDetection_{0}".format(_os.getpid())
+                try:
+                    self._face_detection.subscribe(fallback_name, 100, 0.0)
+                    self._face_subscriber_name = fallback_name
+                    self._owns_face_subscription = True
+                    import sys as _sys
+                    print("[wake_state] face subscription active under "
+                          "fallback name='{0}'".format(fallback_name))
+                    _sys.stderr.flush()
+                except Exception as exc2:
+                    self._log.error("face_subscribe_fallback_failed",
+                                    err=str(exc2))
+                    import sys as _sys
+                    print("[wake_state] FACE SUBSCRIBE FAILED: {0}; fallback "
+                          "also failed: {1}".format(exc, exc2))
+                    _sys.stderr.flush()
         except Exception as exc:
             self._log.error("face_proxy_init_failed", err=str(exc))
             self._face_detection = None

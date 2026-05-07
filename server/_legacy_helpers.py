@@ -367,7 +367,8 @@ def transcribe(path: str) -> str:
 # ───────── agent runner ─────────
 
 def _build_user_message(transcript: str, image_b64: str | None,
-                          vision_observation: dict | None = None):
+                          vision_observation: dict | None = None,
+                          identity: dict | None = None):
     """Build a Runner input.
 
     When ``vision_observation`` is supplied (Phase 11 Option B path), we
@@ -377,10 +378,41 @@ def _build_user_message(transcript: str, image_b64: str | None,
     "success"`` -- this builder is the *only* place vision data enters
     the conversation under Option B, so the therapist can't hallucinate.
 
+    When ``identity`` is supplied (from the robot's onboarding face
+    scan), we ALSO prepend a [USER ...] block so the agent knows who's
+    talking and whether to greet them by name on the first turn.
+
     For text-only, return a string. For multimodal, return the
     Responses-API shape: a single user message with typed content items
     (input_text / input_image).
     """
+    identity_prefix = ""
+    if isinstance(identity, dict):
+        name = (identity.get("name") or "").strip()
+        recognized = bool(identity.get("recognized"))
+        face_visible = bool(identity.get("face_visible"))
+        first_turn = bool(identity.get("first_turn", False))
+        if recognized and name:
+            identity_prefix = (
+                "[USER name=" + name
+                + " returning=true first_turn="
+                + ("true" if first_turn else "false") + "]\n"
+                "(NAO has previously learned this person's face. "
+                + ("This is the first turn after engagement — open with a "
+                   "warm \"Welcome back, " + name + "\" or similar before "
+                   "answering. " if first_turn else "")
+                + "Use their name naturally when it fits.)\n"
+            )
+        elif face_visible and not name and first_turn:
+            identity_prefix = (
+                "[USER name=unknown returning=false first_turn=true]\n"
+                "(A face is visible but NAO has never learned it. On THIS "
+                "first turn, briefly introduce yourself ('Hi, I'm NAO') and "
+                "ask their name. If they answer with a name, call the "
+                "`learn_face(name=...)` tool so future sessions recognize "
+                "them. Don't ramble — one short sentence.)\n"
+            )
+
     vision_prefix = ""
     if isinstance(vision_observation, dict):
         status = vision_observation.get("vision_status") or "skipped"
@@ -417,7 +449,7 @@ def _build_user_message(transcript: str, image_b64: str | None,
                 "or their environment in your reply.)\n"
             )
 
-    text = vision_prefix + (transcript or "")
+    text = identity_prefix + vision_prefix + (transcript or "")
     if not image_b64:
         return text
     return [{
@@ -433,6 +465,7 @@ def _build_user_message(transcript: str, image_b64: str | None,
 async def run_agent_streamed(
     username: str, hint: str | None, transcript: str,
     image_b64: str | None, vision_observation: dict | None = None,
+    identity: dict | None = None,
     *,
     model_override: str | None = None,
     first_token_timeout_s: float | None = None,
@@ -475,6 +508,7 @@ async def run_agent_streamed(
         # one synthetic `done` event.
         reply, active, actions, suppress = run_agent(
             username, hint, transcript, image_b64, vision_observation,
+            identity=identity,
         )
         yield {"type": "done", "reply": reply, "active_agent": active,
                 "actions": actions, "suppress_image": suppress}
@@ -501,7 +535,8 @@ async def run_agent_streamed(
         "suppress_image": False,
         "vision_observation": vision_observation,
     }
-    message = _build_user_message(transcript, image_b64, vision_observation)
+    message = _build_user_message(transcript, image_b64, vision_observation,
+                                   identity=identity)
 
     active_agent = getattr(agent, "name", "agent")
     reply_parts: list[str] = []
@@ -576,6 +611,7 @@ async def run_agent_streamed(
 async def run_pure_chat_with_fallback(
     username: str, hint: str | None, transcript: str,
     image_b64: str | None, vision_observation: dict | None = None,
+    identity: dict | None = None,
     *,
     first_token_timeout_s: float = 3.5,
     fallback_model: str = "gpt-4o-mini",
@@ -595,6 +631,7 @@ async def run_pure_chat_with_fallback(
     timed_out = False
     async for ev in run_agent_streamed(
             username, hint, transcript, image_b64, vision_observation,
+            identity,
             first_token_timeout_s=first_token_timeout_s):
         if ev.get("type") == "timeout":
             timed_out = True
@@ -611,6 +648,7 @@ async def run_pure_chat_with_fallback(
     # mini's tail latency is bounded around 3.8 s per the bench.
     async for ev in run_agent_streamed(
             username, hint, transcript, image_b64, vision_observation,
+            identity,
             model_override=fallback_model):
         yield ev
 
@@ -618,6 +656,7 @@ async def run_pure_chat_with_fallback(
 def run_agent(username: str, hint: str | None, transcript: str,
               image_b64: str | None,
               vision_observation: dict | None = None,
+              identity: dict | None = None,
               ) -> tuple[str, str, list[dict], bool]:
     """Run the agent graph synchronously and return
     (reply, active_agent_name, actions_queue, suppress_image).
@@ -640,7 +679,8 @@ def run_agent(username: str, hint: str | None, transcript: str,
         # Stash for the topology trace + therapist prompt-time inspection.
         "vision_observation": vision_observation,
     }
-    message = _build_user_message(transcript, image_b64, vision_observation)
+    message = _build_user_message(transcript, image_b64, vision_observation,
+                                   identity=identity)
     reply, active, _verdict, _metadata = run_topology(
         agent, message, context=ctx, session=sess,
     )

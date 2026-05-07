@@ -46,10 +46,13 @@ ELEVENLABS_MODEL = os.environ.get("ELEVENLABS_MODEL", "eleven_flash_v2_5")
 ELEVENLABS_OUTPUT_FORMAT = os.environ.get(
     "ELEVENLABS_OUTPUT_FORMAT", "mp3_44100_64",
 )
-# Three voice slots. User pastes voice IDs from elevenlabs.io into env.
+# Voice slots. User pastes voice IDs from elevenlabs.io into env.
+# "MY" is the operator's personal cloned voice — triggered by saying
+# "switch to my voice".
 ELEVENLABS_VOICE_GIRL    = os.environ.get("ELEVENLABS_VOICE_GIRL", "")
 ELEVENLABS_VOICE_MAN     = os.environ.get("ELEVENLABS_VOICE_MAN", "")
 ELEVENLABS_VOICE_NEUTRAL = os.environ.get("ELEVENLABS_VOICE_NEUTRAL", "")
+ELEVENLABS_VOICE_MY      = os.environ.get("ELEVENLABS_VOICE_MY", "")
 ELEVENLABS_DEFAULT_PROFILE = os.environ.get(
     "ELEVENLABS_DEFAULT_PROFILE", "girl",
 )

@@ -91,6 +91,12 @@ def _voice_id_for(profile: str) -> str | None:
         "neutral": getattr(config, "ELEVENLABS_VOICE_NEUTRAL", ""),
         "n": getattr(config, "ELEVENLABS_VOICE_NEUTRAL", ""),
         "3": getattr(config, "ELEVENLABS_VOICE_NEUTRAL", ""),
+        # "my voice" — operator's personal cloned voice
+        "my": getattr(config, "ELEVENLABS_VOICE_MY", ""),
+        "mine": getattr(config, "ELEVENLABS_VOICE_MY", ""),
+        "aayush": getattr(config, "ELEVENLABS_VOICE_MY", ""),
+        "operator": getattr(config, "ELEVENLABS_VOICE_MY", ""),
+        "4": getattr(config, "ELEVENLABS_VOICE_MY", ""),
     }
     return table.get(p) or None
 

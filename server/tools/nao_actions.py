@@ -148,6 +148,30 @@ def stop_follow(ctx: RunContextWrapper) -> str:
 
 
 @function_tool
+def learn_face(ctx: RunContextWrapper, name: str) -> str:
+    """Teach NAO to recognize the user's face under a given name.
+
+    Call this when the user says things like:
+      • "Remember me as Aayush"
+      • "My name is Aayush, learn my face"
+      • "Save my face as Aayush"
+      • "Learn my face"  (in which case ask for their name first)
+
+    The name is the label NAO will use for this face going forward. Once
+    learned, future sessions will recognize this person and the agent
+    will see their name in the user context. Stored persistently in the
+    NAOqi face database — survives reboots.
+
+    Args:
+      name: Short clean label for the face (1-2 words, no special chars).
+    """
+    clean = (name or "").strip()
+    if not clean:
+        return "I need a name to remember you by — can you tell me your name?"
+    return _enqueue(ctx, "learn_face", {"name": clean})
+
+
+@function_tool
 def play_animation(ctx: RunContextWrapper, animation: str) -> str:
     """Play a named animation. Use this for any motion request that isn't
     covered by the specific tools (wave/nod/dance/follow). The robot maps
@@ -224,7 +248,7 @@ CHAT_ACTIONS = [
     wave_hand, wave_both_hands, nod_head, shake_head, clap_hands,
     move_forward, move_backward, turn_left, turn_right, spin,
     dance, change_eye_color, follow_movement, stop_follow,
-    play_animation,
+    play_animation, learn_face,
     gesture,
 ]
 

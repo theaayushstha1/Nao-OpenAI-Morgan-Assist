@@ -40,4 +40,12 @@ server/nao.db-wal
 # a documentation example of what the report looks like.
 sim/reports/proof_*.json
 sim/reports/proof_*.md
+sim/reports/proof_*.pdf
 sim/reports/live/2*/
+
+# Per-run benchmark artifacts (audio recordings + JSON dumps + PDFs).
+# These contain user voice + are build outputs, not source.
+sim/reports/chat_model_bench/
+sim/reports/fast_chat_bench/
+sim/reports/stt_ab/
+sim/reports/vision_battery/
