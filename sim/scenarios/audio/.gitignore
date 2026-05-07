@@ -1,0 +1,3 @@
+# Stub WAV files generated on first import by sim.scenarios._driver.
+# They're deterministic (silent + 440 Hz sine) — no need to track them.
+*.wav
