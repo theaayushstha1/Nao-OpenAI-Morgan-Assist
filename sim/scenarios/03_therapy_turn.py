@@ -58,12 +58,17 @@ def run(driver: Driver, telemetry: Any) -> dict[str, Any]:
         # Therapy turn
         telemetry.start_turn(1, "I'm feeling anxious about midterms")
         t0 = time.perf_counter()
+        # Anchor a cursor before we speak so wake-greeting audio_chunks
+        # (returning-user path emits "Welcome back, X" before this turn)
+        # don't get picked up as the therapy reply.
+        cursor = driver.cursor()
         driver.say("I'm feeling anxious about midterms")
 
         handoff = driver.expect(
             lambda f: (f.get("type") == "control"
                        and f.get("subtype") == "agent_handoff"),
             timeout_s=min(5.0, deadline - time.monotonic()),
+            since=cursor,
         )
         active = (handoff.get("data") or {}).get("active_agent")
         details["active_agent"] = active
@@ -77,6 +82,7 @@ def run(driver: Driver, telemetry: Any) -> dict[str, Any]:
         observe = driver.expect(
             lambda f: f.get("type") == "action" and f.get("name") == "observe_face",
             timeout_s=min(5.0, deadline - time.monotonic()),
+            since=cursor,
         )
         details["observe_face_args"] = observe.get("args")
 
@@ -85,12 +91,14 @@ def run(driver: Driver, telemetry: Any) -> dict[str, Any]:
                        and f.get("name") == "gesture"
                        and (f.get("args") or {}).get("intent") == "nod"),
             timeout_s=min(5.0, deadline - time.monotonic()),
+            since=cursor,
         )
         details["gesture_args"] = gesture.get("args")
         telemetry.mark("gesture_dispatch", (time.perf_counter() - t0) * 1000.0)
 
         audio = driver.expect(predicate_audio_chunk(),
-                              timeout_s=min(5.0, deadline - time.monotonic()))
+                              timeout_s=min(5.0, deadline - time.monotonic()),
+                              since=cursor)
         telemetry.mark("e2e_user_to_first_audio",
                        (time.perf_counter() - t0) * 1000.0)
         details["reply_audio_text"] = audio.get("text")

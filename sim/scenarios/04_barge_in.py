@@ -63,6 +63,14 @@ def run(driver: Driver, telemetry: Any) -> dict[str, Any]:
         driver.inject_face(face_id="aayush", confidence=0.88, distance_m=0.9)
         driver.expect(predicate_control("ready_to_listen"),
                       timeout_s=min(5.0, deadline - time.monotonic()))
+        # Wait for wake-greeting tts_ended + cooldown to clear before
+        # driving the question turn (otherwise audio_chunks get dropped).
+        try:
+            driver.expect(predicate_control("tts_ended"),
+                          timeout_s=min(3.0, deadline - time.monotonic()))
+            time.sleep(0.7)
+        except TimeoutError:
+            pass
         telemetry.end_turn("ok", "wake handled")
 
         # Question — anchor a cursor so we don't accidentally consume the
@@ -99,11 +107,28 @@ def run(driver: Driver, telemetry: Any) -> dict[str, Any]:
         details["first_audio_seq"] = first_audio_seq
         if not stopped_in_budget:
             details["barge_in_note"] = (
-                "current server: per app_ws.py the barge_in handler logs the "
-                "event but does not abort TTS (`Phase 1 records the event; "
-                "Phase 2 will hook this into TTS abort`). this scenario flips "
-                "to ok once that wiring lands."
+                "barge_in arrived but TTS kept emitting chunks within the "
+                "{}-ms budget. Check server/app_ws.py:_emit_agent_turn — the "
+                "sentence-streaming loop should break on sess.barge_event."
+            ).format(BARGE_IN_BUDGET_MS)
+        # Phase 10.5: server now emits a `tts_aborted` control frame when
+        # the barge_event interrupts the TTS loop. We DON'T require it to
+        # land (it only fires if the LLM actually had more sentences left
+        # to synthesize at the moment of the barge), but we record whether
+        # it appeared for diagnostic purposes.
+        try:
+            tts_aborted = driver.expect(
+                lambda f: (f.get("type") == "control"
+                           and f.get("subtype") == "tts_aborted"),
+                timeout_s=0.5,
+                since=cursor1,
             )
+            details["tts_aborted_seen"] = True
+            details["tts_aborted_sent_chunks"] = (
+                (tts_aborted.get("data") or {}).get("sent_chunks")
+            )
+        except TimeoutError:
+            details["tts_aborted_seen"] = False
         telemetry.mark("action_dispatch",
                        (time.perf_counter() - t_barge) * 1000.0)
         telemetry.end_turn("ok" if stopped_in_budget else "fail",

@@ -67,9 +67,13 @@ def run(driver: Driver, telemetry: Any) -> dict[str, Any]:
             )
             telemetry.start_turn(idx, utt)
             t0 = time.perf_counter()
+            # Per-turn cursor: each iteration must read its OWN reply,
+            # not the previous turn's leftover audio.
+            cursor = driver.cursor()
             driver.say(utt)
             audio = driver.expect(predicate_audio_chunk(),
-                                  timeout_s=min(5.0, deadline - time.monotonic()))
+                                  timeout_s=min(5.0, deadline - time.monotonic()),
+                                  since=cursor)
             telemetry.mark("e2e_user_to_first_audio",
                            (time.perf_counter() - t0) * 1000.0)
             details[f"turn_{idx}_audio_text"] = audio.get("text")

@@ -101,15 +101,14 @@ def _seed_global_rng() -> None:
 def _build_driver(server_handle: Any) -> Any:
     """Construct whatever the scenario expects as ``driver``.
 
-    The task map says: ``scenario.run(driver=..., telemetry=...)``. The
-    driver contract isn't fully nailed down here (it's owned by the
-    ``scenarios`` slug), so we hand the scenario the most useful object
-    we have: the WS server handle. Scenarios that need a richer driver
-    will pull additional bits off ``ws_url``/``url`` themselves.
+    Scenarios call ``driver.install_mocks(...)`` + ``driver.connect_ws(...)``
+    + ``driver.expect(...)`` etc. — that surface lives on
+    ``sim.scenarios._driver.Driver``. Build one of those.
+
+    For forward compat: if a richer ``sim.driver.VirtualNaoDriver`` ever
+    ships (with ``ws_url``/``http_url`` constructor args), prefer it.
     """
-    # Try to resolve a richer driver class from sim if it exists. This
-    # gives the sibling agent a forward-compatible hook: if they ship
-    # ``sim.driver.VirtualNaoDriver`` later, we'll automatically use it.
+    # Forward-compat hook (preferred when present).
     try:
         from sim import driver as _sim_driver  # type: ignore[import-not-found]
         cls = getattr(_sim_driver, "VirtualNaoDriver", None)
@@ -117,6 +116,20 @@ def _build_driver(server_handle: Any) -> Any:
             return cls(ws_url=server_handle.ws_url, http_url=server_handle.url)
     except Exception:
         pass
+
+    # Default: the Phase 10.5 scenarios `Driver` from sim/scenarios/_driver.py.
+    # It uses FastAPI's TestClient internally — the boot_ws_server handle is
+    # only needed for fixture lifecycle (uvicorn already runs the same `app`,
+    # but TestClient doesn't need uvicorn to be live).
+    try:
+        from sim.scenarios._driver import Driver as _ScenarioDriver
+        return _ScenarioDriver()
+    except Exception:
+        pass
+
+    # Last resort: hand back the server handle and let the scenario
+    # fail loudly with AttributeError (driver-shape gap is the bug we
+    # want surfaced, not silently masked).
     return server_handle
 
 

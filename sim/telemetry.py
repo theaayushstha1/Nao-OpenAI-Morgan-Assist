@@ -121,6 +121,12 @@ class Telemetry:
     """
 
     def __init__(self, out_csv: str = _DEFAULT_CSV_PATH) -> None:
+        # Env override: SIM_LATENCY_CSV beats the constructor arg. Lets
+        # operators redirect telemetry without touching code (CI uses
+        # /tmp; local dev keeps the default ~/nao_assist/ path).
+        env_path = os.environ.get("SIM_LATENCY_CSV")
+        if env_path:
+            out_csv = env_path
         # Resolve ~ early so the recorded path is unambiguous.
         self._csv_path: Path = Path(os.path.expanduser(out_csv))
         self._csv_path.parent.mkdir(parents=True, exist_ok=True)

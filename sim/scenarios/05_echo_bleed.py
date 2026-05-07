@@ -86,14 +86,29 @@ def run(driver: Driver, telemetry: Any) -> dict[str, Any]:
         driver.inject_face(face_id="aayush", confidence=0.91, distance_m=0.8)
         driver.expect(predicate_control("ready_to_listen"),
                       timeout_s=min(5.0, deadline - time.monotonic()))
+        # Wait for the wake-greeting's tts_ended before continuing; otherwise
+        # the post-TTS cooldown swallows the user's first audio_chunks and
+        # the next turn never fires.
+        try:
+            driver.expect(predicate_control("tts_ended"),
+                          timeout_s=min(3.0, deadline - time.monotonic()))
+            # Cooldown is grace_ms (200) + padding (400) = 600 ms after
+            # tts_ended. Sleep past it before driving the next turn.
+            time.sleep(0.7)
+        except TimeoutError:
+            # No greeting (new user path) — proceed; no cooldown to wait on.
+            pass
         telemetry.end_turn("ok", "wake handled")
 
         telemetry.start_turn(1, "what is CS 491?")
         t0 = time.perf_counter()
+        # Anchor cursor so wake-greeting audio doesn't pollute first_audio.
+        cursor = driver.cursor()
         driver.say("what is CS 491?")
 
         first_audio = driver.expect(predicate_audio_chunk(),
-                                    timeout_s=min(5.0, deadline - time.monotonic()))
+                                    timeout_s=min(5.0, deadline - time.monotonic()),
+                                    since=cursor)
         details["reply_text"] = first_audio.get("text")
 
         # Wait for tts_ended so the cooldown is active.

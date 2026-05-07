@@ -58,15 +58,19 @@ def run(driver: Driver, telemetry: Any) -> dict[str, Any]:
                       timeout_s=min(5.0, deadline - time.monotonic()))
         telemetry.end_turn("ok", "wake handled")
 
-        # Question
+        # Question. Anchor a cursor BEFORE we speak so any wake-greeting
+        # audio_chunk emitted by the returning-user path doesn't get
+        # mistaken for this turn's reply (see scenario 01 cursor pattern).
         telemetry.start_turn(1, "what is CS 491?")
         t0 = time.perf_counter()
+        cursor = driver.cursor()
         driver.say("what is CS 491?")
 
         handoff = driver.expect(
             lambda f: (f.get("type") == "control"
                        and f.get("subtype") == "agent_handoff"),
             timeout_s=min(5.0, deadline - time.monotonic()),
+            since=cursor,
         )
         active = (handoff.get("data") or {}).get("active_agent")
         details["active_agent"] = active
@@ -83,12 +87,14 @@ def run(driver: Driver, telemetry: Any) -> dict[str, Any]:
             lambda f: (f.get("type") == "action"
                        and f.get("name") == "cs_navigator_search"),
             timeout_s=min(5.0, deadline - time.monotonic()),
+            since=cursor,
         )
         details["cs_navigator_search_args"] = action.get("args")
         telemetry.mark("cs_navigator_call", (time.perf_counter() - t0) * 1000.0)
 
         audio = driver.expect(predicate_audio_chunk(),
-                              timeout_s=min(5.0, deadline - time.monotonic()))
+                              timeout_s=min(5.0, deadline - time.monotonic()),
+                              since=cursor)
         telemetry.mark("e2e_user_to_first_audio",
                        (time.perf_counter() - t0) * 1000.0)
         details["reply_audio_text"] = audio.get("text")

@@ -775,6 +775,13 @@ class _Session:
         "silero", "robot_eou_hint", "utterance_start_ms",
         "tts_active_until_ms", "_finalize_in_flight",
         "had_speech",
+        # Phase 10.5: barge-in abort signal. Set by the `barge_in` control
+        # handler; checked by the TTS streaming loop between sentence chunks
+        # so the player on the robot side can stop without finishing the reply.
+        "barge_event",
+        # Phase 10.5: in-flight agent turn task. Spawned so the receive loop
+        # keeps draining frames (especially barge_in) during long replies.
+        "active_turn_task",
     )
 
     def __init__(self, username: str) -> None:
@@ -810,6 +817,14 @@ class _Session:
         # for the robot's EoU hint or the hard ceiling — we never
         # auto-finalize a buffer that contains no detected voice.
         self.had_speech: bool = False
+        # Phase 10.5: a fresh asyncio.Event used to abort the TTS streaming
+        # loop on `barge_in`. Re-created at the start of every agent turn so
+        # one barge can't preemptively cancel the next reply.
+        self.barge_event: asyncio.Event = asyncio.Event()
+        # Phase 10.5: tracks the currently-running agent turn so the receive
+        # loop can keep handling control frames (especially barge_in) while
+        # the turn is mid-flight.
+        self.active_turn_task: Any | None = None
 
     def reset_turn(self) -> None:
         self.audio_buf = bytearray()
@@ -1113,16 +1128,40 @@ async def _emit_agent_turn(ws: WebSocket, sess: _Session,
 
     first_chunk_emitted = False
     sent_count = 0
+    barged = False
     tts_total_t0 = time.perf_counter()
     # Reset the per-user reply-chunk window — each new agent turn starts a
     # fresh "what did NAO just say" buffer (we don't want stale state from
     # the prior turn fooling the substring guard).
     _LAST_REPLY_CHUNKS.pop(sess.username, None)
     _LAST_REPLY_FULL.pop(sess.username, None)
+    # Phase 10.5: fresh barge_event per turn — clear any latent set bit
+    # from a prior turn so this reply isn't preemptively cancelled.
+    sess.barge_event = asyncio.Event()
     try:
         async for sentence in _stream_reply_sentences(reply):
+            # Check the barge signal between sentences. The robot's player
+            # already stopped locally; we just stop sending more audio.
+            if sess.barge_event.is_set():
+                barged = True
+                logger.info(
+                    "tts_barged", user=sess.username,
+                    session_id=sess.session_id, sent_chunks=sent_count,
+                )
+                break
             t_synth = time.perf_counter()
             mp3 = await asyncio.to_thread(openai_tts.synthesize, sentence)
+            # Re-check after synth — barge_in can arrive during the
+            # synthesize call (which can take hundreds of ms). Dropping
+            # the freshly-synthesized chunk here keeps us within the
+            # tight 600 ms barge budget the robot demands.
+            if sess.barge_event.is_set():
+                barged = True
+                logger.info(
+                    "tts_barged_post_synth", user=sess.username,
+                    session_id=sess.session_id, sent_chunks=sent_count,
+                )
+                break
             # Phase 2: record EVERY synthesized sentence into the per-user
             # echo-guard window. The buffer is capped at _REPLY_CHUNKS_MAX
             # so long replies don't grow unbounded.
@@ -1156,8 +1195,15 @@ async def _emit_agent_turn(ws: WebSocket, sess: _Session,
 
     # Arm the post-TTS cooldown right before signalling tts_ended. Frames
     # already in flight from the robot will land within the cooldown window
-    # and be dropped.
+    # and be dropped. (On a barge, we still arm cooldown so the next
+    # transcript isn't immediately consumed by mic-in-flight residue.)
     _arm_post_tts_cooldown(sess)
+    if barged:
+        # Surface the abort so the client can confirm its local stop took
+        # effect. Lands BEFORE tts_ended so the order is observable.
+        await _send_json(ws, _control_frame("tts_aborted",
+                                             active_agent=active_agent,
+                                             sent_chunks=sent_count))
     await _send_json(ws, _control_frame("tts_ended",
                                         sentences=sent_count,
                                         suppress_image=bool(suppress_image)))
@@ -1310,8 +1356,16 @@ async def _process_turn(ws: WebSocket, sess: _Session) -> None:
         await _emit_motion(ws, sess, transcript, motion, phase_ms)
         return
 
-    await _emit_agent_turn(
-        ws, sess, transcript, image_b64, phase_ms, t_user_done,
+    # Phase 10.5: spawn the agent turn as a background task so the WS
+    # receive loop keeps draining inbound frames during TTS streaming.
+    # Without this, a `barge_in` control frame sent by the robot mid-reply
+    # sits in the WS queue until the entire reply finishes — defeating
+    # the whole point of barge-in. The task is owned by the session;
+    # awaited at session_close (or cancelled if the WS drops).
+    sess.active_turn_task = asyncio.create_task(
+        _emit_agent_turn(
+            ws, sess, transcript, image_b64, phase_ms, t_user_done,
+        )
     )
 
 
@@ -1871,10 +1925,20 @@ async def _ingest_control(ws: WebSocket, sess: _Session,
         return await _handle_wake_event(ws, sess, data)
 
     if sub == "barge_in":
-        # Phase 1 records the event; Phase 2 will hook this into TTS abort.
+        # Phase 10.5: set the barge_event so the TTS loop in
+        # _emit_agent_turn breaks out of its sentence iteration. Robot
+        # client is responsible for stopping its local player; the
+        # event just stops the server from sending more audio_chunk
+        # frames at it.
         logger.info(
             "barge_in", user=sess.username, session_id=sess.session_id,
         )
+        try:
+            sess.barge_event.set()
+        except Exception:
+            # Defensive: if the event somehow wasn't initialized (older
+            # _Session pickled in, etc.), don't kill the connection.
+            pass
         return True
 
     if sub == "mic_resumed":
