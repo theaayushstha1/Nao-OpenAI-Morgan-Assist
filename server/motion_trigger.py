@@ -74,8 +74,77 @@ _TRIGGERS: list[tuple[str, dict, str, list[str]]] = [
         "give me a dance", "can you dance", "could you dance", "let's dance",
         "do a robot dance", "do the robot",
     ]),
-    ("follow_movement", {}, "Mirroring you now.", [
+    ("follow_movement", {}, "Following you now.", [
+        # Canonical short form — fires the Choregraphe `follow-me` pack.
+        # Bare "follow" alone is omitted on purpose — too greedy
+        # ("follow up on what we said" would mis-fire).
+        "follow me", "come follow me", "follow me around",
+        "start following me", "follow me now",
+        # Tracking semantics (these are unambiguous robot commands)
+        "track me", "stay close", "stay with me",
+        # Mirror-me semantics (legacy — copies user's pose)
         "follow my movement", "mirror me", "copy me", "follow what i do",
+    ]),
+    # Stop the follow behavior. NOTE: avoid single-word "stop" / "halt"
+    # here because triggers match on word boundaries, and a bare "stop"
+    # would mis-fire on phrases like "stop watching me" (camera-off
+    # trigger) or "stop talking". Use multi-word phrases only.
+    ("stop_follow", {}, "Stopping.", [
+        "stop following me", "stop following", "don't follow me",
+        "do not follow me", "stop tracking me", "stop tracking",
+        "stay there", "stay here", "stay still", "freeze",
+        "enough following",
+    ]),
+
+    # ── Camera consent ──────────────────────────────────────
+    # Action names are server-side identifiers, not NAO motor calls. The
+    # consumer (app_ws.py) flips session.set_camera_consent(...) and emits a
+    # `control { subtype: "camera_state", data: {enabled: ...} }` frame so
+    # the client UI updates immediately. The fast path here exists because
+    # the LLM sometimes mis-routes "stop watching me" to a generic chat
+    # reply instead of calling the tool — a regex match guarantees the
+    # state flip and the canonical ack land on the same turn.
+    ("disable_camera", {}, "Camera off.", [
+        "stop watching me", "stop watching", "don't watch me", "do not watch me",
+        "stop looking at me", "don't look at me", "do not look at me",
+        "turn off the camera", "turn the camera off", "camera off",
+        "disable the camera", "disable camera", "close your eyes",
+        "stop recording me", "stop seeing me",
+    ]),
+    ("enable_camera", {}, "Camera on.", [
+        "you can watch me again", "you can look at me again", "watch me again",
+        "look at me again", "turn on the camera", "turn the camera on",
+        "camera on", "enable the camera", "enable camera", "open your eyes",
+        "you can see me now", "see me again",
+    ]),
+
+    # ── Voice profile picker (Phase 11.8) ───────────────────
+    # Three voices: girl, man, neutral. Recognized via short phrases the
+    # user can say at any time during a session. The handler in app_ws
+    # reads `args.profile` and persists via session.set_voice_profile.
+    ("set_voice_profile", {"profile": "girl"}, "Switching to girl voice.", [
+        "use the girl voice", "use girl voice", "girl voice",
+        "switch to girl voice", "switch to the girl voice",
+        "use a woman's voice", "use the woman voice", "female voice",
+        "use voice one", "voice one", "voice 1", "first voice",
+    ]),
+    ("set_voice_profile", {"profile": "man"}, "Switching to man voice.", [
+        "use the man voice", "use man voice", "man voice",
+        "switch to man voice", "switch to the man voice",
+        "use a man's voice", "use a male voice", "male voice", "guy voice",
+        "use voice two", "voice two", "voice 2", "second voice",
+    ]),
+    ("set_voice_profile", {"profile": "neutral"}, "Switching to neutral voice.", [
+        "use the neutral voice", "use neutral voice", "neutral voice",
+        "switch to neutral voice", "switch to the neutral voice",
+        "use voice three", "voice three", "voice 3", "third voice",
+    ]),
+    ("set_voice_profile", {"profile": "my"}, "Switching to your voice.", [
+        "switch to my voice", "use my voice", "my voice",
+        "switch to your voice", "use your voice", "your voice",
+        "switch to aayush voice", "aayush voice", "use aayush voice",
+        "switch to operator voice", "operator voice",
+        "use voice four", "voice four", "voice 4", "fourth voice",
     ]),
 
     # ── LEDs ────────────────────────────────────────────────

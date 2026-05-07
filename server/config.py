@@ -1,4 +1,13 @@
-"""Environment-driven configuration for the server."""
+"""Environment-driven configuration for the server.
+
+Centralizes every env var the server reads. Phase 1 of the v2 rework
+(see docs/PRD_v2.md) layers a FastAPI + WebSocket transport on top of
+the existing Flask app behind the ``USE_WS`` feature flag — the new
+``WS_*``/``LOG_*``/``METRICS_*``/``TTS_CHUNK_*``/``MIC_GATE_*``/
+``WS_RECONNECT_*`` exports below are owned by this module per the task
+map in docs/PHASE_1_TASK_MAP.md. All legacy exports are preserved so
+the Flask path keeps booting unchanged when ``USE_WS=0`` (default).
+"""
 import os
 from dotenv import load_dotenv
 
@@ -19,8 +28,42 @@ GROUNDING_MODEL = os.environ.get("GROUNDING_MODEL", "gpt-4.1-mini")
 # snappy (under 2 short sentences). Mini agents get a bit more headroom for
 # clinical reasoning / RAG synthesis but still stay terse.
 NANO_MAX_TOKENS = int(os.environ.get("NANO_MAX_TOKENS", "200"))
+# Phase 11.7: dedicated cap for the fast-chat lane. Casual replies must
+# be 1–2 spoken sentences (~25 words), so 80 tokens is plenty and forces
+# the model to stop early on long-tail tangents. Helps the under-3-second
+# target for chat mode.
+FAST_CHAT_MAX_TOKENS = int(os.environ.get("FAST_CHAT_MAX_TOKENS", "80"))
 MINI_MAX_TOKENS = int(os.environ.get("MINI_MAX_TOKENS", "400"))
 WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "gpt-4o-mini-transcribe")
+
+# ────────── ElevenLabs streaming TTS (Phase 11.8 — fast first audio) ──────────
+# When ELEVENLABS_API_KEY is set, the WS handler routes TTS through
+# ElevenLabs Flash + WebSocket (~150-300ms first audio, vs ~1-2s for
+# OpenAI tts-1). Falls back to OpenAI TTS when key/voice missing or on
+# any failure.
+ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
+ELEVENLABS_MODEL = os.environ.get("ELEVENLABS_MODEL", "eleven_flash_v2_5")
+ELEVENLABS_OUTPUT_FORMAT = os.environ.get(
+    "ELEVENLABS_OUTPUT_FORMAT", "mp3_44100_64",
+)
+# Voice slots. User pastes voice IDs from elevenlabs.io into env.
+# "MY" is the operator's personal cloned voice — triggered by saying
+# "switch to my voice".
+ELEVENLABS_VOICE_GIRL    = os.environ.get("ELEVENLABS_VOICE_GIRL", "")
+ELEVENLABS_VOICE_MAN     = os.environ.get("ELEVENLABS_VOICE_MAN", "")
+ELEVENLABS_VOICE_NEUTRAL = os.environ.get("ELEVENLABS_VOICE_NEUTRAL", "")
+ELEVENLABS_VOICE_MY      = os.environ.get("ELEVENLABS_VOICE_MY", "")
+ELEVENLABS_DEFAULT_PROFILE = os.environ.get(
+    "ELEVENLABS_DEFAULT_PROFILE", "girl",
+)
+# Force the OpenAI TTS path for testing or hard-disable EL temporarily.
+USE_ELEVENLABS_TTS = os.environ.get("USE_ELEVENLABS_TTS", "1") == "1"
+# Phase 11.9: candidate ElevenLabs Scribe v2 Realtime STT. Off by
+# default — gated behind USE_ELEVENLABS_STT for the A/B benchmark
+# (sim/stt_ab.py). Production STT path stays on Deepgram + OpenAI
+# Whisper until the bench data says otherwise.
+USE_ELEVENLABS_STT = os.environ.get("USE_ELEVENLABS_STT", "0") == "1"
+ELEVENLABS_STT_MODEL = os.environ.get("ELEVENLABS_STT_MODEL", "scribe_v2_realtime")
 
 # Deepgram Nova-2 streaming/prerecorded ASR. When USE_DEEPGRAM is true and the
 # API key is present, /turn and /stream_turn use Deepgram instead of Whisper.
@@ -82,3 +125,81 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
 # Per-session log directory for topology traces (written as JSONL).
 SAGE_LOG_DIR = os.environ.get("SAGE_LOG_DIR", "logs")
+
+# ───────── Phase 1: FastAPI + WebSocket transport (PRD v2) ─────────
+# Feature flag. When 1, run.sh boots `uvicorn server.app_ws:app` instead of
+# the legacy Flask `python -m server.server`. The Flask path stays as-is for
+# the deployment week (backwards compat) — flip this only when the FastAPI
+# app is actually merged.
+USE_WS = os.environ.get("USE_WS", "0") == "1"
+
+# uvicorn bind for the WS server.
+WS_HOST = os.environ.get("WS_HOST", "0.0.0.0")
+WS_PORT = int(os.environ.get("WS_PORT", "5050"))
+
+# structlog wiring used by `server/logging_setup.py` (Phase 1 observability).
+# `json` is the prod default; `console` switches to a human-readable renderer.
+LOG_FORMAT = os.environ.get("LOG_FORMAT", "json")
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
+
+# Toggle the Prometheus exporter exposed at /metrics. Lets dev runs skip the
+# metrics middleware entirely without removing the routes.
+METRICS_ENABLED = os.environ.get("METRICS_ENABLED", "1") == "1"
+
+# Sentence chunker tuning for streaming TTS (server/streaming.py). Emit a
+# chunk once we've buffered at least TTS_CHUNK_MIN_CHARS, or after the model
+# has paused for TTS_CHUNK_TIMEOUT_MS without a sentence boundary so we don't
+# wait forever on a slow tail.
+TTS_CHUNK_MIN_CHARS = int(os.environ.get("TTS_CHUNK_MIN_CHARS", "30"))
+TTS_CHUNK_TIMEOUT_MS = int(os.environ.get("TTS_CHUNK_TIMEOUT_MS", "400"))
+
+# Robot mic gate timing. After the last TTS audio chunk completes, wait this
+# long before resubscribing the mic — catches in-flight buffers + reverb.
+MIC_GATE_GRACE_MS = int(os.environ.get("MIC_GATE_GRACE_MS", "200"))
+
+# Robot WS reconnect backoff schedule, in milliseconds. Comma-separated env
+# string parsed once at import. The robot walks this list on successive
+# reconnect attempts and stays at the last value once exhausted.
+WS_RECONNECT_BACKOFF_MS = [
+    int(x) for x in os.environ.get(
+        "WS_RECONNECT_BACKOFF_MS", "300,600,1200,2400"
+    ).split(",")
+    if x.strip()
+]
+
+# ───────── Phase 5 (PRD v2): CS Navigator integration ─────────
+# Replaces the in-tree Pinecone/Vertex RAG with a thin HTTP proxy that calls
+# the operator's deployed Cloud Run FastAPI ("CS Navigator") for any Morgan
+# State CS knowledge query. See docs/PHASE_5_TASK_MAP.md for the contract.
+#
+# CS_NAVIGATOR_URL — Cloud Run base URL, no trailing slash. Empty string
+#                    means the chatbot agent will short-circuit and apologize.
+# CS_NAVIGATOR_TOKEN — optional bearer token. When empty the tool POSTs to
+#                    `/chat/guest`; when set it POSTs to `/chat/stream` with
+#                    `Authorization: Bearer <TOKEN>`.
+# CS_NAVIGATOR_TIMEOUT_S — request timeout (seconds). Float so tests can
+#                    bypass with sub-second values; production stays at 30 s
+#                    to absorb cold starts on the Cloud Run side.
+CS_NAVIGATOR_URL = os.environ.get("CS_NAVIGATOR_URL", "")
+CS_NAVIGATOR_TOKEN = os.environ.get("CS_NAVIGATOR_TOKEN", "")
+CS_NAVIGATOR_TIMEOUT_S = float(os.environ.get("CS_NAVIGATOR_TIMEOUT_S", "30"))
+
+# ───────── Phase 6 (PRD v2): Therapist Vision-On ─────────
+# Vision model used by `server/tools/emotion.py:observe_face` to read the
+# user's face from the per-turn JPEG. Default `gpt-4o`; can be flipped to
+# `gpt-5` (or whatever's GA at deploy time) without a code change.
+VISION_MODEL = os.environ.get("VISION_MODEL", "gpt-4o")
+
+# Default camera-consent for new users. Phase 6 flips this to ON so the
+# therapist can call `observe_face` from turn 1; users opt OUT via the
+# stop-watching pattern triggers or the explicit `set_camera_consent(false)`
+# tool. See docs/PHASE_6_TASK_MAP.md for the full contract.
+CAMERA_DEFAULT_ON = os.environ.get("CAMERA_DEFAULT_ON", "1") == "1"
+
+# First-turn audible heads-up emitted by the WS server when a brand-new
+# session opens with `camera_consent=1`. Plain text — TTS-only, no SSML.
+CAMERA_ANNOUNCE_TEXT = os.environ.get(
+    "CAMERA_ANNOUNCE_TEXT",
+    "Heads up — my camera is on for this conversation. "
+    "Say 'stop watching me' anytime.",
+)

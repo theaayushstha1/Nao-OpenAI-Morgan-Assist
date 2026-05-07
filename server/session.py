@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 from contextlib import contextmanager
+from datetime import datetime, timezone
 
 from agents import SQLiteSession
 
@@ -25,6 +26,13 @@ def _conn():
     )
     try:
         c.execute("ALTER TABLE user_prefs ADD COLUMN proactive_enabled INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # column already exists
+    try:
+        c.execute(
+            "ALTER TABLE user_prefs ADD COLUMN voice_profile TEXT NOT NULL "
+            "DEFAULT ''"
+        )
     except sqlite3.OperationalError:
         pass  # column already exists
     c.execute(
@@ -96,6 +104,14 @@ def migrate_username(old: str, new: str) -> None:
 
 
 def get_camera_consent(username: str) -> bool:
+    """Return camera consent flag for ``username``. Default ON (Phase 6).
+
+    First-time callers get a row inserted with ``camera_consent=1`` so the
+    persisted state matches the in-memory return value. The default is
+    intentionally ON: consent management for Phase 6 lives in the operator
+    policy + the audible "stop watching me" trigger + the green-LED capture
+    cue, not in a silent default-off knob.
+    """
     with _conn() as c:
         row = c.execute(
             "SELECT camera_consent FROM user_prefs WHERE username = ?", (username,)
@@ -109,12 +125,106 @@ def get_camera_consent(username: str) -> bool:
         return bool(row[0])
 
 
+# ---------------------------------------------------------------------------
+# First-turn tracker (Phase 6 camera-consent first-turn announcement).
+# ---------------------------------------------------------------------------
+#
+# `app_ws.py` plays a one-time spoken heads-up the first time a session sees
+# audio, telling the user the camera is on and how to disable it. We track
+# "have we already announced for this session_id?" in process memory rather
+# than a DB column because session_ids are ephemeral per-WebSocket UUIDs:
+# they don't survive a server restart, and persisting them would just leak
+# rows. The dict is pruned on session close (see ``forget_session``).
+
+import time as _time
+
+_FIRST_TURN_ANNOUNCED: set[str] = set()
+# Keyed by username -> last announce timestamp (seconds, monotonic).
+# Used to suppress re-announcing the camera heads-up on every WS reconnect
+# of the same user. WS connections drop every few seconds during long TTS
+# playbacks (5+ s elapsed_s blocks the recv loop on the robot), and each
+# reconnect mints a fresh session_id — without this we'd re-greet the
+# user "Heads up — my camera is on..." every 10 s.
+_LAST_ANNOUNCE_BY_USER: dict[str, float] = {}
+_ANNOUNCE_COOLDOWN_S = 300.0  # 5 minutes — long enough to silence reconnects
+
+
+def is_first_turn(session_id: str, username: str = "") -> bool:
+    """True iff the camera-consent heads-up should fire for this engagement.
+
+    Two conditions must both hold:
+      1. We haven't fired for this exact session_id yet.
+      2. We haven't fired for this username in the last
+         ``_ANNOUNCE_COOLDOWN_S`` seconds (suppresses reconnect storms).
+
+    A falsy ``session_id`` is treated as "not first turn" so callers can't
+    accidentally fire the announce on an unbound session.
+    """
+    if not session_id:
+        return False
+    if session_id in _FIRST_TURN_ANNOUNCED:
+        return False
+    if username:
+        last = _LAST_ANNOUNCE_BY_USER.get(username, 0.0)
+        if _time.time() - last < _ANNOUNCE_COOLDOWN_S:
+            return False
+    return True
+
+
+def mark_first_turn_announced(session_id: str, username: str = "") -> None:
+    """Record that the first-turn camera-consent heads-up has played for
+    ``session_id`` and stamp the username's last-announce time.
+    Idempotent on repeated calls.
+    """
+    if not session_id:
+        return
+    _FIRST_TURN_ANNOUNCED.add(session_id)
+    if username:
+        _LAST_ANNOUNCE_BY_USER[username] = _time.time()
+
+
+def forget_session(session_id: str) -> None:
+    """Drop ``session_id`` from the first-turn tracker. Called on
+    session_close so the in-memory set doesn't leak across long-lived
+    server uptime. Idempotent.
+    """
+    if not session_id:
+        return
+    _FIRST_TURN_ANNOUNCED.discard(session_id)
+
+
 def set_camera_consent(username: str, enabled: bool) -> None:
     with _conn() as c:
         c.execute(
             "INSERT INTO user_prefs (username, camera_consent) VALUES (?, ?) "
             "ON CONFLICT(username) DO UPDATE SET camera_consent=excluded.camera_consent",
             (username, 1 if enabled else 0),
+        )
+
+
+# Phase 11.8: per-user TTS voice profile. Three slots — "girl", "man",
+# "neutral". Empty string means "no preference set; use server default".
+def get_voice_profile(username: str) -> str:
+    """Return the user's chosen voice profile, or "" if not yet set."""
+    with _conn() as c:
+        row = c.execute(
+            "SELECT voice_profile FROM user_prefs WHERE username = ?",
+            (username,),
+        ).fetchone()
+        if row is None:
+            return ""
+        return (row[0] or "").strip()
+
+
+def set_voice_profile(username: str, profile: str) -> None:
+    """Persist the user's voice profile pick. Empty string clears it."""
+    norm = (profile or "").strip().lower()
+    with _conn() as c:
+        c.execute(
+            "INSERT INTO user_prefs (username, voice_profile) VALUES (?, ?) "
+            "ON CONFLICT(username) DO UPDATE SET "
+            "voice_profile=excluded.voice_profile",
+            (username, norm),
         )
 
 
@@ -150,6 +260,131 @@ def load_recent_recaps(username: str, n: int = 3) -> list[str]:
             (username, n),
         ).fetchall()
         return [r[0] for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Phase 7 — Robot-Side Brain cache sync.
+# ---------------------------------------------------------------------------
+#
+# The robot keeps a small identity/preferences cache (`~/nao_assist/brain.json`)
+# capped at 64 KB. On each WS handshake the robot announces its
+# ``brain_version`` and we push back any deltas it doesn't have. For Phase 7
+# minimum, the deltas are:
+#
+# * ``last_seen_iso``      — derived from the ``users.updated_at`` epoch.
+# * ``display_name``       — from ``users.display_name``.
+# * ``last_recap_summary`` — first body in the ``recaps`` table for this user,
+#                             truncated to 300 chars.
+#
+# Recaps key on ``username`` (the human-readable handle the agent loop uses),
+# while the cache keys on ``face_id``. We use ``display_name`` as the username
+# bridge: when display_name is set, callers like the therapist save recaps
+# under that handle, so it's the right key to look up. If no display_name
+# exists, recap lookup is skipped (face-only users have no therapist history
+# yet by definition).
+#
+# ``pull_brain_updates`` is read-only and never raises — a corrupt DB or
+# missing user just yields ``{}`` so the handshake degrades to "no sync".
+
+_BRAIN_RECAP_TRUNCATE = 300
+
+
+def _epoch_to_iso(epoch: float | None) -> str | None:
+    """Convert a UNIX epoch (REAL column) to an RFC-3339 / ISO-8601 string.
+
+    Returns ``None`` for falsy / invalid inputs so the caller can skip the
+    field entirely rather than emit ``"1970-01-01T00:00:00Z"``.
+    """
+    try:
+        ts = float(epoch or 0.0)
+    except (TypeError, ValueError):
+        return None
+    if ts <= 0.0:
+        return None
+    try:
+        dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+    except (OverflowError, OSError, ValueError):
+        return None
+    # Trim sub-second precision; the brain only needs minute-level "freshness".
+    return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def pull_brain_updates(face_id: str, since_version: int = 2) -> dict:
+    """Return the brain-cache delta for ``face_id`` since ``since_version``.
+
+    For Phase 7 minimum, ``since_version`` is reserved for forward-compat
+    (the brain schema is locked at v2 today; future versions may carry
+    structural rewrites that gate certain fields). We always return the
+    current values for the user; the robot is responsible for ignoring
+    fields it doesn't recognize.
+
+    Returns:
+        ``{}`` if ``face_id`` is empty, the user is unknown, or the row has
+        no fields worth syncing.
+
+        Otherwise, ``{"users": {face_id: {...}}, "system_prompt_fragments": {}}``
+        per the Phase 7 task map. Only fields that exist for the user are
+        included — callers should treat missing keys as "no change".
+
+    Never raises: any DB / I/O failure is caught and returned as ``{}`` so a
+    flaky persistence layer can't break the WS handshake.
+    """
+    fid = (face_id or "").strip().lower()
+    if not fid:
+        return {}
+
+    # All reads in one short-lived sqlite connection. We open it directly
+    # (rather than via ``_conn()``) because the ``users`` table is owned by
+    # ``server/memory.py`` — its DDL lives there, not here, and re-issuing
+    # the side-table CREATE statements on a hot path would be wasteful.
+    user_fields: dict[str, str] = {}
+    display_name: str | None = None
+    try:
+        c = sqlite3.connect(_DB_PATH)
+        try:
+            row = c.execute(
+                "SELECT display_name, updated_at FROM users WHERE face_id = ?",
+                (fid,),
+            ).fetchone()
+        finally:
+            c.close()
+    except sqlite3.Error:
+        return {}
+
+    if row is None:
+        return {}
+
+    raw_name, raw_updated_at = row
+    if raw_name:
+        display_name = str(raw_name).strip() or None
+        if display_name:
+            user_fields["display_name"] = display_name
+
+    iso = _epoch_to_iso(raw_updated_at)
+    if iso:
+        user_fields["last_seen_iso"] = iso
+
+    # Recaps key on ``username``. We use ``display_name`` as the bridge —
+    # it's the same handle the therapist uses when calling ``save_recap``.
+    if display_name:
+        try:
+            recaps = load_recent_recaps(display_name, n=1)
+        except sqlite3.Error:
+            recaps = []
+        if recaps:
+            body = (recaps[0] or "").strip()
+            if body:
+                if len(body) > _BRAIN_RECAP_TRUNCATE:
+                    body = body[: _BRAIN_RECAP_TRUNCATE - 3].rstrip() + "..."
+                user_fields["last_recap_summary"] = body
+
+    if not user_fields:
+        return {}
+
+    return {
+        "users": {fid: user_fields},
+        "system_prompt_fragments": {},
+    }
 
 
 # ---------------------------------------------------------------------------
