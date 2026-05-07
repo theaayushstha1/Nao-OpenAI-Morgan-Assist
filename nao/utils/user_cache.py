@@ -1,20 +1,58 @@
 # -*- coding: utf-8 -*-
-"""Persistent identity cache for the NAO-side runtime.
+"""Identity cache shim. Now backed by ``utils.brain.BrainCache``.
 
-Why this exists: `_USER_CACHE` in conversation.py is module-level Python state.
-It's lost on every NAO process restart, which is why the robot kept asking the
-same user for their name on cold boot even though server-side memory already
-knew them. We persist {username, recognized} to a small JSON file under
-/home/nao/nao_assist/ so the next process boot can skip the face scan + name
-ask entirely.
+PHASE 7: this module USED to be a hand-rolled JSON file at
+``/home/nao/.nao_assist_user.json``. It now delegates to the unified
+brain cache (``utils.brain``) so identity, preferences, prompt fragments,
+and per-face_id state all live in one ``brain.json``.
 
-The file is intentionally tiny and best-effort: any I/O error degrades to "no
-cached user" and the caller falls back to the live face/ask flow.
+Why a shim instead of a hard rewrite of every caller? Two reasons:
+
+1. ``conversation.py``, ``main.py``, ``reset_identity.py`` already call
+   ``user_cache.{load, save, clear}``. Touching those is a separate
+   change with its own tests. The shim keeps the cutover atomic.
+2. The Phase 7 task map explicitly says "preserve existing API."
+
+What changes vs. the old user_cache:
+
+* The persisted record now lives keyed by ``face_id`` inside ``brain.json``
+  rather than as the entire payload of ``.nao_assist_user.json``.
+* Because the legacy file was untyped (just username + recognized), we
+  synthesise a ``face_id`` of ``"local_user"`` for shim writes that don't
+  carry a face_id. Real per-face writes go through the brain cache
+  directly via ``BrainCache.upsert_user(face_id=...)``.
+* Legacy on-disk migration is preserved one-shot: if ``brain.json`` does
+  not yet contain ``"local_user"`` and the old ``.nao_assist_user.json``
+  exists, we fold it forward and delete the legacy file.
+
+The ``load()/save()/clear()`` signatures are byte-for-byte the same as the
+previous module so the existing call sites keep working unchanged.
 """
 from __future__ import print_function
 
 import json
 import os
+
+from . import brain as _brain
+
+
+# ``"local_user"`` is the synthetic face_id we route legacy callers through.
+# When a caller asks for the cache (no face_id context), we return /
+# upsert this entry. Real face-aware code paths (greeter, WS handshake)
+# should call brain.get_default() directly with a real face_id.
+_LEGACY_FACE_ID = "local_user"
+
+# Old in-tree / out-of-tree cache paths. We migrate forward once: if
+# ``brain.json`` is missing the legacy local_user entry but a legacy file
+# exists, we copy username/recognized into local_user, save the brain,
+# and unlink the legacy file so a future redeploy can't resurrect a
+# stale identity.
+_LEGACY_PATHS = (
+    os.environ.get(
+        "NAO_USER_CACHE_PATH", "/home/nao/.nao_assist_user.json"),
+    "/home/nao/nao_assist/.last_user.json",  # very old in-tree path
+)
+
 
 try:
     unicode_type = unicode  # noqa: F821  (Py2.7 on NAO)
@@ -29,38 +67,25 @@ except NameError:
 _TEXT_TYPES = (str, unicode_type)
 
 
-# IMPORTANT: must live OUTSIDE the deploy tree.
-#
-# run.sh uses `rsync -az --delete nao/ -> /home/nao/nao_assist/`. Anything
-# inside /home/nao/nao_assist/ that isn't in the local repo gets WIPED on
-# every redeploy — which is exactly what was happening to the old cache
-# path .last_user.json: written by main.py, deleted by next rsync, NAO
-# forgets the user every time we ship code. The new default path is a
-# hidden file in nao's home, which rsync never touches.
-_DEFAULT_PATH = os.environ.get(
-    "NAO_USER_CACHE_PATH",
-    "/home/nao/.nao_assist_user.json",
-)
-
-# Old in-tree location, kept for one-time migration. If we boot up and the
-# new path is empty but the old path has data, copy it forward before that
-# old file gets deleted by the next deploy.
-_LEGACY_PATHS = (
-    "/home/nao/nao_assist/.last_user.json",
-)
-
-
-def _read_one(p):
-    """Internal: parse a single cache file. Returns {} on any failure."""
+def _read_legacy_one(p):
+    """Parse one legacy single-user JSON file. Returns ``{}`` on any
+    failure -- this is the same defensive read the old user_cache.py
+    used, kept verbatim because we still hit the file at the same time
+    in the boot path.
+    """
     try:
         if not os.path.exists(p):
             return {}
-        with open(p, "rb") as f:
+        f = open(p, "rb")
+        try:
             data = json.loads(f.read().decode("utf-8"))
+        finally:
+            f.close()
         if not isinstance(data, dict):
             return {}
         username = data.get("username")
-        if isinstance(username, bytes_type) and not isinstance(username, unicode_type):
+        if isinstance(username, bytes_type) and not isinstance(
+                username, unicode_type):
             username = username.decode("utf-8", "ignore")
         if not isinstance(username, _TEXT_TYPES) or not username:
             return {}
@@ -68,79 +93,199 @@ def _read_one(p):
             "username": username.lower(),
             "recognized": bool(data.get("recognized", False)),
         }
-    except Exception as e:
-        print("[user_cache] read error at {0}:".format(p), e)
+    except Exception as exc:
+        print("[user_cache] read error at {0}:".format(p), exc)
         return {}
 
 
-def load(path=None):
-    """Return {'username': str|None, 'recognized': bool} from disk.
+def _migrate_legacy_if_needed(b):
+    """If brain has no ``local_user`` but a legacy file does, fold it in.
 
-    Never raises. Returns empty dict if the file is missing, unreadable, or
-    malformed. On first run after the cache-path migration, falls back to
-    the legacy in-tree path and writes the data forward to the new safe
-    path so the next redeploy doesn't lose it.
+    Runs once per process (the brain singleton caches the migration).
+    Best-effort: a failing migration just leaves the legacy file alone
+    so a later run can retry.
     """
-    p = path or _DEFAULT_PATH
-    found = _read_one(p)
-    if found:
-        return found
-    # New path empty — try the legacy in-tree path and migrate forward.
+    if b.get_user(_LEGACY_FACE_ID) is not None:
+        return False
+    for p in _LEGACY_PATHS:
+        snap = _read_legacy_one(p)
+        if not snap:
+            continue
+        b.upsert_user(
+            _LEGACY_FACE_ID,
+            display_name=snap["username"],
+            preferences={"recognized": bool(snap.get("recognized", False))},
+        )
+        b.save()
+        # Remove the legacy file so the next ``rsync --delete`` round
+        # can't drop it back in front of us mid-session, AND so a fresh
+        # checkout doesn't see two competing cache files.
+        try:
+            os.unlink(p)
+            print("[user_cache] migrated legacy {0} -> brain.json".format(p))
+        except Exception:
+            # If we can't delete it, that's fine -- the shim now reads
+            # from brain.json first, so the legacy file is just dead
+            # weight we'll clean up on the next deploy.
+            pass
+        return True
+    return False
+
+
+def _resolve_brain():
+    """Get the brain singleton, performing one-shot legacy migration."""
+    b = _brain.get_default()
+    try:
+        _migrate_legacy_if_needed(b)
+    except Exception as exc:
+        # Migration failure must not break the cache surface. Log + fall
+        # through; brain.json itself is still readable and writable.
+        print("[user_cache] migration error:", exc)
+    return b
+
+
+def load(path=None):
+    """Return ``{'username': str|None, 'recognized': bool}``.
+
+    Argument ``path`` is accepted for backwards compat with callers that
+    still pass it (notably the old reset_identity.py). When set, we use
+    ``BrainCache(path=path)`` for that one read instead of the singleton
+    -- this preserves the legacy "load this specific file" behaviour.
+
+    Never raises. Empty dict ``{}`` on miss / error.
+    """
     if path is None:
-        for legacy in _LEGACY_PATHS:
-            legacy_data = _read_one(legacy)
-            if legacy_data:
-                save(legacy_data["username"], legacy_data["recognized"], path=p)
-                print("[user_cache] migrated from {0} -> {1}".format(legacy, p))
-                return legacy_data
-    return {}
+        b = _resolve_brain()
+    else:
+        b = _brain.BrainCache(path=path)
+        b.load()
+
+    user = b.get_user(_LEGACY_FACE_ID)
+    if user is None:
+        return {}
+    name = user.get("display_name") or ""
+    if not name:
+        return {}
+    prefs = user.get("preferences") or {}
+    return {
+        "username": name.lower(),
+        "recognized": bool(prefs.get("recognized", False)),
+    }
 
 
 def save(username, recognized, path=None):
-    """Persist identity to disk. Best-effort; never raises.
+    """Persist identity. Best-effort; never raises.
 
-    Creates parent directory if missing. Writes atomically via temp + rename so
-    a crashed write doesn't leave a half-file that load() then rejects.
+    Same signature as the old user_cache.save() so call sites in
+    conversation.py keep working. Writes through the brain cache so the
+    identity is unified with face_id-keyed records.
     """
     if not username:
         return False
-    p = path or _DEFAULT_PATH
-    try:
-        parent = os.path.dirname(p) or "."
-        if not os.path.exists(parent):
-            try:
-                os.makedirs(parent)
-            except Exception:
-                pass
-        tmp = p + ".tmp"
-        if isinstance(username, bytes_type) and not isinstance(username, unicode_type):
+    if isinstance(username, bytes_type) and not isinstance(
+            username, unicode_type):
+        try:
             username = username.decode("utf-8", "ignore")
-        payload = json.dumps({
-            "username": username.lower() if isinstance(username, _TEXT_TYPES) else str(username).lower(),
-            "recognized": bool(recognized),
-        })
-        with open(tmp, "wb") as f:
-            f.write(payload.encode("utf-8"))
-        os.rename(tmp, p)
-        return True
-    except Exception as e:
-        print("[user_cache] save error:", e)
+        except Exception:
+            return False
+    if path is None:
+        b = _resolve_brain()
+    else:
+        b = _brain.BrainCache(path=path)
+        b.load()
+    try:
+        b.upsert_user(
+            _LEGACY_FACE_ID,
+            display_name=(
+                username.lower()
+                if isinstance(username, _TEXT_TYPES)
+                else str(username).lower()
+            ),
+            preferences={"recognized": bool(recognized)},
+        )
+        return b.save()
+    except Exception as exc:
+        print("[user_cache] save error:", exc)
         return False
 
 
 def clear(path=None):
-    """Remove the cache file. Used by 'forget me' style commands.
+    """Wipe the legacy local_user record. Used by ``reset_identity.py``.
 
-    Also wipes legacy paths so a stale in-tree file can't reappear after a
-    redeploy and silently re-identify the user with old data.
+    Note: this does NOT wipe the entire brain (face_id-keyed records for
+    other users are still valuable). To wipe the whole cache, call
+    ``brain.get_default().clear()`` directly.
     """
-    paths = [path] if path else [_DEFAULT_PATH] + list(_LEGACY_PATHS)
+    if path is None:
+        b = _resolve_brain()
+    else:
+        b = _brain.BrainCache(path=path)
+        b.load()
     ok = True
-    for p in paths:
+    try:
+        b.remove_user(_LEGACY_FACE_ID)
+        if not b.save():
+            ok = False
+    except Exception as exc:
+        print("[user_cache] clear error:", exc)
+        ok = False
+
+    # Also zap any leftover legacy files. Failures here don't fail the
+    # whole clear; the brain file is the source of truth now.
+    for p in _LEGACY_PATHS:
         try:
             if os.path.exists(p):
                 os.unlink(p)
-        except Exception as e:
-            print("[user_cache] clear error at {0}:".format(p), e)
+        except Exception as exc:
+            print("[user_cache] legacy unlink error at {0}:".format(p), exc)
             ok = False
     return ok
+
+
+# ---------------------------------------------------------------------------
+# Optional face_id-aware helpers. The Phase 7 task map mentions
+# ``get_face_id_for_user`` / ``set_face_id_for_user`` as examples of the
+# shim surface. Existing call sites don't import them today (verified
+# with grep on the worktree), but the names are listed in the task map
+# so we expose them here for forward-compat. They are thin wrappers over
+# the brain cache; tests live in ``server/tests/test_brain_cache.py``.
+# ---------------------------------------------------------------------------
+
+def get_face_id_for_user(display_name):
+    """Return the first face_id whose record matches ``display_name``.
+
+    Linear scan over users (cap is small). Returns ``None`` if no match.
+    """
+    if not display_name:
+        return None
+    target = display_name.lower() if isinstance(
+        display_name, _TEXT_TYPES) else str(display_name).lower()
+    b = _resolve_brain()
+    summary = b.summary()
+    for fid in summary.get("users") or []:
+        rec = b.get_user(fid)
+        if rec and (rec.get("display_name") or "").lower() == target:
+            return fid
+    return None
+
+
+def set_face_id_for_user(face_id, display_name, recognized=True):
+    """Upsert ``face_id`` -> ``display_name`` and persist.
+
+    The shim equivalent of "remember this person's face under this name."
+    Returns True on success, False on save failure (cache is still
+    updated in-memory).
+    """
+    if not face_id:
+        return False
+    b = _resolve_brain()
+    try:
+        b.upsert_user(
+            face_id,
+            display_name=display_name or "",
+            preferences={"recognized": bool(recognized)},
+        )
+        return b.save()
+    except Exception as exc:
+        print("[user_cache] set_face_id error:", exc)
+        return False
