@@ -33,3 +33,9 @@ pytest-flask==1.3.0
 # SAGE-CBT optional: SafetyAgent Claude provider (SAGE_SAFETY_PROVIDER=claude).
 # Not required for the default OpenAI-only path; imported lazily.
 anthropic>=0.40.0 ; python_version >= "3.10"
+
+# Phase 10.5 — Virtual NAO simulator (Mac-side). Optional; only needed
+# to run sim/live_nao.py interactively. Headless scenarios + e2e tests
+# work with no audio libs (sounddevice import is guarded).
+# Install on demand:  pip install sounddevice numpy pydub
+# System deps (Mac):  brew install portaudio ffmpeg
