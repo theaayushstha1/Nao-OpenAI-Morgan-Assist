@@ -1,3 +1,14 @@
+# DEPRECATED — Phase 5: replaced by cs_navigator_search. Kept as fallback only.
+#
+# Phase 5 of the v2 rework (see ``docs/PHASE_5_TASK_MAP.md``) moves Morgan-CS
+# knowledge to the operator's deployed CS Navigator Cloud Run API. This module
+# previously took over from ``pinecone_search`` on commit 4deb236 and is now
+# itself superseded by ``server.tools.cs_navigator.cs_navigator_search``.
+#
+# Why we keep the file: the Phase 5 PRD requires the previous search tool to
+# stay live as a fallback for one phase + 3 stable sessions before deletion,
+# so ``server/agents/chatbot.py`` falls back here when the cs_navigator
+# worktree has not yet been merged. Do not import this from any other agent.
 """RAG tool backed by Google Vertex AI Search.
 
 Queries CS Navigator's shared datastore (default `csnavigator-kb-v7`, project
