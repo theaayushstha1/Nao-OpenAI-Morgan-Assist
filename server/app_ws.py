@@ -585,6 +585,21 @@ async def _lifespan(_app: FastAPI):
             "NAO_SHARED_SECRET unset — server is OPEN to anyone on the network. "
             "Set it in .env before exposing /ws/{username}.",
         )
+    # Phase 6 — apply any pending DB migrations on boot. The runner is
+    # idempotent (skips files already recorded in the `migrations` table)
+    # and best-effort: a migration failure logs and continues so a bad
+    # file in this directory can't take the whole server down.
+    try:
+        from server.migrations import apply_pending_migrations
+        applied = apply_pending_migrations()
+        if applied:
+            logging.getLogger("sage.app_ws").info(
+                "migrations applied on boot: %s", ",".join(applied),
+            )
+    except Exception as e:  # noqa: BLE001
+        logging.getLogger("sage.app_ws").error(
+            "migration runner failed on boot: %r", e,
+        )
     yield
 
 
@@ -1592,6 +1607,127 @@ async def _handle_wake_event(ws: WebSocket, sess: _Session,
     return True
 
 
+# ───────── Phase 6 — first-turn camera-consent heads-up ─────────
+
+# Default copy if the config knob isn't published yet (the `vision-debug`
+# slug owns config.py for Phase 6 — fall back so we don't crash if our
+# branch lands first).
+_CAMERA_ANNOUNCE_FALLBACK = (
+    "Heads up — my camera is on for this conversation. "
+    "Say 'stop watching me' anytime."
+)
+
+
+async def _maybe_announce_camera_consent(ws: WebSocket, sess: _Session) -> None:
+    """Phase 6 first-turn audible heads-up that the camera is on.
+
+    Fires once per WS session (tracked via ``session.is_first_turn``) when
+    BOTH of these hold:
+
+    * ``config.CAMERA_DEFAULT_ON`` is True (operator opt-out lives here).
+    * The user's persisted ``camera_consent`` is True.
+
+    Synthesizes ``config.CAMERA_ANNOUNCE_TEXT`` via OpenAI TTS and sends
+    one ``audio_chunk`` frame followed by a ``tts_ended`` control. The
+    post-TTS cooldown is armed so the heads-up doesn't feed back into
+    STT, mirroring the wake-event greeting path.
+
+    Never raises — TTS / DB failures degrade silently to "no announce".
+    The caller still proceeds with whatever else session_open does.
+    """
+    # Operator-level kill switch. Defaults to True so the heads-up still
+    # plays if the parallel `vision-debug` agent's config edit hasn't
+    # landed yet.
+    if not bool(getattr(config, "CAMERA_DEFAULT_ON", True)):
+        return
+
+    try:
+        from server import session as _session
+    except Exception:  # noqa: BLE001 — should never happen in practice
+        return
+
+    if not _session.is_first_turn(sess.session_id):
+        return
+
+    # Read consent off-loop so a slow SQLite call doesn't stall the
+    # event loop. `get_camera_consent` lazily inserts default-1 rows.
+    try:
+        consent = await asyncio.to_thread(
+            _session.get_camera_consent, sess.username,
+        )
+    except Exception as e:  # noqa: BLE001 — never break session_open on this
+        logger.warning(
+            "camera_announce_consent_failed",
+            user=sess.username, error=repr(e),
+        )
+        return
+    if not consent:
+        return
+
+    text = str(getattr(config, "CAMERA_ANNOUNCE_TEXT", _CAMERA_ANNOUNCE_FALLBACK))
+    if not text.strip():
+        return
+
+    phase_ms: dict[str, float] = {}
+    with _phase("camera_announce_synth", phase_ms):
+        try:
+            mp3 = await asyncio.to_thread(openai_tts.synthesize, text)
+        except Exception as e:  # noqa: BLE001 — TTS down → silent skip
+            logger.warning(
+                "camera_announce_tts_failed",
+                user=sess.username, error=repr(e),
+            )
+            mp3 = b""
+
+    # Mark BEFORE the send so a transient send error doesn't cause us to
+    # double-announce on the next session_open. Idempotency wins over a
+    # one-time miss.
+    _session.mark_first_turn_announced(sess.session_id)
+
+    if mp3:
+        # Echo-guard hooks — keep the sentence list aligned with the
+        # wake-event path so the regression suite stays happy.
+        try:
+            _reset_reply_chunks(sess.username, text)
+        except Exception:
+            pass
+        try:
+            await _send_json(
+                ws, _audio_chunk_frame(sess.next_seq(), text, mp3),
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.warning(
+                "camera_announce_send_failed",
+                user=sess.username, error=repr(e),
+            )
+            return
+        try:
+            legacy.LAST_REPLY[sess.username] = text
+        except Exception:
+            pass
+        _arm_post_tts_cooldown(sess)
+        try:
+            await _send_json(ws, _control_frame("tts_ended", sentences=1))
+        except Exception:
+            pass
+    else:
+        # TTS unavailable — emit a transcript-only control so the robot
+        # can still surface the heads-up visually / in logs.
+        try:
+            await _send_json(
+                ws, _control_frame("tts_chunk_skipped", text=text),
+            )
+        except Exception:
+            pass
+
+    logger.info(
+        "camera_announce",
+        user=sess.username, session_id=sess.session_id,
+        had_audio=bool(mp3),
+        phase_ms=phase_ms,
+    )
+
+
 async def _ingest_control(ws: WebSocket, sess: _Session,
                           frame: dict[str, Any]) -> bool:
     sub = frame.get("subtype")
@@ -1612,11 +1748,23 @@ async def _ingest_control(ws: WebSocket, sess: _Session,
             user=sess.username, session_id=sess.session_id,
             face_id=sess.face_id, hint=sess.hint,
         )
+        # Phase 6 — first-turn camera-consent heads-up. Runs BEFORE any
+        # personalized greeting (wake_event greetings come later in the
+        # stream when the engagement gates fire). Gated on the operator
+        # knob so a deployment can opt out without code changes.
+        await _maybe_announce_camera_consent(ws, sess)
         return True
 
     if sub == "session_close":
         await asyncio.to_thread(legacy.close_active_session, sess.username)
         _clear_session_fsm_state(sess.session_id)
+        # Phase 6 — drop the per-session first-turn flag so the in-memory
+        # tracker doesn't leak across long-lived server uptime.
+        try:
+            from server import session as _session
+            _session.forget_session(sess.session_id)
+        except Exception:  # noqa: BLE001 — best-effort cleanup
+            pass
         await _send_json(ws, _control_frame(
             "session_end", session_id=sess.session_id,
         ))
