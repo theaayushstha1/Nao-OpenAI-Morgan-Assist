@@ -12,7 +12,9 @@
   <img alt="OpenAI"    src="https://img.shields.io/badge/OpenAI-Agents%20SDK-412991?style=for-the-badge&logo=openai&logoColor=white">
   <img alt="ElevenLabs" src="https://img.shields.io/badge/ElevenLabs-Flash%20v2.5-000000?style=for-the-badge">
   <img alt="Deepgram"  src="https://img.shields.io/badge/Deepgram-Nova--2-13EF93?style=for-the-badge">
+  <img alt="GPT‑4o"    src="https://img.shields.io/badge/Vision-GPT--4o-412991?style=for-the-badge&logo=openai&logoColor=white">
   <img alt="NAO"       src="https://img.shields.io/badge/NAO-H25-FF6F00?style=for-the-badge">
+  <img alt="Research"  src="https://img.shields.io/badge/Research-SAGE--CBT-7B1FA2?style=for-the-badge">
 </p>
 
 <sub>Aayush Shrestha · Advised by Dr. Shuangbao "Paul" Wang · Department of Computer Science, Morgan State University</sub>
@@ -29,7 +31,7 @@
 
 A NAO humanoid that **listens, sees, thinks, talks, and moves like a person.** A student walks up, NAO recognizes their face, greets them by name, answers questions about courses, weather, or feelings, gestures while talking, turns its head toward whoever speaks, and runs a hardcoded crisis gate that bypasses the LLM entirely on suicidal ideation.
 
-End‑to‑end target: **< 800 ms p50** mouth‑close to first audio.
+End‑to‑end target: **&lt; 800 ms p50** mouth‑close to first audio.
 
 > **For people new to this repo:** read this README, then [`docs/DECISIONS`](docs/DECISIONS.md) (how problems were navigated), then [`docs/PRD_v2`](docs/PRD_v2.md) (full spec). Index of all docs in [`docs/INDEX`](docs/INDEX.md).
 
@@ -40,19 +42,19 @@ End‑to‑end target: **< 800 ms p50** mouth‑close to first audio.
 ```mermaid
 sequenceDiagram
     autonumber
-    participant U as 🧑 User
-    participant N as 🤖 NAO (py 2.7)
-    participant S as ⚙️ Server (FastAPI)
-    participant A as 🧠 Agents SDK
-    participant T as 🔊 ElevenLabs
-    
+    participant U as User
+    participant N as NAO (py 2.7)
+    participant S as Server (FastAPI)
+    participant A as Agents SDK
+    participant T as ElevenLabs
+
     U->>N: speech
     N->>S: WS audio_chunk frames
     S->>S: VAD + Silero gate
     S->>S: STT (Deepgram / Whisper)
-    S-->>S: 🛡 Crisis gate (988 hard)
-    S-->>S: 🎭 Motion trigger (LLM bypass)
-    S->>A: Router → Specialist
+    S-->>S: Crisis gate (988 hard)
+    S-->>S: Motion trigger (LLM bypass)
+    S->>A: Router -> Specialist
     A-->>S: streaming token deltas
     S->>S: Sentence chunker
     S->>T: per-sentence synth (parallel)
@@ -78,26 +80,26 @@ graph LR
     classDef gate fill:#b71c1c,stroke:#b71c1c,color:#fff
     classDef db fill:#6a1b9a,stroke:#6a1b9a,color:#fff
 
-    USER([🧑 User]):::u
+    USER([User]):::u
 
-    subgraph NAO["🤖 NAO H25 · naoqi 2.7"]
+    subgraph NAO["NAO H25 - naoqi 2.7"]
         WAKE[Wake state machine]:::nao
         WSC[WS client]:::nao
         AUD[Audio module<br/>fragment recorder]:::nao
-        TTS[Stream TTS<br/>MP3 → WAV → ALAudioPlayer]:::nao
-        EXEC[Action worker<br/>gestures · dances · motors]:::nao
+        TTS[Stream TTS<br/>MP3 to WAV to ALAudioPlayer]:::nao
+        EXEC[Action worker<br/>gestures - dances - motors]:::nao
         SND[Sound localizer<br/>+ ALTracker face mode]:::nao
         BRAIN[(Brain cache<br/>64 KB)]:::db
     end
 
-    subgraph SRV["⚙️ Server · FastAPI + uvicorn"]
+    subgraph SRV["Server - FastAPI + uvicorn"]
         WSS[WebSocket /ws/:user]:::srv
-        SAFE[🛡 Crisis gate]:::gate
-        MTR[🎭 Motion trigger]:::srv
+        SAFE[Crisis gate]:::gate
+        MTR[Motion trigger]:::srv
         VAD[Silero VAD]:::srv
-        STT[STT lane:<br/>Deepgram · Whisper · Scribe]:::srv
+        STT[STT lane:<br/>Deepgram - Whisper - Scribe]:::srv
         ROUTER[Router]:::ai
-        CHAT[Chat lanes:<br/>pure · embodied]:::ai
+        CHAT[Chat lanes:<br/>pure - embodied]:::ai
         CHATBOT[Chatbot]:::ai
         SKILLS[Skills]:::ai
         THER[Therapist + CBT/Grounding/MI]:::ai
@@ -106,9 +108,9 @@ graph LR
         OBS[/metrics + JSONL/]:::srv
     end
 
-    EL[(🎙 ElevenLabs Flash v2.5)]:::ext
-    OAI[(🧠 OpenAI Agents SDK)]:::ext
-    CSN[(📚 CS Navigator API<br/>Cloud Run)]:::ext
+    EL[(ElevenLabs Flash v2.5)]:::ext
+    OAI[(OpenAI Agents SDK)]:::ext
+    CSN[(CS Navigator API<br/>Cloud Run)]:::ext
 
     USER -->|voice| WAKE --> WSC
     USER -->|face/proximity| WAKE
@@ -146,19 +148,19 @@ graph TD
     classDef sub fill:#7b1fa2,stroke:#7b1fa2,color:#fff
     classDef tool fill:#2e7d32,stroke:#2e7d32,color:#fff
 
-    T([turn]) --> CG{🛡 crisis check}:::gate
+    T([turn]) --> CG{crisis check}:::gate
     CG -- positive --> H[988 hotline<br/>fixed reply, no LLM]:::gate
-    CG -- clean --> MT{🎭 motion trigger}:::route
+    CG -- clean --> MT{motion trigger}:::route
     MT -- match --> ACT[short-circuit action]:::route
     MT -- no match --> R[router<br/>gpt-4.1-nano]:::route
 
-    R --> CH[chat<br/>pure · embodied]:::spec
+    R --> CH[chat<br/>pure - embodied]:::spec
     R --> CB[chatbot]:::spec
     R --> SK[skills]:::spec
     R --> TH[therapist<br/>gpt-4.1-mini]:::spec
 
     TH --> CBT[cbt_coach<br/>thought records]:::sub
-    TH --> GR[grounding_coach<br/>5-4-3-2-1 · box · scan]:::sub
+    TH --> GR[grounding_coach<br/>5-4-3-2-1, box, scan]:::sub
     TH -. opt .-> MI[mi_coach<br/>OARS]:::sub
 
     CH & TH -.-> NA[(nao_actions)]:::tool
@@ -171,7 +173,7 @@ graph TD
 | Agent | Role | Default model |
 |---|---|---|
 | **router** | triage + handoff (sensory grounding rule, never denies senses) | `gpt-4.1-nano` |
-| **chat (pure)** | tool‑less ultra‑fast lane, < 2 s first audio | `gpt-4.1-nano` |
+| **chat (pure)** | tool‑less ultra‑fast lane, &lt; 2 s first audio | `gpt-4.1-nano` |
 | **chat (embodied)** | gestures + actions + face learn | `gpt-4.1-nano` |
 | **chatbot** | Morgan‑CS RAG via CS Navigator API | `gpt-4.1-mini` |
 | **skills** | time, weather, timers, todos | `gpt-4.1-nano` |
@@ -190,24 +192,24 @@ stateDiagram-v2
     direction LR
 
     [*] --> IDLE
-    IDLE --> AWARE: face detected<br/>(conf ≥ 0.35)
-    AWARE --> IDLE: face lost<br/>or 8 s timeout
-    AWARE --> ENGAGED: mutual gaze ≥ 1.5 s<br/>· proximity stable<br/>· speech onset<br/>· "hey NAO"
+    IDLE --> AWARE: face detected (conf >= 0.35)
+    AWARE --> IDLE: face lost or 8 s timeout
+    AWARE --> ENGAGED: mutual gaze 1.5s, proximity, speech, or hey NAO
     ENGAGED --> LISTENING: chime + WS open
     LISTENING --> SPEAKING: TTS playing
-    SPEAKING --> LISTENING: playback drained<br/>+ grace
+    SPEAKING --> LISTENING: playback drained + grace
     LISTENING --> AWARE: face lost > 5 s
-    SPEAKING --> LISTENING: barge-in<br/>(touch / speech onset)
+    SPEAKING --> LISTENING: barge-in (touch / speech onset)
 
     note right of AWARE
-        Robot is *aware* but silent.
+        Robot is aware but silent.
         No greeting, no chime —
         prevents passerby false-wakes.
     end note
 
     note right of LISTENING
-        Eyes cyan · gaze drift
-        Mic open · streaming PCM
+        Eyes cyan - gaze drift
+        Mic open - streaming PCM
     end note
 ```
 
@@ -221,21 +223,21 @@ flowchart TD
     classDef ok fill:#2e7d32,stroke:#2e7d32,color:#fff
     classDef bad fill:#b71c1c,stroke:#b71c1c,color:#fff
 
-    START([reply ready]) --> ENQ[stream_tts.enqueue<br/>per-sentence MP3]:::a
-    ENQ --> PLAY[ALAudioPlayer<br/>blocking_play_start]:::a
-    PLAY --> DONE{queue<br/>empty?}:::a
-    DONE -- no --> NEXT[next chunk]:::a --> PLAY
-    DONE -- yes --> DRAIN[local_tts_queue_empty]:::ok
-    DRAIN --> SETTLE[wait 800 ms<br/>speaker cone settle]:::a
-    SETTLE --> OPEN[gate(False)<br/>fresh stream.wav]:::ok
-    OPEN --> RESUME[push mic_resumed]:::ok
+    START([reply ready]) --> ENQ["stream_tts.enqueue<br/>per-sentence MP3"]:::a
+    ENQ --> PLAY["ALAudioPlayer<br/>blocking_play_start"]:::a
+    PLAY --> DONE{"queue empty?"}:::a
+    DONE -- no --> NEXT["next chunk"]:::a --> PLAY
+    DONE -- yes --> DRAIN["local_tts_queue_empty"]:::ok
+    DRAIN --> SETTLE["wait 800 ms<br/>speaker cone settle"]:::a
+    SETTLE --> OPEN["gate False<br/>fresh stream.wav"]:::ok
+    OPEN --> RESUME["push mic_resumed"]:::ok
     RESUME --> LISTEN([mic live])
 
-    ECHO{server self_echo<br/>reject?}:::bad
+    ECHO{"server self_echo<br/>reject?"}:::bad
     LISTEN --> ECHO
-    ECHO -- yes --> CLOSE[gate(True)<br/>stop recorder]:::bad
-    CLOSE --> RESETTLE[250 ms settle]:::bad
-    RESETTLE --> RESTART[gate(False)<br/>fresh stream.wav]:::ok
+    ECHO -- yes --> CLOSE["gate True<br/>stop recorder"]:::bad
+    CLOSE --> RESETTLE["250 ms settle"]:::bad
+    RESETTLE --> RESTART["gate False<br/>fresh stream.wav"]:::ok
     RESTART --> LISTEN
 ```
 
@@ -247,24 +249,24 @@ The old design opened the mic on the server's `tts_ended` frame — but that onl
 
 ```mermaid
 sequenceDiagram
-    participant Server as 🌐 Server
-    participant Recv as 🟢 WS recv loop
-    participant Q as 📥 _action_queue
-    participant Worker as ⚙️ nao-ws-actions
-    participant NAO as 🤖 ALMotion + ALBehavior
-    
+    participant Server
+    participant Recv as WS recv loop
+    participant Q as _action_queue
+    participant Worker as nao-ws-actions
+    participant NAO as ALMotion + ALBehavior
+
     Server->>Recv: action {name, args}
     Recv->>Q: put_nowait
     Recv-->>Server: (returns immediately)
     Worker->>Q: get
-    Worker->>NAO: dispatch(name, args)<br/>blocking up to 15 s
+    Worker->>NAO: dispatch(name, args) blocking up to 15 s
     NAO-->>Worker: done
     Worker->>Q: get next
-    
+
     Note over Server,NAO: barge-in / crisis / shutdown
     Server->>Recv: control: barge_in
     Recv->>Worker: drain queue
-    Recv->>NAO: stopAllBehaviors()
+    Recv->>NAO: stopAllBehaviors
     NAO-->>Worker: cancelled
 ```
 
@@ -276,34 +278,34 @@ See [`DECISIONS § D9`](docs/DECISIONS.md#d9-action-dispatch-on-recv-thread-vs-w
 
 ```mermaid
 sequenceDiagram
-    participant U as 🧑 User
-    participant W as 🚦 Wake SM
-    participant N as 🤖 NAO
-    participant S as ⚙️ Server
-    participant A as 🧠 Chat agent
+    participant U as User
+    participant W as Wake SM
+    participant N as NAO
+    participant S as Server
+    participant A as Chat agent
 
     U->>W: walks into camera view
-    W->>W: AWARE → ENGAGED (gate fires)
+    W->>W: AWARE -> ENGAGED (gate fires)
     N->>S: control session_open
-    N->>S: 📸 image (reason=session_open)
-    N-->>U: 🔊 "Heads up — my camera is on..."
+    N->>S: image (reason=session_open)
+    N-->>U: "Heads up - my camera is on..."
     par face scan (3 s daemon)
         N->>N: ALFaceDetection.recognize
         alt known face
-            N->>S: control user_identified<br/>{name: "Aayush", recognized: true}
+            N->>S: control user_identified {name: Aayush, recognized: true}
         else unknown
-            N->>S: control user_identified<br/>{name: null, face_visible: true}
+            N->>S: control user_identified {name: null, face_visible: true}
         end
     end
     U->>S: "hey can you see me"
-    S->>A: [USER name=Aayush returning=true]<br/>[NAO_VISION ...]<br/>"hey can you see me"
+    S->>A: USER name=Aayush returning=true + NAO_VISION + transcript
     alt known
         A-->>U: "Welcome back, Aayush!"
     else unknown
         A-->>U: "I see you. What's your name?"
         U->>S: "I'm Aayush, remember me"
         S->>A: route to chat
-        A->>N: tool: learn_face(name="Aayush")
+        A->>N: tool: learn_face(name=Aayush)
         N->>N: ALFaceDetection.learnFace
         A-->>U: "Got it, Aayush. Pleasure to meet you."
     end
@@ -314,32 +316,32 @@ sequenceDiagram
 ## Highlights at a glance
 
 <table>
-<tr><td valign="top">
+<tr><td valign="top" width="50%">
 
-### 🎙 Voice loop
+#### Voice loop
 - Streaming TTS with sentence chunker
 - 3 STT backends, hot‑swap A/B
 - Flash v2.5 voice profiles
 - 3‑layer self‑echo defense
-- Post‑playback mic resume
+- Post‑playback mic resume waiter
 - Recorder restart on echo reject
 
-### 🧠 Multi‑agent
+#### Multi‑agent
 - OpenAI Agents SDK + handoffs
 - Pure & embodied chat lanes
 - CBT + Grounding + MI sub‑coaches
 - Memory injection (recaps, themes)
 - Per‑user voice profile in SQLite
 
-### 👁 Vision
+#### Vision
 - Lazy GPT‑4o, trigger‑phrase gated
 - Fresh per question (no stale cache)
 - `[NAO_VISION]` prompt block
 - Server‑side image stash, never on robot
 
-</td><td valign="top">
+</td><td valign="top" width="50%">
 
-### 🤸 Embodiment
+#### Embodiment
 - 47 native gesture intents
 - 35‑style dance map
 - `follow-me` Choregraphe pack
@@ -348,17 +350,17 @@ sequenceDiagram
 - Action worker thread
 - `stopAllBehaviors` cancellation
 
-### 🚦 Wake & onboarding
+#### Wake & onboarding
 - Hybrid face‑first + keyword fallback
 - 5‑state wake SM with LED cues
 - Touch‑sensor barge‑in
 - Face learn flow + persistent DB
 - Camera consent + privacy LED
 
-### 🛡 Safety + observability
+#### Safety + observability
 - Hardcoded 988 crisis gate
 - Re‑toned hotline reply
-- structlog JSON, Prometheus, Grafana
+- `structlog` JSON, Prometheus, Grafana
 - Robot‑side rotating JSONL
 - 22 latency labels, 10 dash panels
 
@@ -371,10 +373,10 @@ sequenceDiagram
 ```mermaid
 flowchart LR
     classDef step fill:#0d47a1,stroke:#0d47a1,color:#fff
-    
-    A[clone repo]:::step --> B[python -m venv .venv<br/>pip install -r server/requirements.txt]:::step
-    B --> C[cp .env.example .env<br/>fill OPENAI_API_KEY etc.]:::step
-    C --> D[./run.sh]:::step
+
+    A["clone repo"]:::step --> B["python -m venv .venv<br/>pip install -r server/requirements.txt"]:::step
+    B --> C["cp .env.example .env<br/>fill OPENAI_API_KEY etc."]:::step
+    C --> D["./run.sh"]:::step
     D --> E([uvicorn :5050<br/>+ NAO main.py])
 ```
 
@@ -398,7 +400,7 @@ cp .env.example .env             # fill keys
 |---|---|
 | "Hey NAO" / step into view | Wake state machine |
 | "Wave at my friend" | `wave_hand` action |
-| "Do the kung fu" | `dance(style='kungfu')` → `KungFu_1` Choregraphe pack |
+| "Do the kung fu" | `dance(style='kungfu')` -> `KungFu_1` Choregraphe pack |
 | "Follow me" / "Track me" | `follow_movement` (`follow-me` pack) |
 | "Stop following me" / "Freeze" | `stop_follow` |
 | "What am I wearing?" / "Can you see me?" | Lazy GPT‑4o vision call |
@@ -417,11 +419,11 @@ Tap NAO's head sensors at any time to **barge in** — TTS stops within ~200 ms,
 
 | Metric | Target | Where measured |
 |---|---|---|
-| `e2e_user_to_first_audio` p50 | < 800 ms | `phase_ms` in `turn_complete` log |
-| `e2e_user_to_first_audio` p95 | < 1.2 s | Prometheus histogram |
-| `tts_synth_first_chunk` | < 500 ms | Flash v2.5 streaming |
+| `e2e_user_to_first_audio` p50 | &lt; 800 ms | `phase_ms` in `turn_complete` log |
+| `e2e_user_to_first_audio` p95 | &lt; 1.2 s | Prometheus histogram |
+| `tts_synth_first_chunk` | &lt; 500 ms | Flash v2.5 streaming |
 | `vision_call` | ~1.5 s | only on visual triggers |
-| Barge‑in stop time | < 200 ms | `tts_player.stop()` + `stopAllBehaviors` |
+| Barge‑in stop time | &lt; 200 ms | `tts_player.stop()` + `stopAllBehaviors` |
 
 `/metrics` exposes histograms per phase. Grafana JSON in [`server/dashboards/grafana_voice.json`](server/dashboards/grafana_voice.json).
 
@@ -431,41 +433,41 @@ Tap NAO's head sensors at any time to **barge in** — TTS stops within ~200 ms,
 
 ```
 Nao-OpenAI-Morgan-Assist/
-├── nao/                      🤖 Python 2.7 — runs on the robot
-│   ├── main.py               ▶ entry: wake SM + session controller
-│   ├── ws_client.py          🔗 long-lived WebSocket session
-│   ├── audio_module.py       🎙 ALAudioRecorder fragment streamer
-│   ├── stream_tts.py         🔊 MP3 → WAV → ALAudioPlayer + ffmpeg loudness
-│   ├── wake_state.py         🚦 IDLE → AWARE → ENGAGED → LISTENING → SPEAKING
-│   ├── sound_localize.py     🧭 ALSoundLocalization auto-track
-│   ├── leds.py               💡 eye LED helpers
-│   ├── idle_motion.py        🌬 background breathing + gaze drift
+├── nao/                      Python 2.7 — runs on the robot
+│   ├── main.py               entry: wake SM + session controller
+│   ├── ws_client.py          long-lived WebSocket session
+│   ├── audio_module.py       ALAudioRecorder fragment streamer
+│   ├── stream_tts.py         MP3 -> WAV -> ALAudioPlayer + ffmpeg loudness
+│   ├── wake_state.py         IDLE -> AWARE -> ENGAGED -> LISTENING -> SPEAKING
+│   ├── sound_localize.py     ALSoundLocalization auto-track
+│   ├── leds.py               eye LED helpers
+│   ├── idle_motion.py        background breathing + gaze drift
 │   └── utils/
-│       ├── nao_execute.py    🎭 dispatcher: gestures, dances, motors
-│       ├── face_naoqi.py     👤 face recognition + learning
-│       ├── brain.py          💾 64 KB local identity cache
-│       └── camera_capture.py 📸 per-turn JPEG snap
+│       ├── nao_execute.py    dispatcher: gestures, dances, motors
+│       ├── face_naoqi.py     face recognition + learning
+│       ├── brain.py          64 KB local identity cache
+│       └── camera_capture.py per-turn JPEG snap
 │
-├── server/                   ⚙️ Python 3.11+ — runs on dev / cloud
-│   ├── app_ws.py             🌐 FastAPI + WebSocket — main entry
-│   ├── safety.py             🛡 pre-dispatch crisis gate (988)
-│   ├── motion_trigger.py     🎯 regex short-circuit for body commands
-│   ├── streaming.py          ✂️ sentence chunker for streaming TTS
-│   ├── elevenlabs_tts.py     🎤 Flash v2.5 streaming with voice profiles
-│   ├── deepgram_asr.py       📝 Nova-2 streaming STT
-│   ├── elevenlabs_stt.py     📝 Scribe v2 Realtime STT
-│   ├── vad_silero.py         🔉 server-side authoritative voice gate
-│   ├── memory.py             🧠 recaps, weekly themes, monthly personas
-│   ├── session.py            💾 SQLiteSession + camera consent
-│   ├── logging_setup.py      📊 structlog JSON
-│   ├── metrics.py            📈 Prometheus exporter
-│   ├── dashboards/           📉 Grafana JSON
-│   ├── agents/               🧑‍🤝‍🧑 router, chat, chatbot, skills, therapist...
-│   └── tools/                🔧 nao_actions, cs_navigator, emotion, skills
+├── server/                   Python 3.11+ — runs on dev / cloud
+│   ├── app_ws.py             FastAPI + WebSocket — main entry
+│   ├── safety.py             pre-dispatch crisis gate (988)
+│   ├── motion_trigger.py     regex short-circuit for body commands
+│   ├── streaming.py          sentence chunker for streaming TTS
+│   ├── elevenlabs_tts.py     Flash v2.5 streaming with voice profiles
+│   ├── deepgram_asr.py       Nova-2 streaming STT
+│   ├── elevenlabs_stt.py     Scribe v2 Realtime STT
+│   ├── vad_silero.py         server-side authoritative voice gate
+│   ├── memory.py             recaps, weekly themes, monthly personas
+│   ├── session.py            SQLiteSession + camera consent
+│   ├── logging_setup.py      structlog JSON
+│   ├── metrics.py            Prometheus exporter
+│   ├── dashboards/           Grafana JSON
+│   ├── agents/               router, chat, chatbot, skills, therapist, ...
+│   └── tools/                nao_actions, cs_navigator, emotion, skills
 │
-├── sim/                      🧪 Python 3.11+ — load test + benchmarks
-├── docs/                     📚 PRD, DECISIONS, INDEX, phase task maps
-└── run.sh                    🚀 one-shot deploy + boot + log tail
+├── sim/                      Python 3.11+ — load test + benchmarks
+├── docs/                     PRD, DECISIONS, INDEX, phase task maps
+└── run.sh                    one-shot deploy + boot + log tail
 ```
 
 ---
@@ -483,7 +485,7 @@ Nao-OpenAI-Morgan-Assist/
 Every doc carries an HTML‑comment frontmatter block with `tags:` and `related:` so they're greppable and graph‑traversable. Search example:
 
 ```bash
-grep -lZ "tags:.*embodiment" docs/*.md      # every doc tagged with `embodiment`
+grep -lZ "tags:.*embodiment" docs/*.md      # every doc tagged with embodiment
 grep -lZ "related:.*PHASE_4"  docs/*.md     # every doc that links to Phase 4
 ```
 
