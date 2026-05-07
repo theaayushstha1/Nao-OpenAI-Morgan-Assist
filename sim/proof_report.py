@@ -427,16 +427,17 @@ def _ensure_reports_dir() -> Path:
 
 
 def write_proof_files(records: Iterable[ProofRecord]) -> dict[str, Path]:
-    """Write timestamped JSON + Markdown proof files.
+    """Write timestamped JSON + Markdown (+ PDF if reportlab is available).
 
-    Returns a dict like ``{"json": Path, "markdown": Path}`` so callers
-    can echo the paths in CLI output.
+    Returns a dict with ``"json"``, ``"markdown"``, and (optionally)
+    ``"pdf"`` keys so callers can echo the paths in CLI output.
     """
     records = list(records)
     _ensure_reports_dir()
     stamp = _dt.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
     json_path = REPORTS_DIR / "proof_{}.json".format(stamp)
     md_path = REPORTS_DIR / "proof_{}.md".format(stamp)
+    pdf_path = REPORTS_DIR / "proof_{}.pdf".format(stamp)
 
     payload = {
         "generated_at": stamp,
@@ -449,7 +450,334 @@ def write_proof_files(records: Iterable[ProofRecord]) -> dict[str, Path]:
         format_markdown(records, run_iso=stamp),
         encoding="utf-8",
     )
-    return {"json": json_path, "markdown": md_path}
+
+    out: dict[str, Path] = {"json": json_path, "markdown": md_path}
+    try:
+        write_pdf(records, pdf_path, run_iso=stamp)
+        out["pdf"] = pdf_path
+    except Exception as e:  # pragma: no cover -- reportlab missing or render fail
+        # Don't kill the JSON/MD path on PDF failure; CI machines often
+        # don't have reportlab.
+        import logging
+        logging.getLogger(__name__).warning(
+            "proof PDF skipped: %r", e,
+        )
+    return out
+
+
+# ---------------------------------------------------------------------------
+# PDF renderer (reportlab)
+# ---------------------------------------------------------------------------
+
+
+def write_pdf(records: Iterable[ProofRecord], path: Path,
+              *, run_iso: str = "") -> None:
+    """Render the proof report as a styled PDF.
+
+    Imports reportlab lazily so the JSON+Markdown path works on systems
+    without it. Called by ``write_proof_files`` when reportlab is present.
+    """
+    from reportlab.lib.pagesizes import LETTER
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import inch
+    from reportlab.lib.enums import TA_LEFT
+    from reportlab.lib.colors import HexColor
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, PageBreak, Preformatted,
+        Table, TableStyle,
+    )
+
+    records = list(records)
+
+    NAVY = HexColor("#0B2545")
+    ORANGE = HexColor("#F25C05")
+    GRAY = HexColor("#444")
+    LIGHT = HexColor("#EEF2F7")
+    GREEN = HexColor("#0E7C3A")
+    RED = HexColor("#C0392B")
+    AMBER = HexColor("#A85D00")
+
+    base = getSampleStyleSheet()
+    s_cover = ParagraphStyle(
+        name="ProofCover", parent=base["Normal"],
+        fontName="Helvetica-Bold", fontSize=24, leading=30, textColor=NAVY,
+        spaceAfter=8,
+    )
+    s_sub = ParagraphStyle(
+        name="ProofSub", parent=base["Normal"],
+        fontName="Helvetica", fontSize=11, leading=15, textColor=GRAY,
+        spaceAfter=6,
+    )
+    s_h1 = ParagraphStyle(
+        name="ProofH1", parent=base["Normal"],
+        fontName="Helvetica-Bold", fontSize=16, leading=20, textColor=NAVY,
+        spaceBefore=14, spaceAfter=8,
+    )
+    s_h2 = ParagraphStyle(
+        name="ProofH2", parent=base["Normal"],
+        fontName="Helvetica-Bold", fontSize=12, leading=16, textColor=ORANGE,
+        spaceBefore=10, spaceAfter=4,
+    )
+    s_body = ParagraphStyle(
+        name="ProofBody", parent=base["Normal"],
+        fontName="Helvetica", fontSize=10, leading=14,
+        textColor=HexColor("#222"), spaceAfter=4, alignment=TA_LEFT,
+    )
+    s_label = ParagraphStyle(
+        name="ProofLabel", parent=base["Normal"],
+        fontName="Helvetica-Bold", fontSize=10, leading=14,
+        textColor=NAVY, spaceAfter=2,
+    )
+    s_code = ParagraphStyle(
+        name="ProofCode", parent=base["Normal"],
+        fontName="Courier", fontSize=8.5, leading=11,
+        textColor=HexColor("#1a1a1a"), backColor=LIGHT, borderPadding=4,
+        spaceAfter=6, leftIndent=4,
+    )
+
+    def outcome_color(o: str):
+        return {
+            "ok": GREEN,
+            "skipped": AMBER,
+            "timeout": RED,
+            "fail": RED,
+        }.get(o, GRAY)
+
+    story: list = []
+
+    # Cover
+    story.append(Paragraph("Virtual NAO Proof Report", s_cover))
+    story.append(Paragraph(
+        "Per-scenario proof: what was asked, what NAO replied, which "
+        "agent handled it, what tools fired, and how many milliseconds "
+        "each phase took.",
+        s_sub,
+    ))
+    story.append(Spacer(1, 0.05 * inch))
+    if run_iso:
+        story.append(Paragraph("<b>Generated:</b> {}".format(run_iso), s_sub))
+    story.append(Paragraph(
+        "<b>Source:</b> <font face='Courier'>"
+        "python -m sim.scenarios all --report</font>",
+        s_sub,
+    ))
+    story.append(Paragraph(
+        "<b>Branch:</b> architecture-rework-v2 &nbsp;&middot;&nbsp; "
+        "<b>Scenarios:</b> {}".format(len(records)),
+        s_sub,
+    ))
+    story.append(Spacer(1, 0.18 * inch))
+
+    # Summary table
+    story.append(Paragraph("Summary", s_h1))
+    table_data: list[list] = [
+        [
+            Paragraph("<b>Scenario</b>", s_body),
+            Paragraph("<b>Prompt</b>", s_body),
+            Paragraph("<b>Agent</b>", s_body),
+            Paragraph("<b>First Audio</b>", s_body),
+            Paragraph("<b>Full Turn</b>", s_body),
+            Paragraph("<b>Outcome</b>", s_body),
+        ]
+    ]
+    for r in records:
+        first = _format_first_audio(r.first_audio_ms, r.outcome)
+        full = r.full_turn_label or "-"
+        table_data.append([
+            Paragraph(r.scenario, s_body),
+            Paragraph(_pdf_escape(r.prompt), s_body),
+            Paragraph(r.routed_agent or "-", s_body),
+            Paragraph(first, s_body),
+            Paragraph(full, s_body),
+            Paragraph(
+                '<font color="#{:02x}{:02x}{:02x}"><b>{}</b></font>'.format(
+                    *_hex_triple(outcome_color(r.outcome)),
+                    r.outcome,
+                ),
+                s_body,
+            ),
+        ])
+    summary_table = Table(
+        table_data,
+        colWidths=[1.4 * inch, 2.0 * inch, 0.9 * inch, 0.95 * inch,
+                   0.95 * inch, 0.7 * inch],
+        repeatRows=1,
+    )
+    summary_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), LIGHT),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LINEBELOW", (0, 0), (-1, -1), 0.25, HexColor("#cccccc")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]))
+    story.append(summary_table)
+    story.append(Spacer(1, 0.2 * inch))
+
+    # Per-scenario detail
+    story.append(Paragraph("Per-scenario detail", s_h1))
+    for r in records:
+        story.append(Paragraph(r.scenario, s_h2))
+        story.append(Paragraph(
+            "<b>Prompt:</b> &nbsp;{}".format(_pdf_escape(r.prompt)), s_body,
+        ))
+        story.append(Paragraph(
+            "<b>STT transcript:</b> &nbsp;<font face='Courier'>{}</font>"
+            .format(_pdf_escape(r.transcript or "-")),
+            s_body,
+        ))
+        story.append(Paragraph(
+            "<b>Routed agent:</b> &nbsp;<font face='Courier'>{}</font>"
+            .format(_pdf_escape(r.routed_agent or "-")),
+            s_body,
+        ))
+        story.append(Paragraph(
+            "<b>Reply text:</b> &nbsp;{}".format(
+                _pdf_escape(r.reply_text or "(none captured)"),
+            ),
+            s_body,
+        ))
+        if r.tools_called:
+            tools = ", ".join(
+                "<font face='Courier'>{}</font>".format(_pdf_escape(t))
+                for t in r.tools_called
+            )
+        else:
+            tools = "<i>none</i>"
+        story.append(Paragraph(
+            "<b>Tools / actions:</b> &nbsp;{}".format(tools),
+            s_body,
+        ))
+        # Latency block
+        first = _format_first_audio(r.first_audio_ms, r.outcome)
+        full = r.full_turn_label or "-"
+        wall = (
+            "{:.0f} ms".format(r.duration_ms)
+            if r.duration_ms is not None else "-"
+        )
+        latency_lines = (
+            "<b>First audio out:</b> {first}"
+            "<br/><b>Full turn:</b> {full}"
+            "<br/><b>Scenario wall-clock:</b> {wall}"
+            "<br/><b>Outcome:</b> "
+            "<font color='#{r:02x}{g:02x}{b:02x}'><b>{outcome}</b></font>"
+        ).format(
+            first=first, full=full, wall=wall, outcome=r.outcome,
+            r=outcome_color(r.outcome).rgb()[0] * 255 // 1 if False else 0,
+            g=0, b=0,
+        )
+        # Use the simpler color path -- rgb() above is hacky for HexColor.
+        oc = outcome_color(r.outcome)
+        latency_lines = (
+            "<b>First audio out:</b> {first}"
+            "<br/><b>Full turn:</b> {full}"
+            "<br/><b>Scenario wall-clock:</b> {wall}"
+            "<br/><b>Outcome:</b> <font color='#{hex}'><b>{outcome}</b></font>"
+        ).format(
+            first=first, full=full, wall=wall, outcome=r.outcome,
+            hex="{:02x}{:02x}{:02x}".format(*_hex_triple(oc)),
+        )
+        story.append(Paragraph("<b>Latency</b>", s_label))
+        story.append(Paragraph(latency_lines, s_body))
+        if r.barged:
+            story.append(Paragraph(
+                "<font color='#{}'><b>Barge-in fired</b></font>: TTS aborted "
+                "mid-stream (server emitted <font face='Courier'>tts_aborted"
+                "</font> after the robot's <font face='Courier'>barge_in"
+                "</font> control frame).".format(
+                    "{:02x}{:02x}{:02x}".format(*_hex_triple(AMBER)),
+                ),
+                s_body,
+            ))
+        # Raw phase timings (compact)
+        primary = _first_real_turn(r.raw_telemetry, r.scenario) or {}
+        phases = []
+        for label in (
+            "vad", "stt", "crisis_check", "motion_trigger",
+            "agent_complete", "tts_synth_first_chunk",
+            "tts_synth_total", "action_dispatch",
+            "e2e_user_to_first_audio", "e2e_user_to_complete",
+        ):
+            v = _phase(primary, label)
+            if v is not None:
+                phases.append("{} = {:.1f} ms".format(label, v))
+        if phases:
+            story.append(Paragraph("<b>Phase timings</b>", s_label))
+            story.append(Preformatted("\n".join(phases), s_code))
+        story.append(Spacer(1, 0.1 * inch))
+
+    # Footer note
+    story.append(PageBreak())
+    story.append(Paragraph("Notes", s_h1))
+    story.append(Paragraph(
+        "All timings above were measured by the in-process simulator harness "
+        "(<font face='Courier'>sim/proof_report.py</font>) running against "
+        "the FastAPI WebSocket server in <font face='Courier'>"
+        "server/app_ws.py</font>. STT and TTS are mocked at the "
+        "<font face='Courier'>install_mocks()</font> seam so timings reflect "
+        "the server-side pipeline overhead minus real network/model latency. "
+        "Live runs against OpenAI APIs should show first-audio in the "
+        "300-800 ms range per the Phase 1 latency budget; the simulator "
+        "remains the deterministic substrate for regression detection.",
+        s_body,
+    ))
+    story.append(Paragraph(
+        "The <b>04_barge_in</b> row's <b>Full Turn = aborted</b> is the "
+        "load-bearing demonstration that the Phase 10.5 barge fix actually "
+        "stops TTS mid-stream rather than letting it run to completion. "
+        "If the abort regressed, that cell would show a normal millisecond "
+        "value (~1.3 s with the test's 300 ms-per-chunk synth delay).",
+        s_body,
+    ))
+
+    doc = SimpleDocTemplate(
+        str(path), pagesize=LETTER,
+        leftMargin=0.7 * inch, rightMargin=0.7 * inch,
+        topMargin=0.6 * inch, bottomMargin=0.6 * inch,
+        title="Virtual NAO Proof Report",
+        author="Aayush Shrestha",
+    )
+
+    def _on_page(canvas, _doc):
+        canvas.saveState()
+        canvas.setFont("Helvetica", 8)
+        canvas.setFillColor(GRAY)
+        canvas.drawString(
+            0.7 * inch, 0.4 * inch,
+            "Nao-OpenAI-Morgan-Assist  ·  proof report",
+        )
+        canvas.drawRightString(
+            LETTER[0] - 0.7 * inch, 0.4 * inch,
+            "page {}".format(_doc.page),
+        )
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=_on_page, onLaterPages=_on_page)
+
+
+def _pdf_escape(s: str) -> str:
+    """Escape characters that would break reportlab's mini-HTML parser."""
+    if s is None:
+        return "-"
+    return (
+        str(s)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+
+def _hex_triple(color: Any) -> tuple[int, int, int]:
+    """Pull (r, g, b) 0-255 from a reportlab HexColor."""
+    try:
+        return (
+            int(round(color.red * 255)),
+            int(round(color.green * 255)),
+            int(round(color.blue * 255)),
+        )
+    except Exception:
+        return (68, 68, 68)  # GRAY fallback
 
 
 # ---------------------------------------------------------------------------

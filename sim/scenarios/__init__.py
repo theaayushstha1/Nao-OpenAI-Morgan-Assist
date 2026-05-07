@@ -191,6 +191,8 @@ def _main(argv: list[str]) -> int:
             print()
             print("proof JSON:     {}".format(paths["json"]))
             print("proof Markdown: {}".format(paths["markdown"]))
+            if paths.get("pdf"):
+                print("proof PDF:      {}".format(paths["pdf"]))
         return rc
 
     rc, rec = _run_one(target, collect=want_report)
@@ -203,6 +205,8 @@ def _main(argv: list[str]) -> int:
             print()
             print("proof JSON:     {}".format(paths["json"]))
             print("proof Markdown: {}".format(paths["markdown"]))
+            if paths.get("pdf"):
+                print("proof PDF:      {}".format(paths["pdf"]))
         except Exception as e:
             print(f"\nproof report write failed — {e!r}")
     return rc
