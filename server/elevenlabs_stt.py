@@ -115,6 +115,180 @@ def transcribe_file(path: str, timeout_s: float = 30.0) -> str:
             loop.close()
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Per-session streaming STT — long-lived WS, fed PCM frames live
+# ──────────────────────────────────────────────────────────────────────────
+
+
+class StreamingSttSession:
+    """Holds one open ElevenLabs Scribe Realtime WS for the lifetime of
+    a NAO session. The WS handler feeds PCM frames as they arrive; a
+    background receiver task collects partial + final transcripts.
+
+    Public methods (all async unless noted):
+        open(sample_rate=16000, language="en")    — connect once
+        feed(pcm_bytes)                            — forward one chunk
+        signal_eou()                               — send end_of_audio
+        await_final(timeout_s=1.5) -> str | None   — wait for final
+        reset()                                    — between turns
+        close()                                    — at session_close
+
+    State exposed (read-only):
+        latest_partial    — most recent partial transcript text
+        first_partial_ms  — ms from first PCM in to first partial event
+        final_ms          — ms from signal_eou() to final-transcript event
+        opened            — True once WS connect succeeded
+        error             — last error string, or None
+    """
+
+    def __init__(self):
+        self._ws = None
+        self._recv_task: asyncio.Task | None = None
+        self._final_event = asyncio.Event()
+        self._final_text: str = ""
+        self.latest_partial: str = ""
+        self.first_partial_ms: float | None = None
+        self.final_ms: float | None = None
+        self._t_first_audio: float | None = None
+        self._t_eou: float | None = None
+        self.opened: bool = False
+        self.error: str | None = None
+        self._lang: str = "en"
+        self._rate: int = 16000
+
+    async def open(self, sample_rate: int = 16000,
+                    language: str = "en") -> bool:
+        """Open the EL Scribe WS. Returns True on success."""
+        if not is_available():
+            self.error = "EL_STT_unavailable"
+            return False
+        api_key = config.ELEVENLABS_API_KEY
+        model = getattr(config, "ELEVENLABS_STT_MODEL", "scribe_v2_realtime")
+        self._rate = sample_rate
+        self._lang = language
+
+        url = (
+            "wss://api.elevenlabs.io/v1/speech-to-text/stream"
+            f"?model_id={model}"
+            f"&language_code={language}"
+            f"&sample_rate={sample_rate}"
+            "&encoding=pcm_s16le"
+        )
+        headers = [("xi-api-key", api_key)]
+        try:
+            import websockets  # type: ignore
+        except ImportError:
+            self.error = "websockets_missing"
+            return False
+        try:
+            try:
+                self._ws = await websockets.connect(
+                    url, additional_headers=headers, ping_interval=20,
+                )
+            except TypeError:
+                self._ws = await websockets.connect(
+                    url, extra_headers=headers, ping_interval=20,
+                )
+        except Exception as e:  # noqa: BLE001
+            self.error = f"connect_failed: {e!r}"
+            return False
+
+        self.opened = True
+        self._recv_task = asyncio.create_task(self._recv_loop())
+        return True
+
+    async def _recv_loop(self):
+        """Background receiver. Updates partial / final state."""
+        ws = self._ws
+        if ws is None:
+            return
+        try:
+            async for raw in ws:
+                if isinstance(raw, bytes):
+                    continue
+                try:
+                    msg = json.loads(raw)
+                except Exception:
+                    continue
+                mtype = msg.get("type") or msg.get("event") or ""
+                text = (
+                    msg.get("text") or msg.get("transcript")
+                    or msg.get("delta") or ""
+                )
+                if not text:
+                    continue
+                is_final = bool(
+                    msg.get("is_final")
+                    or "final" in mtype.lower()
+                    or msg.get("type") == "transcript_final"
+                )
+                if self.first_partial_ms is None and self._t_first_audio:
+                    self.first_partial_ms = round(
+                        (time.perf_counter() - self._t_first_audio) * 1000.0, 1
+                    )
+                if is_final:
+                    self._final_text = (self._final_text + " " + text).strip()
+                    if self._t_eou:
+                        self.final_ms = round(
+                            (time.perf_counter() - self._t_eou) * 1000.0, 1
+                        )
+                    self._final_event.set()
+                else:
+                    self.latest_partial = text
+        except Exception as e:  # noqa: BLE001
+            self.error = f"recv_error: {e!r}"
+
+    async def feed(self, pcm_bytes: bytes) -> None:
+        """Forward one PCM chunk to the EL WS. Silent no-op if not open."""
+        if not self.opened or self._ws is None:
+            return
+        if self._t_first_audio is None:
+            self._t_first_audio = time.perf_counter()
+        try:
+            await self._ws.send(pcm_bytes)
+        except Exception as e:  # noqa: BLE001
+            self.error = f"send_error: {e!r}"
+
+    async def signal_eou(self) -> None:
+        """Send end_of_audio so EL emits a final event on the buffered audio."""
+        if not self.opened or self._ws is None:
+            return
+        self._t_eou = time.perf_counter()
+        try:
+            await self._ws.send(json.dumps({"type": "end_of_audio"}))
+        except Exception as e:  # noqa: BLE001
+            self.error = f"eou_error: {e!r}"
+
+    async def await_final(self, timeout_s: float = 1.5) -> str | None:
+        """Wait up to ``timeout_s`` for a final transcript. Returns None
+        on timeout so the caller can fall back to legacy STT."""
+        try:
+            await asyncio.wait_for(self._final_event.wait(),
+                                     timeout=timeout_s)
+            return self._final_text
+        except asyncio.TimeoutError:
+            return None
+
+    async def reset(self) -> None:
+        """Clear per-turn state for the next utterance."""
+        self._final_event.clear()
+        self._final_text = ""
+        self.latest_partial = ""
+        self.first_partial_ms = None
+        self.final_ms = None
+        self._t_first_audio = None
+        self._t_eou = None
+
+    async def close(self) -> None:
+        try:
+            if self._ws is not None:
+                await self._ws.close()
+        except Exception:
+            pass
+        if self._recv_task is not None:
+            self._recv_task.cancel()
+
+
 async def transcribe_stream(pcm_iter: AsyncIterator[bytes],
                               sample_rate: int = 16000,
                               language: str = "en"

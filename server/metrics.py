@@ -111,6 +111,10 @@ ALLOWED_PHASES: frozenset[str] = frozenset({
     "wake_to_engaged",          # E2E sub-window: wake -> engaged state
     "engaged_to_first_audio",   # E2E sub-window: engaged -> first TTS audio
     "wake_to_first_audio",      # E2E sub-window: wake -> first TTS audio
+    # -- Phase 11.10 — streaming STT (ElevenLabs Scribe Realtime) --
+    "stt_first_partial",        # ms from first PCM frame to first partial
+    "stt_final",                # ms from end_of_audio signal to final transcript
+    "camera_announce_synth",    # Phase 6 — first-turn announce TTS
 })
 
 # Bucket edges in milliseconds. The last bucket (+Inf) is automatic.

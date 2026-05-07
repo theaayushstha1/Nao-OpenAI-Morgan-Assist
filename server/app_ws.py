@@ -897,6 +897,8 @@ class _Session:
         # on every back-and-forth turn; refresh on first turn, every
         # ~45 s, on visual-trigger phrases, or after agent handoff.
         "_cached_vision", "_cached_vision_at_ms", "_therapy_turn_count",
+        # Phase 11.10 — per-session streaming STT (ElevenLabs Scribe Realtime).
+        "_streaming_stt",
     )
 
     def __init__(self, username: str) -> None:
@@ -950,6 +952,11 @@ class _Session:
         self._cached_vision: dict | None = None
         self._cached_vision_at_ms: float = 0.0
         self._therapy_turn_count: int = 0
+        # Phase 11.10 — streaming STT (ElevenLabs Scribe Realtime).
+        # Per-session WS that receives PCM frames as they arrive and
+        # emits partial + final transcripts. Used in place of the
+        # buffer-then-upload Whisper/Deepgram path when configured.
+        self._streaming_stt: Any | None = None
 
     def reset_turn(self) -> None:
         self.audio_buf = bytearray()
@@ -1637,8 +1644,57 @@ async def _process_turn(ws: WebSocket, sess: _Session) -> None:
                 ))
                 return
 
-        with _phase("stt", phase_ms):
-            transcript = await asyncio.to_thread(legacy.transcribe, wav_path)
+        # Phase 11.10 — prefer the streaming STT's final transcript when
+        # available. We've been forwarding live PCM into ElevenLabs Scribe
+        # the whole time the user was talking, so by now the model usually
+        # has already emitted partials and is just waiting for end_of_audio.
+        # Send EoU and wait briefly for the final event; on timeout / no
+        # streaming session, fall back to the legacy WAV-then-Whisper path.
+        stt_streaming = getattr(sess, "_streaming_stt", None)
+        transcript = ""
+        used_streaming = False
+        if stt_streaming is not None and stt_streaming.opened:
+            with _phase("stt", phase_ms):
+                try:
+                    await stt_streaming.signal_eou()
+                    final = await stt_streaming.await_final(timeout_s=1.5)
+                except Exception as exc:  # noqa: BLE001
+                    final = None
+                    logger.warning(
+                        "stt_streaming_finalize_error",
+                        user=sess.username, error=repr(exc),
+                    )
+            if final:
+                transcript = final
+                used_streaming = True
+                if stt_streaming.first_partial_ms is not None:
+                    phase_ms["stt_first_partial"] = stt_streaming.first_partial_ms
+                if stt_streaming.final_ms is not None:
+                    phase_ms["stt_final"] = stt_streaming.final_ms
+                logger.info(
+                    "stt_streaming_final",
+                    user=sess.username, session_id=sess.session_id,
+                    transcript=transcript[:200],
+                    first_partial_ms=stt_streaming.first_partial_ms,
+                    final_ms=stt_streaming.final_ms,
+                )
+            # Reset for the next turn regardless of outcome.
+            try:
+                await stt_streaming.reset()
+            except Exception:
+                pass
+
+        if not used_streaming:
+            # Legacy buffer-then-upload path (Whisper or Deepgram).
+            with _phase("stt", phase_ms):
+                transcript = await asyncio.to_thread(
+                    legacy.transcribe, wav_path,
+                )
+            logger.info(
+                "stt_legacy",
+                user=sess.username, session_id=sess.session_id,
+                transcript=(transcript or "")[:200],
+            )
     finally:
         if wav_path:
             try:
@@ -1857,6 +1913,21 @@ async def _ingest_frame(ws: WebSocket, sess: _Session,
                 user=sess.username, error=repr(e),
             )
             return True
+
+        # Phase 11.10 — also forward the PCM to the streaming STT WS
+        # if it's open. We keep buffering into sess.audio_buf for the
+        # legacy fallback path; double-feeding both is cheap (one is
+        # in-memory bytearray append, the other is one ws.send()) and
+        # gives us a clean automatic fallback if EL fails mid-turn.
+        stt_streaming = getattr(sess, "_streaming_stt", None)
+        if stt_streaming is not None and stt_streaming.opened:
+            try:
+                await stt_streaming.feed(pcm)
+            except Exception as exc:  # noqa: BLE001 — never block legacy
+                logger.warning(
+                    "stt_streaming_feed_error",
+                    user=sess.username, error=repr(exc),
+                )
 
         # First chunk of a new utterance: stamp the start time and (re)build
         # the streaming silero. We rebuild on each fresh utterance instead of
@@ -2304,6 +2375,34 @@ async def _ingest_control(ws: WebSocket, sess: _Session,
             user=sess.username, session_id=sess.session_id,
             face_id=sess.face_id, hint=sess.hint,
         )
+        # Phase 11.10 — open the ElevenLabs Scribe Realtime STT WS for
+        # this session if the feature flag is set. Live mic frames will
+        # be forwarded into it from the audio_chunk handler. Falls back
+        # to legacy buffer-then-upload STT if open fails or the EL plan
+        # doesn't include Scribe (gated on USE_ELEVENLABS_STT).
+        try:
+            from server import elevenlabs_stt as _el_stt
+            if _el_stt.is_available():
+                stt_sess = _el_stt.StreamingSttSession()
+                ok = await stt_sess.open(sample_rate=16000, language="en")
+                if ok:
+                    sess._streaming_stt = stt_sess  # type: ignore[attr-defined]
+                    logger.info(
+                        "stt_streaming_opened",
+                        user=sess.username, session_id=sess.session_id,
+                        provider="elevenlabs_scribe",
+                    )
+                else:
+                    logger.warning(
+                        "stt_streaming_open_failed",
+                        user=sess.username, session_id=sess.session_id,
+                        error=stt_sess.error,
+                    )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "stt_streaming_init_error",
+                user=sess.username, error=repr(exc),
+            )
         # Phase 7 — Robot-Side Brain cache sync. The robot announces its
         # current ``brain_version`` in the handshake; if the server has
         # newer data for this face_id, push it back as a ``brain_sync``
@@ -2331,6 +2430,14 @@ async def _ingest_control(ws: WebSocket, sess: _Session,
             _session.forget_session(sess.session_id)
         except Exception:  # noqa: BLE001 — best-effort cleanup
             pass
+        # Phase 11.10 — close the streaming STT WS for this session.
+        stt_streaming = getattr(sess, "_streaming_stt", None)
+        if stt_streaming is not None:
+            try:
+                await stt_streaming.close()
+            except Exception:
+                pass
+            sess._streaming_stt = None  # type: ignore[attr-defined]
         await _send_json(ws, _control_frame(
             "session_end", session_id=sess.session_id,
         ))
