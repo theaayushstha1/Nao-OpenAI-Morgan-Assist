@@ -385,12 +385,29 @@ def _build_user_message(transcript: str, image_b64: str | None,
     if isinstance(vision_observation, dict):
         status = vision_observation.get("vision_status") or "skipped"
         summary = (vision_observation.get("vision_summary") or "").strip()
+        cached = bool(vision_observation.get("vision_cached"))
+        age_ms = vision_observation.get("vision_age_ms")
         if status == "success" and summary:
+            cache_note = ""
+            if cached:
+                age_s = (age_ms or 0) / 1000.0
+                cache_note = (
+                    " vision_cached=true vision_age_s=" + f"{age_s:.0f}"
+                )
             vision_prefix = (
-                "[NAO_VISION vision_status=success vision_summary=\""
+                "[NAO_VISION vision_status=success" + cache_note
+                + " vision_summary=\""
                 + summary.replace("\"", "'") + "\"]\n"
-                "(Server-side vision observation. You MAY reference these "
-                "details in your reply per the prompt's Rule 0.)\n"
+                "(Server-side vision observation"
+                + (
+                    " from " + f"{(age_ms or 0)/1000.0:.0f}"
+                    + " seconds ago — still safe to reference; "
+                      "if user has visibly shifted, lead with current emotion "
+                      "instead of contradicted details."
+                    if cached else ""
+                )
+                + ". You MAY reference these details in your reply per "
+                  "the prompt's Rule 0.)\n"
             )
         else:
             vision_prefix = (
