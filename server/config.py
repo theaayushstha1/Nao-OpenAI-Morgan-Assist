@@ -132,3 +132,20 @@ WS_RECONNECT_BACKOFF_MS = [
     ).split(",")
     if x.strip()
 ]
+
+# ───────── Phase 5 (PRD v2): CS Navigator integration ─────────
+# Replaces the in-tree Pinecone/Vertex RAG with a thin HTTP proxy that calls
+# the operator's deployed Cloud Run FastAPI ("CS Navigator") for any Morgan
+# State CS knowledge query. See docs/PHASE_5_TASK_MAP.md for the contract.
+#
+# CS_NAVIGATOR_URL — Cloud Run base URL, no trailing slash. Empty string
+#                    means the chatbot agent will short-circuit and apologize.
+# CS_NAVIGATOR_TOKEN — optional bearer token. When empty the tool POSTs to
+#                    `/chat/guest`; when set it POSTs to `/chat/stream` with
+#                    `Authorization: Bearer <TOKEN>`.
+# CS_NAVIGATOR_TIMEOUT_S — request timeout (seconds). Float so tests can
+#                    bypass with sub-second values; production stays at 30 s
+#                    to absorb cold starts on the Cloud Run side.
+CS_NAVIGATOR_URL = os.environ.get("CS_NAVIGATOR_URL", "")
+CS_NAVIGATOR_TOKEN = os.environ.get("CS_NAVIGATOR_TOKEN", "")
+CS_NAVIGATOR_TIMEOUT_S = float(os.environ.get("CS_NAVIGATOR_TIMEOUT_S", "30"))
