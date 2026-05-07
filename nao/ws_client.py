@@ -10,11 +10,32 @@ Frame envelope and field names are pinned to ``docs/PHASE_1_TASK_MAP.md``.
 The server (``server/app_ws.py``) parses these strictly; do not rename keys
 without coordinating with the ``fastapi-app`` agent.
 
+Phase 7 — Robot-Side Brain handshake (``docs/PHASE_7_TASK_MAP.md``):
+
+* ``session_open`` now carries an optional ``brain_summary`` field built
+  from ``brain_cache.summary()`` (face_id_count, version,
+  last_seen_iso_per_face, brain_size_bytes). The server uses it to decide
+  whether to ship a ``brain_sync`` delta back. If the cache implementation
+  does not yet expose ``summary()``, the field is omitted — backwards
+  compatible with the Phase 1 handshake.
+* Inbound ``control { subtype: "brain_sync" }`` frames carry a
+  ``data.updates`` dict that we forward to ``brain_cache.apply_updates``
+  and persist via ``brain_cache.save``. The save is dispatched on a
+  daemon thread so the receiver loop is never blocked on disk I/O.
+* ``_handle_brain_sync`` routes the frame; both ``apply_updates`` and
+  ``save`` failures are logged and swallowed so a corrupt push cannot
+  kill the WS session.
+
 Counterparts (sibling agents in Phase 1):
     nao.audio_module.NaoAudioStreamer     ALModule mic streamer + gate
     nao.stream_tts.StreamTtsPlayer        sentence-chunk MP3 player
     nao.utils.nao_execute.run             body action dispatcher
     nao.logger.get_logger                 rotating JSONL structured log
+
+Counterparts (Phase 7 sibling agents):
+    nao.utils.brain.BrainCache            ``summary``/``apply_updates``/``save``
+    server.app_ws                         emits ``brain_sync`` after session_open
+    server.session.pull_brain_updates     builds the delta payload
 """
 from __future__ import print_function
 
@@ -356,6 +377,8 @@ class NaoWsClient(object):
             self._on_tts_ended(data)
         elif sub == "crisis_lock":
             self._on_crisis_lock(data)
+        elif sub == "brain_sync":
+            self._handle_brain_sync(data)
         elif sub == "transcript":
             # Transcript is for client-side logging only. Phase 1 keeps the
             # robot dumb about transcript content; future phases (3, 8) can
@@ -371,6 +394,92 @@ class NaoWsClient(object):
                                               if k in data})
         else:
             self.log.warn("control_subtype_unknown", subtype=sub)
+
+    # --- Phase 7: brain_sync push handler -----------------------------
+    def _handle_brain_sync(self, data):
+        """Apply a server-pushed brain delta and persist it asynchronously.
+
+        Frame shape (server -> client):
+            { "type": "control", "subtype": "brain_sync",
+              "data": { "updates": { "users": {...},
+                                     "system_prompt_fragments": {...} } } }
+
+        The server emits this right after ``session_open`` when its
+        view of a face is newer than the robot's ``brain_version`` /
+        ``brain_summary``. We forward ``data["updates"]`` to
+        ``brain_cache.apply_updates`` and then ``brain_cache.save`` on a
+        daemon thread so disk I/O never stalls the receiver loop. Both
+        steps are wrapped: a malformed push must not kill the WS session.
+        """
+        cache = self.brain_cache
+        if cache is None:
+            self.log.warn("brain_sync_dropped", reason="no_cache")
+            return
+        updates = None
+        if isinstance(data, dict):
+            updates = data.get("updates")
+        if not isinstance(updates, dict):
+            self.log.warn("brain_sync_bad_payload",
+                          got_type=type(updates).__name__)
+            return
+
+        apply_fn = getattr(cache, "apply_updates", None)
+        if not callable(apply_fn):
+            self.log.warn("brain_sync_unsupported",
+                          reason="cache.apply_updates not callable")
+            return
+
+        try:
+            apply_fn(updates)
+        except Exception as exc:
+            # Apply failure is recoverable — the cache is responsible for
+            # rejecting bad input cleanly. Log and skip the save so we
+            # don't persist a half-applied state.
+            self.log.error("brain_apply_updates_failed", error=str(exc))
+            return
+
+        users_count = 0
+        try:
+            users = updates.get("users")
+            if isinstance(users, dict):
+                users_count = len(users)
+        except Exception:
+            users_count = 0
+        has_fragments = isinstance(updates.get("system_prompt_fragments"),
+                                   dict)
+        self.log.info("brain_sync_applied",
+                      users=users_count,
+                      fragments=has_fragments)
+
+        # Save in the background so receiver-thread latency stays low.
+        # The cache is expected to do its own atomic write (temp + rename)
+        # so a crash mid-save doesn't corrupt the JSON on disk.
+        save_fn = getattr(cache, "save", None)
+        if not callable(save_fn):
+            self.log.debug("brain_sync_save_skipped",
+                           reason="cache.save not callable")
+            return
+        try:
+            saver = threading.Thread(
+                target=self._brain_save_worker,
+                args=(save_fn,),
+                name="nao-brain-save")
+            saver.daemon = True
+            saver.start()
+        except Exception as exc:
+            # Couldn't spin a thread (resource exhaustion, etc) — fall
+            # back to a synchronous save. Worst case we eat a few ms of
+            # disk latency on this frame; better than dropping the write.
+            self.log.warn("brain_save_thread_failed", error=str(exc))
+            self._brain_save_worker(save_fn)
+
+    def _brain_save_worker(self, save_fn):
+        try:
+            save_fn()
+        except Exception as exc:
+            self.log.error("brain_save_failed", error=str(exc))
+        else:
+            self.log.debug("brain_saved")
 
     # --- TTS gating: close mic on start, reopen on end + grace ---
     def _on_tts_started(self, data):
@@ -661,16 +770,46 @@ class NaoWsClient(object):
             "brain_version": brain_version,
             "hint": self.hint,
         }
-        # Optional: include a brain summary so server can decide if we
-        # need a sync delta. brain_cache.summary() is added in Phase 7;
-        # tolerate its absence.
+        # Phase 7: include a small brain summary so the server can decide
+        # whether to push a brain_sync delta. The cache impl owns the
+        # exact shape (face_id_count, version, last_seen_iso_per_face,
+        # brain_size_bytes — see docs/PHASE_7_TASK_MAP.md). Tolerate caches
+        # that don't (yet) expose summary() — older robots will simply
+        # skip the field and the server will treat them as unknown.
+        summary = self._brain_summary()
+        if summary is not None:
+            data["brain_summary"] = summary
+        return self._send_json(ws, _control_frame("session_open", data))
+
+    def _brain_summary(self):
+        """Best-effort fetch of ``brain_cache.summary()``.
+
+        Returns the dict on success, ``None`` if the cache is missing,
+        the method is not yet implemented, or the call raises. Never
+        propagates: a flaky summary must not block session_open.
+        """
+        cache = self.brain_cache
+        if cache is None:
+            return None
+        summary_fn = getattr(cache, "summary", None)
+        if not callable(summary_fn):
+            self.log.debug("brain_summary_unavailable",
+                           reason="cache.summary not callable")
+            return None
         try:
-            summary = self.brain_cache.summary() if self.brain_cache is not None else None
-            if summary is not None:
-                data["brain_summary"] = summary
+            summary = summary_fn()
         except Exception as exc:
             self.log.debug("brain_summary_unavailable", error=str(exc))
-        return self._send_json(ws, _control_frame("session_open", data))
+            return None
+        if summary is None:
+            return None
+        if not isinstance(summary, dict):
+            # Defensive: anything non-dict can't be JSON-encoded as an
+            # object and the server contract expects a mapping.
+            self.log.warn("brain_summary_bad_type",
+                          got_type=type(summary).__name__)
+            return None
+        return summary
 
     def _cache_get(self, key, default=None):
         cache = self.brain_cache
