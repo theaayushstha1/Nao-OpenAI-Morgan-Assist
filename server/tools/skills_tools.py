@@ -9,6 +9,8 @@ import requests
 
 from agents import RunContextWrapper, function_tool
 
+from server import session
+
 _NY = ZoneInfo("America/New_York")
 _BALT_LAT, _BALT_LON = 39.2904, -76.6122
 
@@ -127,3 +129,47 @@ def _complete_todo_impl(store: dict, todo_id: int) -> str:
 def complete_todo(ctx: RunContextWrapper, todo_id: int) -> str:
     """Mark a todo complete by id."""
     return _complete_todo_impl(_unwrap(ctx), todo_id)
+
+
+# ────── camera consent ──────
+# Tool path for "stop watching me" / "you can watch me again" when the regex
+# in motion_trigger.py didn't fire but the LLM still understood the intent.
+# Both paths converge on session.set_camera_consent(...) so the persisted
+# state is identical regardless of which one wins the turn.
+#
+# Server-side handler note: the WebSocket path (app_ws.py — out of scope here)
+# is responsible for emitting a `control { subtype: "camera_state",
+# data: {enabled: <bool>} }` frame so the client UI flips immediately. The
+# `camera-consent` agent owns the first-turn announce; these tools cover
+# mid-conversation toggles.
+
+def _disable_camera_impl(ctx) -> str:
+    store = _unwrap(ctx)
+    username = store.get("username", "guest")
+    session.set_camera_consent(username, False)
+    store["suppress_image"] = True
+    return "camera disabled"
+
+
+def _enable_camera_impl(ctx) -> str:
+    store = _unwrap(ctx)
+    username = store.get("username", "guest")
+    session.set_camera_consent(username, True)
+    store["suppress_image"] = False
+    return "camera enabled"
+
+
+@function_tool
+def disable_camera(ctx: RunContextWrapper) -> str:
+    """Turn off the camera for this user. Persists across sessions until
+    re-enabled. Use when the user asks NAO to stop watching, looking, or
+    recording (e.g. "stop watching me", "turn off the camera")."""
+    return _disable_camera_impl(ctx)
+
+
+@function_tool
+def enable_camera(ctx: RunContextWrapper) -> str:
+    """Turn the camera back on for this user. Use when the user explicitly
+    invites NAO to watch again (e.g. "you can watch me again", "turn the
+    camera on")."""
+    return _enable_camera_impl(ctx)
