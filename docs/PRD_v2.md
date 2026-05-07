@@ -1,3 +1,10 @@
+<!--
+title: PRD v2 — From Vessel to Brain
+tags: [prd, architecture, planning, sage-cbt]
+related: [DECISIONS, spike_results, PHASE_1_TASK_MAP, PHASE_3_TASK_MAP, PHASE_4_TASK_MAP, PHASE_6_TASK_MAP, PHASE_9_TASK_MAP]
+status: shipped
+-->
+
 # PRD: NAO Morgan Assist v2 — From Vessel to Brain
 
 > Branch: `dev/architecture-rework` (off `main` @ `f606534`)

@@ -1,3 +1,11 @@
+<!--
+title: Phase 6 — Task Map & Contracts
+tags: [phase-6, task-map, vision, camera-consent, privacy, gpt4o]
+related: [DECISIONS, PRD_v2, PHASE_5_TASK_MAP, PHASE_7_TASK_MAP]
+phase: "6"
+status: shipped
+-->
+
 # Phase 6 — Task Map & Contracts
 
 > **Therapist Vision-On.** Default camera consent ON, debug the broken observe_face vision call, add visible green-LED capture cue, "stop watching me" pattern-trigger, first-turn audible heads-up.

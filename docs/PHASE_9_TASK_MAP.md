@@ -1,3 +1,11 @@
+<!--
+title: Phase 9 — Task Map & Contracts
+tags: [phase-9, task-map, testing, prometheus, grafana, observability]
+related: [DECISIONS, PRD_v2, PHASE_1_TASK_MAP]
+phase: "9"
+status: shipped
+-->
+
 # Phase 9 — Task Map & Contracts (FINAL)
 
 > **Test Hardening + Dashboards.** Whitelist all phase labels that prior phases deferred. Build a Grafana dashboard. Add concurrent-user tests, motion_trigger unit tests, extend the WS smoke test. Final stretch.

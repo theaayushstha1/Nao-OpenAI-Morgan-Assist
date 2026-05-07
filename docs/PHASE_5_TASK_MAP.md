@@ -1,3 +1,11 @@
+<!--
+title: Phase 5 — Task Map & Contracts
+tags: [phase-5, task-map, rag, cs-navigator, cloud-run, knowledge]
+related: [DECISIONS, PRD_v2, PHASE_4_TASK_MAP, PHASE_6_TASK_MAP]
+phase: "5"
+status: shipped
+-->
+
 # Phase 5 — Task Map & Contracts
 
 > **CS Navigator Integration.** Replace Pinecone with the operator's existing deployed Cloud Run FastAPI at `/Users/theaayushstha/Projects/cs chatbot/cs-chatbot`. The CS Navigator backend exposes `POST /chat`, `POST /chat/stream` (auth), and `POST /chat/guest` (no-auth). We delete the Pinecone tool, add a thin streaming HTTP proxy tool, rewire the chatbot agent.

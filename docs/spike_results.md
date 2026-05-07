@@ -1,3 +1,11 @@
+<!--
+title: Phase 0.5 — Transport Spike Results
+tags: [spike, benchmark, transport, websocket, realtime-api]
+related: [DECISIONS, PRD_v2, PHASE_1_TASK_MAP]
+status: shipped
+phase: "0.5"
+-->
+
 # Phase 0.5 — Spike Results
 
 > Drafted: 2026-05-06 alongside Phase 1 transport work.

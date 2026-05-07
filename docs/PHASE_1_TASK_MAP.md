@@ -1,3 +1,11 @@
+<!--
+title: Phase 1 — Task Map & Contracts
+tags: [phase-1, task-map, transport, websocket, fastapi, observability]
+related: [DECISIONS, PRD_v2, spike_results, PHASE_2_TASK_MAP]
+phase: "1"
+status: shipped
+-->
+
 # Phase 1 — Task Map & Contracts
 
 > **For all parallel agents working Phase 1.** Read this BEFORE writing any code. The PRD is at `docs/PRD_v2.md`. This file defines the **shared contracts** — frame envelopes, file ownership, env vars, log shape — so 9 agents can fan out without stepping on each other.

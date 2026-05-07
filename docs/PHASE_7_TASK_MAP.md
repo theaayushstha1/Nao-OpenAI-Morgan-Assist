@@ -1,3 +1,11 @@
+<!--
+title: Phase 7 — Task Map & Contracts
+tags: [phase-7, task-map, brain-cache, offline, sync, identity]
+related: [DECISIONS, PRD_v2, PHASE_6_TASK_MAP, PHASE_8_TASK_MAP]
+phase: "7"
+status: shipped
+-->
+
 # Phase 7 — Task Map & Contracts
 
 > **Robot-Side Brain (identity & preferences cache, NOT a knowledge base).** Extends `user_cache.py`. Capped at 64 KB. Knowledge stays on CS Navigator API. Robot can do limited offline (presence + greeting) when WS fails.

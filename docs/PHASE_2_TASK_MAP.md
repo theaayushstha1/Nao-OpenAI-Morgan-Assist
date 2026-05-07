@@ -1,3 +1,11 @@
+<!--
+title: Phase 2 — Task Map & Contracts
+tags: [phase-2, task-map, vad, echo-guard, silero, mic-lifecycle]
+related: [DECISIONS, PRD_v2, PHASE_1_TASK_MAP, PHASE_3_TASK_MAP]
+phase: "2"
+status: shipped
+-->
+
 # Phase 2 — Task Map & Contracts
 
 > **VAD + Echo Hardening.** Builds on Phase 1's WS transport. The Phase 1 audio gate (`ALAudioDevice.unsubscribe`) is already in. Phase 2 tunes VAD for noisy rooms, strengthens echo, and adds an end-of-utterance arbiter that combines robot + server signals.

@@ -1,3 +1,11 @@
+<!--
+title: Phase 3 — Task Map & Contracts
+tags: [phase-3, task-map, wake, face-detection, state-machine, leds]
+related: [DECISIONS, PRD_v2, PHASE_4_TASK_MAP, PHASE_8_TASK_MAP]
+phase: "3"
+status: shipped
+-->
+
 # Phase 3 — Task Map & Contracts
 
 > **Hybrid Wake: Face-First with Word Fallback.** Builds on Phase 1 transport + Phase 2 VAD. Replaces wake-word-only with passive face detection that wakes on engagement signals (gaze, proximity, sustained face, speech, or keyword fallback).

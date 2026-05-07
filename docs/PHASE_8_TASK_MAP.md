@@ -1,3 +1,11 @@
+<!--
+title: Phase 8 — Task Map & Contracts
+tags: [phase-8, task-map, onboarding, face-learn, hri]
+related: [DECISIONS, PRD_v2, PHASE_3_TASK_MAP, PHASE_7_TASK_MAP]
+phase: "8"
+status: shipped
+-->
+
 # Phase 8 — Task Map & Contracts
 
 > **Onboarding Polish.** Apply HRI research findings. Replace "say chat mode / therapy / skills" with content-inferred mode + minimal name onboarding. Multi-person disambiguation.

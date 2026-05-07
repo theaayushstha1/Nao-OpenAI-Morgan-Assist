@@ -1,3 +1,11 @@
+<!--
+title: Phase 4 — Task Map & Contracts
+tags: [phase-4, task-map, embodiment, gestures, sound-localization, motors]
+related: [DECISIONS, PRD_v2, PHASE_3_TASK_MAP, PHASE_5_TASK_MAP]
+phase: "4"
+status: shipped
+-->
+
 # Phase 4 — Task Map & Contracts
 
 > **Active Embodiment.** Sound-source localization (head turns toward speaker), per-turn body-language gestures, idle breathing/gaze. Vessel → brain.

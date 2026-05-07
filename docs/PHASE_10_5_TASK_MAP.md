@@ -1,3 +1,11 @@
+<!--
+title: Phase 10.5 — Task Map & Contracts
+tags: [phase-10-5, task-map, simulator, proof-report, benchmark, sim]
+related: [DECISIONS, PRD_v2, PHASE_9_TASK_MAP]
+phase: "10.5"
+status: shipped
+-->
+
 # Phase 10.5 — Task Map & Contracts
 
 > **Virtual NAO simulator.** Drives the entire voice pipeline (mic → WS → server → TTS → speaker) from a Mac, without the physical robot. Replaces nothing on the robot side. Lives entirely under `sim/`. Used to stabilize the rework while NAO is unavailable, and as the substrate that makes Phase 10 fixes verifiable.
