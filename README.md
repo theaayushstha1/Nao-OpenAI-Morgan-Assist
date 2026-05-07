@@ -25,10 +25,10 @@
 
 ---
 
-> ## v2 Architectural Rework — `dev/architecture-rework`
+> ## v2 Architectural Rework — [`architecture-rework-v2`](https://github.com/theaayushstha1/Nao-OpenAI-Morgan-Assist/tree/architecture-rework-v2)
 >
 > This README documents `main`. A coordinated **v2 rework** lives on the
-> `dev/architecture-rework` branch and replaces the Flask transport with FastAPI +
+> [`architecture-rework-v2`](https://github.com/theaayushstha1/Nao-OpenAI-Morgan-Assist/tree/architecture-rework-v2) branch and replaces the Flask transport with FastAPI +
 > WebSocket, adds face-driven hybrid wake (no more "hey nao chat mode"), per-turn
 > body-language gestures, sound-source localization, a CS Navigator API integration
 > (Cloud Run, replaces Pinecone), default-on therapist vision with privacy LED,
@@ -45,7 +45,7 @@
 >
 > **Headline changes vs main:**
 >
-> | | main | dev/architecture-rework |
+> | | main | architecture-rework-v2 |
 > |---|---|---|
 > | Transport | Flask `POST /turn` + SSE | FastAPI `WS /ws/{username}` |
 > | Wake | `"hey nao"` keyword | Face-first hybrid (gaze, proximity, sustained face, speech, keyword fallback) |
