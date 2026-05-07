@@ -1182,53 +1182,143 @@ async def _emit_agent_turn(ws: WebSocket, sess: _Session,
         vision_summary=(vision_observation.get("vision_summary") or "")[:200],
     )
 
-    with _phase("agent_complete", phase_ms):
-        # `run_topology` is sync (calls asyncio.run inside) — keep it off the
-        # event loop so we can keep handling incoming frames (barge-in).
-        # Pass image_b64=None: vision already ran server-side and the result
-        # is now injected via vision_observation. Sending the bytes again
-        # would just waste tokens on a duplicate input_image attachment.
-        reply, active_agent, actions, suppress_image = await asyncio.to_thread(
-            legacy.run_agent,
-            sess.username, sess.hint, transcript, None,
-            vision_observation,
-        )
+    # Phase 11.5 — TRUE STREAMING. Drive the agent in streaming mode so
+    # token deltas flow through a sentence chunker → parallel TTS synth.
+    # We emit audio_chunk frames as soon as each sentence's MP3 is ready,
+    # without waiting for the full reply. Crisis check ALREADY ran (it's
+    # in _process_turn upstream of here), so it's safe to start TTS.
+    #
+    # The legacy synchronous path remains as a fallback if the topology
+    # is non-passthrough (debate / supervisor_veto / shared_pool need
+    # multiple full Runner.run calls and can't stream). Detected on the
+    # fly: if the streamer yields a `done` event with no preceding
+    # `delta` events, we treat it as the sync fallback.
 
-    # Drain actions BEFORE the first audio chunk so the robot can prep
-    # body movement during speech.
-    with _phase("action_dispatch", phase_ms):
-        for action in actions:
-            name = action.get("name") if isinstance(action, dict) else None
-            if not name:
-                continue
-            args = action.get("args") if isinstance(action, dict) else None
-            await _send_json(ws, _action_frame(name, args or {}))
+    # Reset the per-user reply-chunk window before any TTS — the echo
+    # guard reads from this buffer and stale state from a prior turn
+    # would create false rejections.
+    _LAST_REPLY_CHUNKS.pop(sess.username, None)
+    _LAST_REPLY_FULL.pop(sess.username, None)
+    # Phase 10.5: fresh barge_event per turn.
+    sess.barge_event = asyncio.Event()
 
-    await _send_json(ws, _control_frame(
-        "agent_handoff",
-        active_agent=active_agent,
-        suppress_image=bool(suppress_image),
-    ))
+    # Wire up the agent generator. It runs on its own event loop in a
+    # background thread (Runner.run_streamed needs asyncio); we marshal
+    # events back through a queue so this coroutine can `await` cleanly.
+    import queue as _queue
+    import threading as _threading
+    _q: "asyncio.Queue[dict]" = asyncio.Queue()
+    _loop = asyncio.get_running_loop()
 
+    async def _drive_agent():
+        try:
+            async for ev in legacy.run_agent_streamed(
+                sess.username, sess.hint, transcript, None,
+                vision_observation,
+            ):
+                await _q.put(ev)
+        except Exception as e:
+            await _q.put({"type": "error", "error": repr(e)})
+        finally:
+            await _q.put({"type": "_eos"})
+
+    def _bridge():
+        # Spawn a fresh asyncio loop in this thread to host the agent
+        # generator. Use run_coroutine_threadsafe to push items back to
+        # the main loop's queue so the WS handler can await them.
+        async def _runner():
+            try:
+                async for ev in legacy.run_agent_streamed(
+                    sess.username, sess.hint, transcript, None,
+                    vision_observation,
+                ):
+                    asyncio.run_coroutine_threadsafe(
+                        _q.put(ev), _loop).result()
+            except Exception as e:
+                asyncio.run_coroutine_threadsafe(
+                    _q.put({"type": "error", "error": repr(e)}), _loop,
+                ).result()
+            finally:
+                asyncio.run_coroutine_threadsafe(
+                    _q.put({"type": "_eos"}), _loop).result()
+        asyncio.run(_runner())
+
+    bridge_thread = _threading.Thread(target=_bridge, daemon=True)
+    bridge_thread.start()
+
+    # Sentence chunker: pulls from a `delta` -> str async generator and
+    # yields complete-sentence strings as they form.
+    delta_q: "asyncio.Queue[str | None]" = asyncio.Queue()
+
+    async def _delta_iter():
+        while True:
+            d = await delta_q.get()
+            if d is None:
+                return
+            yield d
+
+    # Outputs from the streaming agent (dones / actions / agent handoffs).
+    final_reply: dict = {"text": "", "active_agent": "agent",
+                          "actions": [], "suppress_image": False,
+                          "errored": False}
+
+    async def _consume_events():
+        """Pull events from _q, route to delta_q for sentences, capture rest."""
+        sent_any_delta = False
+        while True:
+            ev = await _q.get()
+            t = ev.get("type")
+            if t == "delta":
+                final_reply["text"] += ev.get("text", "")
+                sent_any_delta = True
+                await delta_q.put(ev.get("text", ""))
+            elif t == "agent":
+                final_reply["active_agent"] = ev.get("active_agent",
+                                                      final_reply["active_agent"])
+            elif t == "done":
+                # Sync fallback or end-of-stream. If we never got deltas,
+                # the topology fallback returned the full reply here; pump
+                # it through the sentence chunker so TTS still happens.
+                final_reply["active_agent"] = ev.get("active_agent",
+                                                      final_reply["active_agent"])
+                final_reply["actions"] = ev.get("actions") or []
+                final_reply["suppress_image"] = bool(ev.get("suppress_image"))
+                if not sent_any_delta:
+                    full = ev.get("reply") or ""
+                    final_reply["text"] = full
+                    if full:
+                        await delta_q.put(full)
+            elif t == "error":
+                final_reply["errored"] = True
+                logger.warning(
+                    "agent_stream_error", user=sess.username,
+                    session_id=sess.session_id, error=ev.get("error"),
+                )
+            elif t == "_eos":
+                await delta_q.put(None)
+                return
+
+    consumer_task = asyncio.create_task(_consume_events())
+
+    from server.streaming import chunk_for_tts
+
+    # Send `tts_started` as soon as we know we'll have audio. Active
+    # agent might be wrong here (handoff lands later); send a fresh
+    # agent_handoff control if the active_agent changes.
     await _send_json(ws, _control_frame("tts_started",
-                                        active_agent=active_agent))
+                                         active_agent=final_reply["active_agent"]))
 
     first_chunk_emitted = False
     sent_count = 0
     barged = False
+    handoff_sent_for: str | None = None
     tts_total_t0 = time.perf_counter()
-    # Reset the per-user reply-chunk window — each new agent turn starts a
-    # fresh "what did NAO just say" buffer (we don't want stale state from
-    # the prior turn fooling the substring guard).
-    _LAST_REPLY_CHUNKS.pop(sess.username, None)
-    _LAST_REPLY_FULL.pop(sess.username, None)
-    # Phase 10.5: fresh barge_event per turn — clear any latent set bit
-    # from a prior turn so this reply isn't preemptively cancelled.
-    sess.barge_event = asyncio.Event()
     try:
-        async for sentence in _stream_reply_sentences(reply):
-            # Check the barge signal between sentences. The robot's player
-            # already stopped locally; we just stop sending more audio.
+        # chunk_for_tts collapses delta tokens into sentence-sized chunks.
+        # We then synthesize each one in a background task so the next
+        # synth can start while the current one is being emitted.
+        async for sentence in chunk_for_tts(_delta_iter()):
+            # Barge guard between chunks.
             if sess.barge_event.is_set():
                 barged = True
                 logger.info(
@@ -1236,6 +1326,15 @@ async def _emit_agent_turn(ws: WebSocket, sess: _Session,
                     session_id=sess.session_id, sent_chunks=sent_count,
                 )
                 break
+            # If a handoff happened mid-stream, surface it once before
+            # the first audio chunk of the new agent.
+            if handoff_sent_for != final_reply["active_agent"]:
+                await _send_json(ws, _control_frame(
+                    "agent_handoff",
+                    active_agent=final_reply["active_agent"],
+                    suppress_image=bool(final_reply["suppress_image"]),
+                ))
+                handoff_sent_for = final_reply["active_agent"]
             t_synth = time.perf_counter()
             mp3 = await asyncio.to_thread(openai_tts.synthesize, sentence)
             # Re-check after synth — barge_in can arrive during the
@@ -1279,6 +1378,43 @@ async def _emit_agent_turn(ws: WebSocket, sess: _Session,
         phase_ms["e2e_user_to_complete"] = round(
             (time.perf_counter() - t_user_done) * 1000.0, 2,
         )
+        # Wait for the consumer to drain so final_reply is fully populated
+        # (we need it for actions + transcript log + agent_handoff if it
+        # never fired). 2s is plenty — Runner has long since finished by
+        # the time the last sentence got synthesized.
+        try:
+            await asyncio.wait_for(consumer_task, timeout=2.0)
+        except asyncio.TimeoutError:
+            consumer_task.cancel()
+
+    # Variables expected by the rest of this function (post-TTS cooldown,
+    # action drain, agent_handoff fallback, turn_complete log).
+    reply = final_reply["text"]
+    active_agent = final_reply["active_agent"]
+    actions = final_reply["actions"] or []
+    suppress_image = final_reply["suppress_image"]
+
+    # If we never sent an agent_handoff (e.g. no streaming deltas + no
+    # active agent change), send it now so the client knows who replied.
+    if handoff_sent_for is None:
+        await _send_json(ws, _control_frame(
+            "agent_handoff",
+            active_agent=active_agent,
+            suppress_image=bool(suppress_image),
+        ))
+    # Drain actions AFTER reply (actions populated during streaming).
+    # This is a deviation from the pre-streaming contract that emitted
+    # actions BEFORE the first audio chunk — with streaming we don't
+    # know the action list until the agent finishes. Trade-off:
+    # gestures fire ~500ms later than ideal, but first audio fires
+    # several seconds earlier. Net positive for the user.
+    with _phase("action_dispatch", phase_ms):
+        for action in actions:
+            name = action.get("name") if isinstance(action, dict) else None
+            if not name:
+                continue
+            args = action.get("args") if isinstance(action, dict) else None
+            await _send_json(ws, _action_frame(name, args or {}))
 
     # Arm the post-TTS cooldown right before signalling tts_ended. Frames
     # already in flight from the robot will land within the cooldown window

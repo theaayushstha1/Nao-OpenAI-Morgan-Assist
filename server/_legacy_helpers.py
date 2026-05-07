@@ -413,6 +413,101 @@ def _build_user_message(transcript: str, image_b64: str | None,
     }]
 
 
+async def run_agent_streamed(
+    username: str, hint: str | None, transcript: str,
+    image_b64: str | None, vision_observation: dict | None = None,
+):
+    """Stream a passthrough agent turn token-by-token.
+
+    Yields one of three event shapes (dict):
+        {"type": "delta",    "text": "<chunk>"}
+        {"type": "action",   "name": "<tool>", "args": {...}}
+        {"type": "agent",    "active_agent": "<name>"}      # on handoff
+        {"type": "done",     "reply": "<full>", "active_agent": "<name>",
+         "actions": [...], "suppress_image": bool}
+        {"type": "error",    "error": "<repr>"}
+
+    Falls back to the sync run_agent if the topology isn't
+    'passthrough' (debate / supervisor_veto / shared_pool require
+    multiple full Runner.run calls — they don't fit a single token
+    stream). The caller can detect the fallback by getting a `done`
+    event with no preceding `delta` events and adapt.
+
+    Phase 11.5 (true streaming TTS): the WS handler pipes ``delta``
+    events through the sentence chunker → parallel TTS synth, so the
+    robot can start speaking before the agent has finished the reply.
+    Crisis check has already gated this (it runs in _process_turn
+    BEFORE this generator is invoked), so streaming is safe.
+    """
+    import asyncio
+    import os
+    from agents import Runner
+    try:
+        from openai.types.responses import ResponseTextDeltaEvent
+    except Exception:  # pragma: no cover
+        ResponseTextDeltaEvent = None  # type: ignore[assignment]
+
+    topology = (os.environ.get("SAGE_TOPOLOGY") or "passthrough").lower()
+    if topology != "passthrough":
+        # Non-passthrough topologies need multiple Runner.run calls
+        # (debate, supervisor_veto, shared_pool). They can't be streamed
+        # token-by-token cleanly. Fall back to the sync path and emit
+        # one synthetic `done` event.
+        reply, active, actions, suppress = run_agent(
+            username, hint, transcript, image_b64, vision_observation,
+        )
+        yield {"type": "done", "reply": reply, "active_agent": active,
+                "actions": actions, "suppress_image": suppress}
+        return
+
+    agent = pick_initial_agent(username, hint)
+    sess = session.get_or_create_session(username)
+    ctx = {
+        "username": username,
+        "actions_queue": [],
+        "emotion_log": [],
+        "latest_image_b64": image_b64,
+        "suppress_image": False,
+        "vision_observation": vision_observation,
+    }
+    message = _build_user_message(transcript, image_b64, vision_observation)
+
+    active_agent = getattr(agent, "name", "agent")
+    reply_parts: list[str] = []
+
+    try:
+        run = Runner.run_streamed(agent, message, context=ctx, session=sess)
+        async for ev in run.stream_events():
+            if ev.type == "raw_response_event":
+                data = ev.data
+                if ResponseTextDeltaEvent is not None and \
+                   isinstance(data, ResponseTextDeltaEvent):
+                    delta = data.delta or ""
+                    if delta:
+                        reply_parts.append(delta)
+                        yield {"type": "delta", "text": delta}
+            elif ev.type == "agent_updated_stream_event":
+                new_agent = getattr(ev, "new_agent", None)
+                if new_agent is not None:
+                    active_agent = getattr(new_agent, "name", active_agent)
+                    yield {"type": "agent", "active_agent": active_agent}
+        try:
+            final_text = run.final_output_as(str)
+        except Exception:
+            final_text = "".join(reply_parts)
+    except Exception as e:  # noqa: BLE001
+        yield {"type": "error", "error": repr(e)}
+        return
+
+    yield {
+        "type": "done",
+        "reply": final_text,
+        "active_agent": active_agent,
+        "actions": list(ctx["actions_queue"]),
+        "suppress_image": bool(ctx["suppress_image"]),
+    }
+
+
 def run_agent(username: str, hint: str | None, transcript: str,
               image_b64: str | None,
               vision_observation: dict | None = None,
