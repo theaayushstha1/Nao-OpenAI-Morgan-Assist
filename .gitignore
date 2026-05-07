@@ -40,3 +40,4 @@ server/nao.db-wal
 # a documentation example of what the report looks like.
 sim/reports/proof_*.json
 sim/reports/proof_*.md
+sim/reports/live/2*/
