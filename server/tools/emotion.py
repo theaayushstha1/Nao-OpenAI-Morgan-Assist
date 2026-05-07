@@ -226,7 +226,18 @@ def _vision_classify(image_b64: str) -> dict:
     if _debug_vision_enabled():
         _log.info("[DEBUG_VISION] observe_face response: %s", raw)
 
-    return json.loads(raw)
+    # Defensive: gpt-4o has been observed returning None / empty content
+    # for some inputs even with response_format=json_object set. Don't
+    # let json.loads(None) explode and trash the whole turn.
+    if not raw or not raw.strip():
+        return {"error": "empty_response"}
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        # Fall back to wrapping the raw text — at least the therapist
+        # sees something instead of bouncing to the no-image path.
+        return {"dominant_emotion": "unknown", "secondary": "",
+                "notes": raw.strip()[:400]}
 
 
 def _observe_face_impl(ctx):
