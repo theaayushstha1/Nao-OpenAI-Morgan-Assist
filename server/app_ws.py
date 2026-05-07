@@ -29,6 +29,7 @@ import base64
 import json
 import logging
 import os
+import re
 import tempfile
 import time
 import uuid
@@ -172,6 +173,195 @@ logger = _structlog_logger if _structlog_logger is not None else _StdLogger()
 
 TTS_CHUNK_MIN_CHARS = int(os.environ.get("TTS_CHUNK_MIN_CHARS", "30"))
 TTS_CHUNK_TIMEOUT_MS = int(os.environ.get("TTS_CHUNK_TIMEOUT_MS", "400"))
+
+# Phase 2 — EoU arbiter knobs (per docs/PHASE_2_TASK_MAP.md).
+#
+# `MIN_SILENCE_MS` is the silero-driven silence threshold that finalizes a
+# turn outright. The robot-hint-driven branch uses a tighter `200 ms` window
+# (since the robot has already declared the user done — we just want silero
+# confirmation). The semantic-early branch fires on `250 ms` of silence with
+# a complete-thought signal.
+#
+# The 60 s ceiling matches the PRD ("Allow up to 60 s of legitimate
+# continuous speech").
+EOU_MIN_SILENCE_MS = int(os.environ.get("EOU_MIN_SILENCE_MS", "600"))
+EOU_HINT_CONFIRM_MS = int(os.environ.get("EOU_HINT_CONFIRM_MS", "200"))
+EOU_SEMANTIC_SILENCE_MS = int(os.environ.get("EOU_SEMANTIC_SILENCE_MS", "250"))
+EOU_HARD_CEILING_MS = int(os.environ.get("EOU_HARD_CEILING_MS", "60_000"))
+
+# Phase 2 — Post-TTS cooldown knob. Bytes received within
+# `(MIC_GATE_GRACE_MS + 400) ms` after the last audio_chunk are dropped as
+# echo. The 400 ms tail covers reverb that survives the robot's own mic
+# unsubscribe.
+TTS_COOLDOWN_PADDING_MS = int(os.environ.get("TTS_COOLDOWN_PADDING_MS", "400"))
+
+
+# ───────── streaming Silero (parallel agent) ─────────
+#
+# `server.vad_silero.StreamingSilero` is being added by the `server-silero`
+# agent in a sibling worktree. Until that lands here we must degrade
+# gracefully — the existing behaviour was "always finalize on robot hint",
+# so a None instance falls back to that path.
+
+try:  # pragma: no cover — exercised once server-silero lands
+    from server.vad_silero import StreamingSilero as _StreamingSilero  # type: ignore
+except Exception:  # noqa: BLE001
+    _StreamingSilero = None  # type: ignore[assignment]
+
+
+def _get_streaming_silero() -> Any | None:
+    """Return a fresh ``StreamingSilero`` instance, or None if unavailable.
+
+    The factory is wrapped in try/except because Silero pulls in torch which
+    can fail at construction time on machines without the model weights.
+    """
+    if _StreamingSilero is None:
+        return None
+    try:
+        return _StreamingSilero()
+    except Exception as e:  # noqa: BLE001
+        logging.getLogger("sage.app_ws").warning(
+            "StreamingSilero construction failed (%s); arbiter will fall "
+            "back to robot-hint-only finalization.", e,
+        )
+        return None
+
+
+# ───────── echo cooldown counter ─────────
+#
+# Tracks how often we drop incoming audio_chunk frames during post-TTS
+# cooldown. Defined locally if `server.metrics.echo_cooldown_drops_total`
+# isn't published yet (the parallel observability agent will whitelist it).
+
+_echo_cooldown_drops_total: Any | None = None
+
+
+def _resolve_echo_drop_counter() -> Any | None:
+    """Lazily resolve the cooldown counter, preferring the published metric."""
+    global _echo_cooldown_drops_total
+    if _echo_cooldown_drops_total is not None:
+        return _echo_cooldown_drops_total
+    if _metrics is not None:
+        existing = getattr(_metrics, "echo_cooldown_drops_total", None)
+        if existing is not None:
+            _echo_cooldown_drops_total = existing
+            return existing
+    # Build a private Counter on the metrics registry if available, else a
+    # truly local one so increments still work in tests / no-metrics mode.
+    try:
+        from prometheus_client import Counter
+        registry = PROM_REGISTRY
+        if registry is not None:
+            _echo_cooldown_drops_total = Counter(
+                "nao_echo_cooldown_drops_total",
+                "Inbound audio_chunk frames dropped during post-TTS cooldown",
+                registry=registry,
+            )
+        else:
+            _echo_cooldown_drops_total = Counter(
+                "nao_echo_cooldown_drops_total",
+                "Inbound audio_chunk frames dropped during post-TTS cooldown",
+            )
+    except Exception:  # noqa: BLE001 — prometheus_client may be missing
+        class _LocalCounter:
+            __slots__ = ("_n",)
+
+            def __init__(self) -> None:
+                self._n = 0
+
+            def inc(self, amount: float = 1.0) -> None:
+                self._n += amount
+
+        _echo_cooldown_drops_total = _LocalCounter()
+    return _echo_cooldown_drops_total
+
+
+# ───────── self-echo guard state (Phase 2 strengthening) ─────────
+#
+# Per-username rolling window of the last 8 sentences passed to TTS, plus a
+# joined snapshot for substring containment checks. These augment the
+# bigram-overlap guard in `_legacy_helpers._is_self_echo` (which is left
+# untouched per the file-ownership rules).
+
+_LAST_REPLY_CHUNKS: dict[str, list[str]] = {}
+_LAST_REPLY_FULL: dict[str, str] = {}
+_REPLY_CHUNKS_MAX = 8
+
+
+def _record_reply_chunk(username: str, sentence: str) -> None:
+    """Append a sentence to the per-user rolling chunk buffer.
+
+    Called every time we synthesize a sentence (crisis hotline reply,
+    motion-trigger ack, or per-sentence agent stream chunk). Keeps the
+    buffer capped at ``_REPLY_CHUNKS_MAX`` and rebuilds the joined
+    snapshot used by the substring guard.
+    """
+    if not sentence:
+        return
+    text = str(sentence).strip()
+    if not text:
+        return
+    chunks = _LAST_REPLY_CHUNKS.setdefault(username, [])
+    chunks.append(text)
+    # Trim to the most recent _REPLY_CHUNKS_MAX entries.
+    if len(chunks) > _REPLY_CHUNKS_MAX:
+        del chunks[: len(chunks) - _REPLY_CHUNKS_MAX]
+    _LAST_REPLY_FULL[username] = " ".join(chunks)
+
+
+def _reset_reply_chunks(username: str, full_reply: str) -> None:
+    """Reset the per-user buffer to a single-entry view of the full reply.
+
+    Used for non-streamed replies (crisis, motion) where we synthesize a
+    single string in one shot rather than walking sentences.
+    """
+    text = (full_reply or "").strip()
+    if not text:
+        _LAST_REPLY_CHUNKS.pop(username, None)
+        _LAST_REPLY_FULL.pop(username, None)
+        return
+    _LAST_REPLY_CHUNKS[username] = [text]
+    _LAST_REPLY_FULL[username] = text
+
+
+def _is_substring_or_sentence_echo(username: str, transcript: str) -> bool:
+    """Phase 2 echo guard layer above ``_legacy_helpers._is_self_echo``.
+
+    Two new checks:
+    1. ``transcript.lower().strip()`` is a substring of the joined last-reply.
+    2. Any single recorded sentence shares >= 70% of its tokens with the
+       transcript (Jaccard token overlap on the smaller side).
+
+    Either match returns True — caller emits ``echo_reject`` and skips the
+    agent.
+    """
+    if not transcript:
+        return False
+    nt = transcript.lower().strip()
+    if not nt:
+        return False
+
+    full = _LAST_REPLY_FULL.get(username, "").lower()
+    if full and nt in full:
+        return True
+
+    # Token-overlap against each individual sentence — protects against the
+    # case where the transcript echoes one sentence but the joined string
+    # is too long for a substring hit.
+    nt_tokens = set(re.findall(r"[a-z0-9']+", nt))
+    if not nt_tokens:
+        return False
+    for sent in _LAST_REPLY_CHUNKS.get(username, []):
+        sent_tokens = set(re.findall(r"[a-z0-9']+", sent.lower()))
+        if not sent_tokens:
+            continue
+        smaller = min(len(nt_tokens), len(sent_tokens))
+        if smaller == 0:
+            continue
+        overlap = len(nt_tokens & sent_tokens) / float(smaller)
+        if overlap >= 0.70:
+            return True
+    return False
 
 
 # ───────── auth ─────────
@@ -376,6 +566,10 @@ class _Session:
         "asking_name",
         "audio_buf", "image_b64", "turn_idx",
         "out_seq",
+        # Phase 2 additions ─ EoU arbiter + post-TTS cooldown
+        "silero", "robot_eou_hint", "utterance_start_ms",
+        "tts_active_until_ms", "_finalize_in_flight",
+        "had_speech",
     )
 
     def __init__(self, username: str) -> None:
@@ -389,16 +583,211 @@ class _Session:
         self.turn_idx = 0
         self.out_seq = 0  # monotonic seq for outgoing audio_chunk frames
 
+        # Phase 2: server-side streaming Silero (set lazily on first audio
+        # chunk so a missing dependency at import time doesn't kill the
+        # session). See `_get_streaming_silero()` for the construction path.
+        self.silero: Any | None = None
+        # Robot energy-VAD hint flag — set when the client sends
+        # `end_of_utterance` control with `robot_eou_hint=True`. Cleared
+        # when the turn finalizes.
+        self.robot_eou_hint: bool = False
+        # Wall-clock ms of the first inbound audio_chunk for the current
+        # utterance — used for the 60 s hard ceiling in the arbiter.
+        self.utterance_start_ms: float = 0.0
+        # Wall-clock ms beyond which inbound audio is ignored as TTS
+        # echo (post-TTS cooldown). 0 = cooldown inactive.
+        self.tts_active_until_ms: float = 0.0
+        # Reentrancy guard so two arbiter triggers (e.g. silero-driven and
+        # robot-hint-driven) don't both kick `_process_turn`.
+        self._finalize_in_flight: bool = False
+        # True once silero has registered any speech inside the current
+        # utterance. Silence-only utterances (the user never spoke) wait
+        # for the robot's EoU hint or the hard ceiling — we never
+        # auto-finalize a buffer that contains no detected voice.
+        self.had_speech: bool = False
+
     def reset_turn(self) -> None:
         self.audio_buf = bytearray()
         self.image_b64 = None
+        self.robot_eou_hint = False
+        self.utterance_start_ms = 0.0
+        self.had_speech = False
+        # Reset streaming VAD state so the next utterance doesn't inherit
+        # silence already accumulated at the tail of the prior one.
+        if self.silero is not None:
+            try:
+                self.silero.reset()
+            except Exception:
+                # If reset() throws, drop the instance — it'll be re-created
+                # lazily on the next chunk.
+                self.silero = None
 
     def next_seq(self) -> int:
         self.out_seq += 1
         return self.out_seq
 
 
+# ───────── EoU arbiter ─────────
+
+
+def _silero_silence_ms(sess: _Session) -> int:
+    """Best-effort read of the streaming Silero's silence accumulator.
+
+    Returns 0 if the stream isn't available — the arbiter then degrades to
+    robot-hint-only finalization, matching pre-Phase-2 behavior.
+    """
+    sl = sess.silero
+    if sl is None:
+        return 0
+    try:
+        return int(sl.silence_duration_ms())
+    except Exception:
+        return 0
+
+
+def _silero_speaking(sess: _Session) -> bool:
+    """True if the streaming Silero currently registers speech.
+
+    On any error we conservatively report False so the arbiter doesn't
+    block finalization on a failing detector.
+    """
+    sl = sess.silero
+    if sl is None:
+        return False
+    try:
+        return bool(sl.is_speech_now())
+    except Exception:
+        return False
+
+
+async def _maybe_run_semantic_endpoint(transcript: str | None) -> bool:
+    """Async-tolerant wrapper around ``semantic_endpoint.is_complete_thought``.
+
+    The `semantic-endpoint` agent is upgrading the function to ``async def``
+    in a parallel worktree. We accept either a coroutine return value or a
+    sync bool so we don't break when only one side has shipped. Empty or
+    None transcripts return False — the caller treats that as "wait".
+    """
+    if not transcript or not transcript.strip():
+        return False
+    from server import semantic_endpoint  # imported lazily; cheap after first
+    try:
+        result = semantic_endpoint.is_complete_thought(transcript)
+        if asyncio.iscoroutine(result):
+            return bool(await result)
+        return bool(result)
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "semantic_endpoint_call_failed",
+            error=repr(e),
+            transcript_preview=(transcript or "")[:80],
+        )
+        return False
+
+
+async def _should_finalize_turn(sess: _Session,
+                                transcript_so_far: str | None,
+                                now_ms: float) -> bool:
+    """Multi-signal end-of-utterance arbiter.
+
+    Returns True iff the audio buffer should be flushed and ``_process_turn``
+    invoked. Combines:
+
+    1. **Silero silence ≥ ``EOU_MIN_SILENCE_MS``** → finalize outright.
+    2. **Robot hint** + Silero confirms no-speech for ``EOU_HINT_CONFIRM_MS``
+       → finalize.
+    3. **Silero silence ≥ ``EOU_SEMANTIC_SILENCE_MS``** + a non-empty
+       transcript snapshot that ``is_complete_thought`` says is complete →
+       finalize early.
+    4. Hard ceiling: utterance duration ≥ ``EOU_HARD_CEILING_MS``
+       (default 60 s) → finalize.
+
+    Otherwise returns False (keep buffering). When ``StreamingSilero`` is
+    unavailable the function degrades to "finalize on robot hint", matching
+    Phase 1 behavior.
+
+    The whole call is timed via ``metrics.phase_timer("eou_arbiter")`` when
+    that label exists; if the metrics module hasn't whitelisted it yet, the
+    timer is a no-op and the local ``phase_ms`` dict still records the
+    elapsed time.
+    """
+    # If we have no Silero stream, the only signal we can act on is the
+    # robot hint — preserve the pre-Phase-2 contract.
+    if sess.silero is None:
+        if sess.robot_eou_hint:
+            return True
+        # Hard ceiling still applies even with no detector.
+        if (sess.utterance_start_ms
+                and (now_ms - sess.utterance_start_ms)
+                >= EOU_HARD_CEILING_MS):
+            logger.info(
+                "eou_arbiter_hard_ceiling",
+                user=sess.username, session_id=sess.session_id,
+                duration_ms=round(now_ms - sess.utterance_start_ms, 1),
+                detector="absent",
+            )
+            return True
+        return False
+
+    silence_ms = _silero_silence_ms(sess)
+    speaking = _silero_speaking(sess)
+
+    # 1. Silero says we've been silent long enough on its own — but only
+    #    after speech actually happened. A clip that is silence-from-the-
+    #    start gets handled by the robot hint or the hard ceiling, not by
+    #    the silence accumulator (otherwise we'd auto-finalize before the
+    #    user has even started talking).
+    if sess.had_speech and silence_ms >= EOU_MIN_SILENCE_MS:
+        return True
+
+    # 2. Robot also thinks we're done — only need a brief silero-confirmed
+    #    silence window to commit. This branch fires regardless of
+    #    `had_speech` because the robot's energy VAD already endpointed
+    #    the utterance — we trust it.
+    if sess.robot_eou_hint and (silence_ms >= EOU_HINT_CONFIRM_MS or not speaking):
+        return True
+
+    # 3. Semantic-early branch — only when we already have a transcript
+    #    snapshot to inspect (cheap conditions warrant the LLM call).
+    if (sess.had_speech
+            and transcript_so_far
+            and silence_ms >= EOU_SEMANTIC_SILENCE_MS
+            and not speaking
+            and await _maybe_run_semantic_endpoint(transcript_so_far)):
+        return True
+
+    # 4. Hard ceiling.
+    if (sess.utterance_start_ms
+            and (now_ms - sess.utterance_start_ms) >= EOU_HARD_CEILING_MS):
+        logger.info(
+            "eou_arbiter_hard_ceiling",
+            user=sess.username, session_id=sess.session_id,
+            duration_ms=round(now_ms - sess.utterance_start_ms, 1),
+            silence_ms=silence_ms, speaking=speaking,
+        )
+        return True
+
+    return False
+
+
 # ───────── crisis path ─────────
+
+def _arm_post_tts_cooldown(sess: _Session) -> None:
+    """Set the post-TTS cooldown window after the last audio_chunk fires.
+
+    The receive loop drops inbound audio_chunk frames while
+    ``time.time() * 1000 < sess.tts_active_until_ms`` so reverb echoing
+    through NAO's mic in the moments after speaker shutoff doesn't fire a
+    self-conversation loop. The padding (`TTS_COOLDOWN_PADDING_MS`) is added
+    on top of `MIC_GATE_GRACE_MS` because the robot side resubscribes its
+    mic after the grace window — frames in flight on the wire still need to
+    be discarded server-side.
+    """
+    grace_ms = int(getattr(config, "MIC_GATE_GRACE_MS", 200) or 0)
+    sess.tts_active_until_ms = (time.time() * 1000.0
+                                + grace_ms
+                                + TTS_COOLDOWN_PADDING_MS)
+
 
 async def _emit_crisis(ws: WebSocket, sess: _Session, transcript: str,
                        phase_ms: dict[str, float]) -> None:
@@ -418,12 +807,16 @@ async def _emit_crisis(ws: WebSocket, sess: _Session, transcript: str,
 
     with _phase("tts_synth_first_chunk", phase_ms):
         mp3 = await asyncio.to_thread(openai_tts.synthesize, safety.HOTLINE_REPLY)
+    # Record the hotline reply for the substring/sentence echo guard before
+    # we hand audio to the client — the next inbound transcript may echo it.
+    _reset_reply_chunks(sess.username, safety.HOTLINE_REPLY)
     if mp3:
         await _send_json(
             ws,
             _audio_chunk_frame(sess.next_seq(), safety.HOTLINE_REPLY, mp3),
         )
     legacy.LAST_REPLY[sess.username] = safety.HOTLINE_REPLY
+    _arm_post_tts_cooldown(sess)
     await _send_json(ws, _control_frame("tts_ended"))
 
     logger.info(
@@ -453,12 +846,14 @@ async def _emit_motion(ws: WebSocket, sess: _Session, transcript: str,
 
     with _phase("tts_synth_first_chunk", phase_ms):
         mp3 = await asyncio.to_thread(openai_tts.synthesize, motion.ack)
+    _reset_reply_chunks(sess.username, motion.ack)
     if mp3:
         await _send_json(
             ws,
             _audio_chunk_frame(sess.next_seq(), motion.ack, mp3),
         )
     legacy.LAST_REPLY[sess.username] = motion.ack
+    _arm_post_tts_cooldown(sess)
     await _send_json(ws, _control_frame("tts_ended"))
 
     logger.info(
@@ -514,10 +909,19 @@ async def _emit_agent_turn(ws: WebSocket, sess: _Session,
     first_chunk_emitted = False
     sent_count = 0
     tts_total_t0 = time.perf_counter()
+    # Reset the per-user reply-chunk window — each new agent turn starts a
+    # fresh "what did NAO just say" buffer (we don't want stale state from
+    # the prior turn fooling the substring guard).
+    _LAST_REPLY_CHUNKS.pop(sess.username, None)
+    _LAST_REPLY_FULL.pop(sess.username, None)
     try:
         async for sentence in _stream_reply_sentences(reply):
             t_synth = time.perf_counter()
             mp3 = await asyncio.to_thread(openai_tts.synthesize, sentence)
+            # Phase 2: record EVERY synthesized sentence into the per-user
+            # echo-guard window. The buffer is capped at _REPLY_CHUNKS_MAX
+            # so long replies don't grow unbounded.
+            _record_reply_chunk(sess.username, sentence)
             elapsed = (time.perf_counter() - t_synth) * 1000.0
             if not first_chunk_emitted:
                 phase_ms["tts_synth_first_chunk"] = round(elapsed, 2)
@@ -545,6 +949,10 @@ async def _emit_agent_turn(ws: WebSocket, sess: _Session,
             (time.perf_counter() - t_user_done) * 1000.0, 2,
         )
 
+    # Arm the post-TTS cooldown right before signalling tts_ended. Frames
+    # already in flight from the robot will land within the cooldown window
+    # and be dropped.
+    _arm_post_tts_cooldown(sess)
     await _send_json(ws, _control_frame("tts_ended",
                                         sentences=sent_count,
                                         suppress_image=bool(suppress_image)))
@@ -637,6 +1045,25 @@ async def _process_turn(ws: WebSocket, sess: _Session) -> None:
         ))
         return
 
+    # Phase 2 echo guard — substring containment + per-sentence token
+    # overlap. Layered ABOVE the legacy bigram-overlap check so we don't
+    # touch `_legacy_helpers.py`. Runs before crisis/agent dispatch.
+    if (not sess.asking_name
+            and _is_substring_or_sentence_echo(sess.username, transcript)):
+        logger.info(
+            "turn_rejected",
+            user=sess.username, session_id=sess.session_id,
+            turn_idx=sess.turn_idx + 1, phase_ms=phase_ms,
+            transcript=(transcript or "")[:200],
+            reason="self_echo",
+        )
+        await _send_json(ws, _control_frame(
+            "echo_reject",
+            transcript=transcript,
+            reason="self_echo",
+        ))
+        return
+
     # Crisis FIRST — on the raw clip — so a partial like
     # "I keep thinking about" can't be quietly waited on.
     with _phase("crisis_check", phase_ms):
@@ -685,6 +1112,43 @@ async def _process_turn(ws: WebSocket, sess: _Session) -> None:
 
 # ───────── frame ingest ─────────
 
+async def _finalize_turn_if_ready(ws: WebSocket, sess: _Session,
+                                  *, force: bool = False) -> bool:
+    """Run the arbiter (or force) and process the turn if it says so.
+
+    Returns True if a turn was actually processed. The reentrancy guard
+    prevents two arbiter triggers (silero-driven from inside an audio
+    chunk and robot-hint-driven from an `end_of_utterance` control) from
+    both kicking ``_process_turn``.
+    """
+    if sess._finalize_in_flight:
+        return False
+    if not sess.audio_buf:
+        return False
+
+    decision = force
+    if not decision:
+        # Time the arbiter via metrics.phase_timer when the label is
+        # whitelisted; otherwise fall through to the no-op timer that
+        # still records into a local dict.
+        local_phase: dict[str, float] = {}
+        with _phase("eou_arbiter", local_phase):
+            decision = await _should_finalize_turn(
+                sess, transcript_so_far=None,
+                now_ms=time.time() * 1000.0,
+            )
+
+    if not decision:
+        return False
+
+    sess._finalize_in_flight = True
+    try:
+        await _process_turn(ws, sess)
+    finally:
+        sess._finalize_in_flight = False
+    return True
+
+
 async def _ingest_frame(ws: WebSocket, sess: _Session,
                         frame: dict[str, Any]) -> bool:
     """Apply one inbound frame.
@@ -694,16 +1158,63 @@ async def _ingest_frame(ws: WebSocket, sess: _Session,
     ftype = frame.get("type")
 
     if ftype == "audio_chunk":
+        # Phase 2 — post-TTS cooldown. Drop frames that arrive while the
+        # robot's speaker is still ringing in the room. Frames in flight
+        # from the robot's own mic land here; without this gate they
+        # could echo back through STT and trigger a self-conversation
+        # loop.
+        now_ms = time.time() * 1000.0
+        if now_ms < sess.tts_active_until_ms:
+            counter = _resolve_echo_drop_counter()
+            if counter is not None:
+                try:
+                    counter.inc()
+                except Exception:
+                    pass
+            return True
+
         b64 = frame.get("data") or ""
         if not b64:
             return True
         try:
-            sess.audio_buf.extend(base64.b64decode(b64))
+            pcm = base64.b64decode(b64)
+            sess.audio_buf.extend(pcm)
         except Exception as e:  # noqa: BLE001
             logger.warning(
                 "audio_decode_error",
                 user=sess.username, error=repr(e),
             )
+            return True
+
+        # First chunk of a new utterance: stamp the start time and (re)build
+        # the streaming silero. We rebuild on each fresh utterance instead of
+        # relying solely on `reset()` so a model that crashed mid-utterance
+        # doesn't leave the session permanently silero-less.
+        if sess.utterance_start_ms == 0.0:
+            sess.utterance_start_ms = now_ms
+            if sess.silero is None:
+                sess.silero = _get_streaming_silero()
+
+        # Feed silero. The detector is permissive on internal errors —
+        # we never let a VAD bug kill an in-flight session.
+        if sess.silero is not None:
+            try:
+                sess.silero.feed(pcm)
+                # Mark that speech has been heard at least once in this
+                # utterance. Silero's `is_speech_now()` flips between True
+                # during talking and False during pauses; we just OR it in.
+                if not sess.had_speech and _silero_speaking(sess):
+                    sess.had_speech = True
+            except Exception as e:  # noqa: BLE001
+                logger.warning(
+                    "silero_feed_failed",
+                    user=sess.username, error=repr(e),
+                )
+                # Don't drop the session; just retire the broken instance.
+                sess.silero = None
+
+        # Arbiter check — may finalize the turn right here.
+        await _finalize_turn_if_ready(ws, sess)
         return True
 
     if ftype == "image":
@@ -773,7 +1284,23 @@ async def _ingest_control(ws: WebSocket, sess: _Session,
 
     if sub == "end_of_utterance":
         sess.asking_name = bool(data.get("asking_name", sess.asking_name))
-        await _process_turn(ws, sess)
+        # Record the robot-side hint for the arbiter. The hint may already
+        # be enough on its own (no Silero, or Silero confirms silence) —
+        # `_finalize_turn_if_ready` runs the multi-signal check.
+        sess.robot_eou_hint = bool(data.get("robot_eou_hint", True))
+        # If the audio buffer is empty (the robot sent EoU without any
+        # audio_chunk frames first), there's nothing to finalize — skip.
+        if not sess.audio_buf:
+            sess.robot_eou_hint = False
+            sess.asking_name = False
+            return True
+
+        # Run the arbiter; if it doesn't decide to finalize on its own,
+        # force the legacy behavior (Phase 1 contract: EoU control
+        # finalizes the turn).
+        finalized = await _finalize_turn_if_ready(ws, sess)
+        if not finalized:
+            await _finalize_turn_if_ready(ws, sess, force=True)
         sess.asking_name = False
         return True
 
