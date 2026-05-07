@@ -55,6 +55,12 @@ ELEVENLABS_DEFAULT_PROFILE = os.environ.get(
 )
 # Force the OpenAI TTS path for testing or hard-disable EL temporarily.
 USE_ELEVENLABS_TTS = os.environ.get("USE_ELEVENLABS_TTS", "1") == "1"
+# Phase 11.9: candidate ElevenLabs Scribe v2 Realtime STT. Off by
+# default — gated behind USE_ELEVENLABS_STT for the A/B benchmark
+# (sim/stt_ab.py). Production STT path stays on Deepgram + OpenAI
+# Whisper until the bench data says otherwise.
+USE_ELEVENLABS_STT = os.environ.get("USE_ELEVENLABS_STT", "0") == "1"
+ELEVENLABS_STT_MODEL = os.environ.get("ELEVENLABS_STT_MODEL", "scribe_v2_realtime")
 
 # Deepgram Nova-2 streaming/prerecorded ASR. When USE_DEEPGRAM is true and the
 # API key is present, /turn and /stream_turn use Deepgram instead of Whisper.
