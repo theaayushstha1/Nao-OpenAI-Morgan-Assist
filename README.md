@@ -25,6 +25,41 @@
 
 ---
 
+> ## v2 Architectural Rework — `dev/architecture-rework`
+>
+> This README documents `main`. A coordinated **v2 rework** lives on the
+> `dev/architecture-rework` branch and replaces the Flask transport with FastAPI +
+> WebSocket, adds face-driven hybrid wake (no more "hey nao chat mode"), per-turn
+> body-language gestures, sound-source localization, a CS Navigator API integration
+> (Cloud Run, replaces Pinecone), default-on therapist vision with privacy LED,
+> robot-side `BrainCache` (64 KB local identity/preferences cache), and a 22-label
+> Prometheus dashboard with 10 Grafana panels.
+>
+> - **PRD:** [`docs/PRD_v2.md`](docs/PRD_v2.md) — 600-line spec, 9 phases.
+> - **Walkthrough PDF (NotebookLM-ready):** [`docs/Nao_Morgan_Assist_Rework_Walkthrough.pdf`](docs/Nao_Morgan_Assist_Rework_Walkthrough.pdf) — 30 pages.
+> - **Per-phase task maps:** [`docs/PHASE_1_TASK_MAP.md`](docs/PHASE_1_TASK_MAP.md) … [`docs/PHASE_9_TASK_MAP.md`](docs/PHASE_9_TASK_MAP.md).
+> - **Spike findings:** [`docs/spike_results.md`](docs/spike_results.md) — Phase 0.5 transport spike.
+> - **How to run:** `USE_WS=1 ./run.sh` boots uvicorn + the new WS transport. `USE_WS=0` (default) keeps the legacy Flask path.
+>
+> **Status:** code-level complete (96 commits, 71 files, +26K LOC). Live verification on the physical NAO at `172.20.95.127` is the remaining gate before merging to `main`. See the PDF §16 for the verification status table.
+>
+> **Headline changes vs main:**
+>
+> | | main | dev/architecture-rework |
+> |---|---|---|
+> | Transport | Flask `POST /turn` + SSE | FastAPI `WS /ws/{username}` |
+> | Wake | `"hey nao"` keyword | Face-first hybrid (gaze, proximity, sustained face, speech, keyword fallback) |
+> | TTS | Per-utterance | Sentence-streaming, parallel synth |
+> | VAD | Once-per-session calibration, 10 s hard cap | Adaptive ambient floor (rolling 30 s), 60 s cap, server-side Silero arbiter |
+> | Mic during TTS | Loose timing | `ALAudioDevice.unsubscribe()` + 400 ms cooldown + substring echo guard |
+> | Embodiment | 18 body-action tools | + 10 canonical gestures + sound-source head turn + idle breathing |
+> | Knowledge | Vertex AI Search | CS Navigator Cloud Run API (`/chat/stream` or `/chat/guest`) |
+> | Camera | Per-user opt-in | Default ON + visible green-LED capture cue + "stop watching me" pattern |
+> | Robot state | `~/.nao_assist_user.json` (single user) | `~/nao_assist/brain.json` (64 KB LRU multi-user) |
+> | Logging | `print(flush=True)` | structlog JSON + 22 phase labels + 8 Prometheus counters + Grafana |
+>
+> ---
+
 ## Overview
 
 NAO listens, sees, remembers, and replies in the user's own cloned voice. The robot streams audio to a Flask server that routes the turn through a graph of specialized agents (chat, RAG over a Morgan CS knowledge base, skills, therapy with CBT and motivational interviewing). A pre‑dispatch crisis gate, a runtime safety invariant, and per‑face memory give the system clinical and operational guardrails.
