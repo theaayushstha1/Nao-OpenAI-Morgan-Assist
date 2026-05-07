@@ -1,11 +1,22 @@
 openai-agents>=0.0.5
 openai>=1.50.0
 google-cloud-discoveryengine>=0.13.0
+# Legacy Flask transport (kept under USE_WS=0 for the deployment-week per PRD v2)
 flask==3.0.3
 werkzeug==3.0.3
 gunicorn==21.2.0
+# Phase 1 transport: FastAPI + WebSocket (USE_WS=1)
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+websockets>=13.0
+# Phase 1 observability — JSON structured logging + Prometheus metrics
+structlog>=24.0
+prometheus-client>=0.20
 python-dotenv==1.0.1
 requests==2.32.3
+httpx>=0.28
+
 # Voice activity detection — server-side gate to drop silence/noise clips
 # before paying for a transcription call. _has_voice() falls back to permissive
 # if this is missing, so it's safe to omit, but recommended.
