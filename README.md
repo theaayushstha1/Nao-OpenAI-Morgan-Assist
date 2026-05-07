@@ -1,6 +1,6 @@
 <div align="center">
 
-# Nao‑OpenAI‑Morgan‑Assist
+# NAO‑SAGECBT
 
 **A real‑time, embodied, multi‑agent voice assistant for the NAO H25 humanoid.**
 *Built at Morgan State University · Department of Computer Science.*
@@ -381,8 +381,8 @@ flowchart LR
 ```
 
 ```bash
-git clone https://github.com/theaayushstha1/Nao-OpenAI-Morgan-Assist.git
-cd Nao-OpenAI-Morgan-Assist
+git clone https://github.com/theaayushstha1/nao-sagecbt.git
+cd nao-sagecbt
 python3.11 -m venv .venv && source .venv/bin/activate
 pip install -r server/requirements.txt
 cp .env.example .env             # fill keys
@@ -432,7 +432,7 @@ Tap NAO's head sensors at any time to **barge in** — TTS stops within ~200 ms,
 ## Repo layout
 
 ```
-Nao-OpenAI-Morgan-Assist/
+nao-sagecbt/
 ├── nao/                      Python 2.7 — runs on the robot
 │   ├── main.py               entry: wake SM + session controller
 │   ├── ws_client.py          long-lived WebSocket session
