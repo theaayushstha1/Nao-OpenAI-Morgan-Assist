@@ -48,6 +48,52 @@ from server import config, motion_trigger, openai_tts, safety
 from server import _legacy_helpers as legacy
 from server.tools import emotion as _emotion_module
 
+# Phase 11.8: ElevenLabs streaming TTS as primary path. Fallback to
+# OpenAI tts-1 when EL is missing/unconfigured/erroring.
+try:
+    from server import elevenlabs_tts as _eleven  # type: ignore
+except Exception:  # pragma: no cover -- module always present, keep belt+braces
+    _eleven = None  # type: ignore[assignment]
+
+
+def _synth_for(username: str, text: str) -> bytes | None:
+    """Pick TTS provider per-call. Tries ElevenLabs first when enabled
+    and available; falls back to OpenAI on any failure / missing key.
+
+    Voice profile resolution order:
+      1. Per-user pref via session.get_voice_profile(username)
+      2. Server default ELEVENLABS_DEFAULT_PROFILE
+      3. OpenAI fallback if neither resolves to an EL voice ID
+    """
+    use_eleven = (
+        _eleven is not None
+        and getattr(config, "USE_ELEVENLABS_TTS", True)
+        and _eleven.is_available()
+    )
+    if use_eleven:
+        try:
+            from server import session as _ses
+            profile = _ses.get_voice_profile(username) or \
+                      getattr(config, "ELEVENLABS_DEFAULT_PROFILE", "girl")
+            voice_id = _eleven._voice_id_for(profile) or \
+                       _eleven._resolve_default_voice_id()
+            if voice_id:
+                bytes_ = _eleven.synthesize(text, voice_id=voice_id)
+                if bytes_:
+                    return bytes_
+            # Resolved profile but EL returned no audio — fall through.
+            logger.warning(
+                "elevenlabs_synth_returned_none",
+                user=username, text_preview=(text or "")[:80],
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "elevenlabs_synth_error",
+                user=username, error=repr(exc),
+            )
+    # Default / fallback path.
+    return openai_tts.synthesize(text)
+
 
 # Phase 11.6 — vision refresh policy. Visual-trigger phrases that
 # unconditionally force a fresh observation regardless of cache age.
@@ -1105,7 +1151,9 @@ async def _emit_crisis(ws: WebSocket, sess: _Session, transcript: str,
     await _send_json(ws, _action_frame("change_eye_color", {"color": "white"}))
 
     with _phase("tts_synth_first_chunk", phase_ms):
-        mp3 = await asyncio.to_thread(openai_tts.synthesize, safety.HOTLINE_REPLY)
+        mp3 = await asyncio.to_thread(
+            _synth_for, sess.username, safety.HOTLINE_REPLY,
+        )
     # Record the hotline reply for the substring/sentence echo guard before
     # we hand audio to the client — the next inbound transcript may echo it.
     _reset_reply_chunks(sess.username, safety.HOTLINE_REPLY)
@@ -1140,11 +1188,34 @@ async def _emit_motion(ws: WebSocket, sess: _Session, transcript: str,
         "data": {"transcript": transcript,
                  "stt_ms": phase_ms.get("stt", 0)},
     })
-    # Action FIRST so the robot can begin the gesture as the ack starts.
-    await _send_json(ws, _action_frame(motion.action, motion.args))
+
+    # Phase 11.8: voice-profile picker is a motion trigger because we
+    # want the change to take effect on THIS turn's ack, not the next
+    # one. Persist BEFORE we synthesize so the new voice is used for
+    # the canonical "Switching to X voice." reply.
+    if motion.action == "set_voice_profile":
+        try:
+            from server import session as _ses
+            profile = (motion.args or {}).get("profile") or ""
+            _ses.set_voice_profile(sess.username, profile)
+            logger.info(
+                "voice_profile_set",
+                user=sess.username, session_id=sess.session_id,
+                voice_profile=profile,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "voice_profile_set_error",
+                user=sess.username, error=repr(exc),
+            )
+    else:
+        # Action FIRST so the robot can begin the gesture as the ack starts.
+        # The voice-profile branch above doesn't have a robot-side action;
+        # it's a server-state flip.
+        await _send_json(ws, _action_frame(motion.action, motion.args))
 
     with _phase("tts_synth_first_chunk", phase_ms):
-        mp3 = await asyncio.to_thread(openai_tts.synthesize, motion.ack)
+        mp3 = await asyncio.to_thread(_synth_for, sess.username, motion.ack)
     _reset_reply_chunks(sess.username, motion.ack)
     if mp3:
         await _send_json(
@@ -1408,7 +1479,7 @@ async def _emit_agent_turn(ws: WebSocket, sess: _Session,
                 ))
                 handoff_sent_for = final_reply["active_agent"]
             t_synth = time.perf_counter()
-            mp3 = await asyncio.to_thread(openai_tts.synthesize, sentence)
+            mp3 = await asyncio.to_thread(_synth_for, sess.username, sentence)
             # Re-check after synth — barge_in can arrive during the
             # synthesize call (which can take hundreds of ms). Dropping
             # the freshly-synthesized chunk here keeps us within the
@@ -1950,7 +2021,9 @@ async def _handle_wake_event(ws: WebSocket, sess: _Session,
             greeting = _build_returning_greeting(display_name, recap_line)
 
             with _phase("tts_synth_first_chunk", phase_ms):
-                mp3 = await asyncio.to_thread(openai_tts.synthesize, greeting)
+                mp3 = await asyncio.to_thread(
+                    _synth_for, sess.username, greeting,
+                )
 
             # Record for the substring/sentence echo guard before shipping
             # audio — the next inbound transcript may echo this greeting.
@@ -2154,7 +2227,7 @@ async def _maybe_announce_camera_consent(ws: WebSocket, sess: _Session) -> None:
     phase_ms: dict[str, float] = {}
     with _phase("camera_announce_synth", phase_ms):
         try:
-            mp3 = await asyncio.to_thread(openai_tts.synthesize, text)
+            mp3 = await asyncio.to_thread(_synth_for, sess.username, text)
         except Exception as e:  # noqa: BLE001 — TTS down → silent skip
             logger.warning(
                 "camera_announce_tts_failed",

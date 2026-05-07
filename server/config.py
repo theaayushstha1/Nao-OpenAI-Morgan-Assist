@@ -36,6 +36,26 @@ FAST_CHAT_MAX_TOKENS = int(os.environ.get("FAST_CHAT_MAX_TOKENS", "80"))
 MINI_MAX_TOKENS = int(os.environ.get("MINI_MAX_TOKENS", "400"))
 WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "gpt-4o-mini-transcribe")
 
+# ────────── ElevenLabs streaming TTS (Phase 11.8 — fast first audio) ──────────
+# When ELEVENLABS_API_KEY is set, the WS handler routes TTS through
+# ElevenLabs Flash + WebSocket (~150-300ms first audio, vs ~1-2s for
+# OpenAI tts-1). Falls back to OpenAI TTS when key/voice missing or on
+# any failure.
+ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
+ELEVENLABS_MODEL = os.environ.get("ELEVENLABS_MODEL", "eleven_flash_v2_5")
+ELEVENLABS_OUTPUT_FORMAT = os.environ.get(
+    "ELEVENLABS_OUTPUT_FORMAT", "mp3_44100_64",
+)
+# Three voice slots. User pastes voice IDs from elevenlabs.io into env.
+ELEVENLABS_VOICE_GIRL    = os.environ.get("ELEVENLABS_VOICE_GIRL", "")
+ELEVENLABS_VOICE_MAN     = os.environ.get("ELEVENLABS_VOICE_MAN", "")
+ELEVENLABS_VOICE_NEUTRAL = os.environ.get("ELEVENLABS_VOICE_NEUTRAL", "")
+ELEVENLABS_DEFAULT_PROFILE = os.environ.get(
+    "ELEVENLABS_DEFAULT_PROFILE", "girl",
+)
+# Force the OpenAI TTS path for testing or hard-disable EL temporarily.
+USE_ELEVENLABS_TTS = os.environ.get("USE_ELEVENLABS_TTS", "1") == "1"
+
 # Deepgram Nova-2 streaming/prerecorded ASR. When USE_DEEPGRAM is true and the
 # API key is present, /turn and /stream_turn use Deepgram instead of Whisper.
 DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY", "")

@@ -28,6 +28,13 @@ def _conn():
         c.execute("ALTER TABLE user_prefs ADD COLUMN proactive_enabled INTEGER NOT NULL DEFAULT 0")
     except sqlite3.OperationalError:
         pass  # column already exists
+    try:
+        c.execute(
+            "ALTER TABLE user_prefs ADD COLUMN voice_profile TEXT NOT NULL "
+            "DEFAULT ''"
+        )
+    except sqlite3.OperationalError:
+        pass  # column already exists
     c.execute(
         "CREATE TABLE IF NOT EXISTS recaps ("
         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
@@ -170,6 +177,32 @@ def set_camera_consent(username: str, enabled: bool) -> None:
             "INSERT INTO user_prefs (username, camera_consent) VALUES (?, ?) "
             "ON CONFLICT(username) DO UPDATE SET camera_consent=excluded.camera_consent",
             (username, 1 if enabled else 0),
+        )
+
+
+# Phase 11.8: per-user TTS voice profile. Three slots — "girl", "man",
+# "neutral". Empty string means "no preference set; use server default".
+def get_voice_profile(username: str) -> str:
+    """Return the user's chosen voice profile, or "" if not yet set."""
+    with _conn() as c:
+        row = c.execute(
+            "SELECT voice_profile FROM user_prefs WHERE username = ?",
+            (username,),
+        ).fetchone()
+        if row is None:
+            return ""
+        return (row[0] or "").strip()
+
+
+def set_voice_profile(username: str, profile: str) -> None:
+    """Persist the user's voice profile pick. Empty string clears it."""
+    norm = (profile or "").strip().lower()
+    with _conn() as c:
+        c.execute(
+            "INSERT INTO user_prefs (username, voice_profile) VALUES (?, ?) "
+            "ON CONFLICT(username) DO UPDATE SET "
+            "voice_profile=excluded.voice_profile",
+            (username, norm),
         )
 
 

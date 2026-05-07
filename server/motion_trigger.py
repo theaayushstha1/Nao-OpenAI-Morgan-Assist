@@ -100,6 +100,28 @@ _TRIGGERS: list[tuple[str, dict, str, list[str]]] = [
         "you can see me now", "see me again",
     ]),
 
+    # ── Voice profile picker (Phase 11.8) ───────────────────
+    # Three voices: girl, man, neutral. Recognized via short phrases the
+    # user can say at any time during a session. The handler in app_ws
+    # reads `args.profile` and persists via session.set_voice_profile.
+    ("set_voice_profile", {"profile": "girl"}, "Switching to girl voice.", [
+        "use the girl voice", "use girl voice", "girl voice",
+        "switch to girl voice", "switch to the girl voice",
+        "use a woman's voice", "use the woman voice", "female voice",
+        "use voice one", "voice one", "voice 1", "first voice",
+    ]),
+    ("set_voice_profile", {"profile": "man"}, "Switching to man voice.", [
+        "use the man voice", "use man voice", "man voice",
+        "switch to man voice", "switch to the man voice",
+        "use a man's voice", "use a male voice", "male voice", "guy voice",
+        "use voice two", "voice two", "voice 2", "second voice",
+    ]),
+    ("set_voice_profile", {"profile": "neutral"}, "Switching to neutral voice.", [
+        "use the neutral voice", "use neutral voice", "neutral voice",
+        "switch to neutral voice", "switch to the neutral voice",
+        "use voice three", "voice three", "voice 3", "third voice",
+    ]),
+
     # ── LEDs ────────────────────────────────────────────────
     ("change_eye_color", {"color": "red"}, "Eyes red.", [
         "eyes red", "red eyes", "turn your eyes red", "make your eyes red",
