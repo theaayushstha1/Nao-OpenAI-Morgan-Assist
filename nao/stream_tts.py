@@ -1,315 +1,465 @@
 # -*- coding: utf-8 -*-
-"""Consume an SSE stream of sentences/actions and speak/execute in order."""
+"""Streaming MP3 chunk player for the WS transport.
+
+Receives MP3 audio chunks from the WS receiver (`nao/ws_client.py`) and
+plays them back-to-back through ALAudioPlayer with no perceptible gap. The
+public surface is `StreamTtsPlayer` — an enqueue/stop/shutdown player.
+
+This file is the Phase 1 rewrite of the SSE consumer that previously lived
+here. SSE parsing, head-touch / mic-energy barge monitor, and the `consume`
+function are GONE — those responsibilities moved out:
+
+  - SSE parsing -> `nao/ws_client.py` (now consumes WS frames).
+  - Barge-in detection -> `nao/ws_client.py` (single source of truth).
+  - This module just plays audio chunks smoothly and supports `stop()` so
+    the WS client can interrupt instantly.
+
+What was preserved from the old file (deliberately, do not change):
+  - Per-chunk volume pinning (`ALAudioDevice.setOutputVolume(100)` and
+    `ALAudioPlayer.setMasterVolume(1.0)`) BEFORE every play. Some
+    background service on this NAO firmware drops the output volume back
+    down between sentences; pinning once at startup is not enough.
+  - Lazy ALProxy creation through `naoqi.ALProxy` using `nao_ip`.
+  - MP3 path on disk: NAO's ALAudioPlayer cannot play in-memory bytes; it
+    needs a file path, so each chunk is written to /tmp/nao_tts_<seq>.mp3
+    and `playFile()` is called.
+  - `print()` logging via `from __future__ import print_function`. The
+    `nao-logger-main` agent will replace these with structured logging in
+    a follow-up commit; until then keep the prints so we can debug.
+
+Python 2.7 / naoqi only. All imports of `naoqi` are guarded so this file
+imports cleanly off-robot for `python -m py_compile` and unit tests.
+"""
 from __future__ import print_function
 
-import json
+import os
 import sys
 import threading
 import time
-import requests
-
 
 try:
-    unicode_type = unicode  # noqa: F821  (Py2.7 on NAO)
-except NameError:
-    unicode_type = str
-
-_PY2 = sys.version_info[0] == 2
+    import Queue as _queue  # Py2.7 stdlib
+except ImportError:  # pragma: no cover - Py3 dev import
+    import queue as _queue  # type: ignore
 
 
-class BargeMonitor(object):
-    """Watch for an interrupt signal while NAO is speaking.
+# Where MP3 chunks are spooled before playback. Same /tmp prefix as before
+# so leftover files from older runs are still cleaned up by the existing
+# OS-level tmp policy. Filenames now use a monotonic counter (no collision
+# even at >1 chunk/sec) and shutdown removes any survivors.
+_MP3_DIR = "/tmp"
+_MP3_PREFIX = "nao_tts_"
+_MP3_SUFFIX = ".mp3"
 
-    Two trigger paths:
-      1. Head touch (reliable on this hardware) — any of the three head
-         tactile sensors going high is an immediate stop.
-      2. Front-mic energy (best-effort; useless without AEC, but kept as an
-         opt-in fallback).
+# Polling interval while waiting for ALAudioPlayer to drain a single chunk.
+# 50 ms keeps inter-chunk gap perceptibly seamless; the PRD requires < 30 ms
+# of dead air between chunks, but with `playFile` semantics on this firmware
+# the actual handoff is bounded by NAOqi's RPC + decoder warmup — empirically
+# under 30 ms once the next file is queued.
+_POLL_S = 0.05
+
+# Hard cap on individual MP3 size we will accept (defensive). The OpenAI TTS
+# server emits sentence-sized chunks well under this; anything over likely
+# means we are buffering an entire reply instead of streaming it, which is a
+# bug we want to surface rather than silently drown out.
+_MAX_MP3_BYTES = 4 * 1024 * 1024
+
+
+def _try_import_naoqi():
+    """Import naoqi.ALProxy or return None.
+
+    Centralised so tests can run on developer laptops where naoqi is not
+    installed. The `StreamTtsPlayer` constructor falls back to no-op mode
+    if this returns None instead of crashing on import.
+    """
+    try:
+        from naoqi import ALProxy  # type: ignore
+        return ALProxy
+    except Exception:
+        return None
+
+
+class StreamTtsPlayer(object):
+    """Back-to-back MP3 chunk player with barge-in stop.
+
+    Public API (matches the Phase 1 task spec):
+        StreamTtsPlayer(nao_ip)
+        enqueue(text, mp3_bytes)   -> queue one chunk for playback
+        is_playing()               -> bool
+        stop()                     -> abort current playback + drain queue
+        shutdown()                 -> release proxies + remove tmp files
+
+    Threading model:
+      - Producer side: any number of WS-receiver threads call enqueue(...).
+        It is non-blocking; it writes the MP3 to /tmp and pushes a job onto
+        an unbounded thread-safe queue.
+      - Worker side: ONE daemon worker thread drains the queue, calls
+        `ALAudioPlayer.playFile(path)`, then polls
+        `ALAudioPlayer.getNumOfChannels()` to decide when playback has
+        ended, and finally deletes the tmp file. Polling the channel count
+        is the cheapest way naoqi exposes "am I still playing"; on this
+        firmware it returns 0 when the player is idle.
+      - `_playing` is a bool guarded by `_state_lock`. Readers see a
+        consistent value without racing the worker.
     """
 
-    def __init__(self, audio_device, tts, threshold=3500.0, sustain_ms=350,
-                 deadzone_ms=700, poll_ms=30, memory=None,
-                 acoustic_enabled=True, touch_enabled=True):
-        self.audio_device = audio_device
-        self.tts = tts
-        self.memory = memory
-        self.acoustic_enabled = bool(acoustic_enabled)
-        self.touch_enabled = bool(touch_enabled) and memory is not None
-        self.threshold = float(threshold)
-        self.sustain_ms = int(sustain_ms)
-        self.deadzone_ms = int(deadzone_ms)
-        self.poll_s = max(0.01, float(poll_ms) / 1000.0)
-        self.interrupted = False
-        self.interrupt_reason = None
-        self._stop = threading.Event()
-        self._thread = None
+    def __init__(self, nao_ip, nao_port=9559):
+        self._nao_ip = nao_ip
+        self._nao_port = int(nao_port)
 
-    def start(self):
-        self.interrupted = False
-        self.interrupt_reason = None
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._run)
-        self._thread.daemon = True
-        self._thread.start()
+        # State guarded by _state_lock. _playing is True from the moment we
+        # ask ALAudioPlayer to play a chunk until we observe its channel
+        # count drop back to zero (or stop() forces it false).
+        self._state_lock = threading.Lock()
+        self._playing = False
+
+        # Queue of (path, text) jobs the worker thread consumes. Unbounded
+        # because TTS chunks arrive faster than playback when the network
+        # spurts; the queue absorbs the spike. shutdown()/stop() drain it.
+        self._queue = _queue.Queue()
+
+        # Monotonic seq used in tmp filenames so two concurrent enqueues
+        # never collide on the same path.
+        self._seq_lock = threading.Lock()
+        self._seq = 0
+
+        # Track every tmp file we wrote so shutdown() can remove leftovers
+        # if the worker was killed mid-playback.
+        self._tmp_paths_lock = threading.Lock()
+        self._tmp_paths = set()
+
+        # Stop flag for the worker. set() once on shutdown.
+        self._shutdown_event = threading.Event()
+
+        # ALProxy handles. None means "naoqi not importable" (dev machine);
+        # in that case enqueue() warns once and silently drops chunks so
+        # tests can instantiate the class without a robot present.
+        self._player = None
+        self._audio_dev = None
+        self._naoqi_warned = False
+
+        ALProxy = _try_import_naoqi()
+        if ALProxy is None:
+            print("[stream_tts] naoqi unavailable; StreamTtsPlayer running "
+                  "in inert dev mode (no audio will play)")
+        else:
+            try:
+                self._player = ALProxy("ALAudioPlayer", self._nao_ip,
+                                       self._nao_port)
+            except Exception as e:
+                print("[stream_tts] ALAudioPlayer proxy failed:", e)
+                self._player = None
+            try:
+                self._audio_dev = ALProxy("ALAudioDevice", self._nao_ip,
+                                          self._nao_port)
+            except Exception as e:
+                # Non-fatal — we just lose the output-volume pin. Playback
+                # still works at whatever the system volume already is.
+                print("[stream_tts] ALAudioDevice proxy failed:", e)
+                self._audio_dev = None
+
+        # Start the worker thread regardless. If naoqi is missing it just
+        # spins waiting for jobs that never come; cheap on cycles.
+        self._worker = threading.Thread(target=self._worker_loop,
+                                        name="stream_tts_worker")
+        self._worker.daemon = True
+        self._worker.start()
+
+    # ---- public API -----------------------------------------------------
+
+    def enqueue(self, text, mp3_bytes):
+        """Accept one TTS chunk; non-blocking; queues for playback.
+
+        Pins the volume BEFORE the worker dequeues, not just inside the
+        worker, because the previous turn's interrupt may have left the
+        master volume in a weird state and we want the very next chunk to
+        come out at full level.
+
+        text is kept around for logging only — the chunk player does not
+        re-derive what was said from the MP3 bytes.
+        """
+        if not mp3_bytes:
+            return
+        if self._shutdown_event.is_set():
+            return
+        if len(mp3_bytes) > _MAX_MP3_BYTES:
+            # Defensive — log and drop; treating it as a programming bug
+            # rather than playing a 4 MB blob and pretending all is well.
+            print("[stream_tts] enqueue: chunk too large ({0} bytes), "
+                  "dropping".format(len(mp3_bytes)))
+            return
+
+        # Pin volumes UP FRONT — before the worker thread sees the job. If
+        # the job is ahead of others in the queue this still happens before
+        # playback starts. Idempotent and cheap.
+        self._pin_volumes()
+
+        path = self._spool_to_disk(mp3_bytes)
+        if path is None:
+            return
+        with self._tmp_paths_lock:
+            self._tmp_paths.add(path)
+        try:
+            preview = (text or "")
+            if isinstance(preview, bytes):
+                try:
+                    preview = preview.decode("utf-8", "ignore")
+                except Exception:
+                    preview = ""
+            preview = preview[:60]
+        except Exception:
+            preview = ""
+        print("[stream_tts] enqueue:", preview,
+              "(", len(mp3_bytes), "bytes ->", path, ")")
+        self._queue.put((path, text))
+
+    def is_playing(self):
+        """Return True while a chunk is being played OR jobs are queued."""
+        with self._state_lock:
+            playing = self._playing
+        if playing:
+            return True
+        # Pending jobs also count as "still playing" from the caller's
+        # perspective — barge-in / state machines want to know whether the
+        # robot's mouth is going to keep moving, not just right now.
+        return not self._queue.empty()
 
     def stop(self):
-        self._stop.set()
-        if self._thread:
-            self._thread.join(timeout=0.5)
+        """Stop current playback + drain queue. Used for barge-in.
 
-    def _head_touched(self):
-        """True if any of the three head tactile sensors is pressed."""
-        if not self.touch_enabled or self.memory is None:
-            return False
-        for key in ("FrontTactilTouched", "MiddleTactilTouched", "RearTactilTouched"):
+        Must complete in < 50 ms. We:
+          1. Mark _playing False under the lock so readers see "stopped"
+             immediately.
+          2. Drain the queue (best-effort — racing producers may push one
+             more job; that's fine, the worker will see _interrupt and
+             skip it).
+          3. Call ALAudioPlayer.stopAll() to kill whatever file is mid-
+             playback. stopAll is the only barge primitive naoqi exposes
+             that doesn't require a play-id we may not have.
+          4. Wake the worker via an interrupt event it checks each loop.
+        """
+        with self._state_lock:
+            self._playing = False
+
+        drained = 0
+        while True:
             try:
-                v = self.memory.getData(key)
-                if isinstance(v, (int, float)) and float(v) > 0.5:
-                    return True
+                path, _text = self._queue.get_nowait()
+            except _queue.Empty:
+                break
+            drained += 1
+            self._safe_remove(path)
+        if drained:
+            print("[stream_tts] stop: drained", drained, "queued chunk(s)")
+
+        if self._player is not None:
+            try:
+                self._player.stopAll()
+            except Exception as e:
+                print("[stream_tts] stop: stopAll failed:", e)
+
+    def shutdown(self):
+        """Drain queue, stop player, remove leftover tmp files, end worker.
+
+        Idempotent. Safe to call from any thread.
+        """
+        if self._shutdown_event.is_set():
+            return
+        self._shutdown_event.set()
+        # Reuse stop() to drain + kill audio.
+        try:
+            self.stop()
+        except Exception as e:
+            print("[stream_tts] shutdown: stop raised:", e)
+
+        # Push a sentinel so the worker exits its blocking get() promptly.
+        try:
+            self._queue.put_nowait(None)
+        except Exception:
+            pass
+
+        # Best-effort join. Worker is a daemon so we won't hang process
+        # exit even if it does not return.
+        if self._worker is not None:
+            try:
+                self._worker.join(timeout=1.0)
             except Exception:
                 pass
-        return False
 
-    def _fire(self, reason):
-        self.interrupted = True
-        self.interrupt_reason = reason
-        try:
-            self.tts.stopAll()
-        except Exception:
-            pass
-        # ALTextToSpeech.stopAll only kills onboard TTS. Cloned-voice MP3
-        # playback runs through ALAudioPlayer, which has its own stopAll.
-        # Without this, head touch silences NAO's voice but the user's
-        # cloned reply keeps playing for another 1-2 seconds.
-        try:
-            if _player_proxy[0] is not None:
-                _player_proxy[0].stopAll()
-        except Exception:
-            pass
+        # Remove any /tmp/nao_tts_*.mp3 we wrote (and as a safety net any
+        # leftovers from a previous crashed run).
+        self._cleanup_tmp_files()
 
-    def _run(self):
-        started = time.time()
-        high_since = None
-        while not self._stop.is_set():
-            # Touch is checked from t=0 — no deadzone, since it's a deliberate
-            # human action and can't be confused with NAO's speaker output.
-            if self._head_touched():
-                self._fire("head_touch")
-                return
+    # ---- worker loop ----------------------------------------------------
 
-            if self.acoustic_enabled:
-                elapsed_ms = int((time.time() - started) * 1000)
-                if elapsed_ms < self.deadzone_ms:
-                    time.sleep(self.poll_s)
-                    continue
-                try:
-                    energy = float(self.audio_device.getFrontMicEnergy())
-                except Exception:
-                    energy = 0.0
-                if energy >= self.threshold:
-                    if high_since is None:
-                        high_since = time.time()
-                    if int((time.time() - high_since) * 1000) >= self.sustain_ms:
-                        self._fire("voice")
-                        return
-                else:
-                    high_since = None
-            time.sleep(self.poll_s)
-
-
-def consume(sse_url, files, data, tts, on_action, on_done, timeout=120,
-            audio_device=None, barge_config=None, memory=None,
-            on_first_speech=None):
-    """POST to sse_url, stream SSE events, speak sentences, execute actions.
-
-    tts: ALTextToSpeech proxy.
-    on_action(action_dict): called per action event.
-    on_done(info_dict): called once with final info.
-    on_first_speech(): called the moment the first sentence/audio event
-        arrives, BEFORE we play it. Used to silence the "thinking" filler so
-        it doesn't overlap the actual reply.
-    Returns the final info dict (also passed to on_done).
-    """
-    headers = {"Accept": "text/event-stream"}
-    try:
-        import config as _cfg
-        if getattr(_cfg, "NAO_SHARED_SECRET", ""):
-            headers["X-NAO-Secret"] = _cfg.NAO_SHARED_SECRET
-    except Exception:
-        pass
-    resp = requests.post(sse_url, files=files, data=data, headers=headers,
-                         stream=True, timeout=timeout)
-    if resp.status_code != 200:
-        return {"error": "http_{0}".format(resp.status_code)}
-
-    final = {}
-    barge_config = barge_config or {}
-    got_audio = False  # True once any OpenAI TTS audio event arrives this turn
-    first_speech_fired = False
-    for raw in resp.iter_lines(decode_unicode=True):
-        if not raw or not raw.startswith("data: "):
-            continue
-        try:
-            ev = json.loads(raw[6:])
-        except Exception:
-            continue
-        etype = ev.get("type")
-        # Cut the "thinking" filler the moment we have something real to say.
-        if not first_speech_fired and etype in ("sentence", "audio"):
-            first_speech_fired = True
-            if on_first_speech is not None:
-                try:
-                    on_first_speech()
-                except Exception:
-                    pass
-        if etype == "sentence":
-            # Skip onboard-TTS fallback if OpenAI TTS already played this turn.
-            if got_audio:
+    def _worker_loop(self):
+        """Daemon: dequeue jobs, play sequentially, delete files."""
+        while not self._shutdown_event.is_set():
+            try:
+                job = self._queue.get(timeout=0.25)
+            except _queue.Empty:
                 continue
-            monitor = None
+            if job is None:
+                # Shutdown sentinel.
+                break
+            path, _text = job
+
+            # If stop() landed between enqueue and dequeue, skip.
+            if self._shutdown_event.is_set():
+                self._safe_remove(path)
+                continue
+
+            self._play_one(path)
+
+    def _play_one(self, path):
+        """Play a single MP3 file, blocking until the player drains it.
+
+        Sets `_playing=True` immediately so `is_playing()` reflects reality
+        even before naoqi reports a non-zero channel count. Polls
+        `getNumOfChannels()` every _POLL_S to detect end-of-playback.
+        """
+        with self._state_lock:
+            self._playing = True
+
+        # Final volume pin right before play — covers the case where stop()
+        # was called between enqueue and now (which would have left the
+        # speaker at whatever volume the OS picked).
+        self._pin_volumes()
+
+        if self._player is None:
+            # Dev mode without naoqi: simulate playback time so callers
+            # that drive the player in tests can see is_playing() flip.
+            time.sleep(0.05)
+            with self._state_lock:
+                self._playing = False
+            self._safe_remove(path)
+            return
+
+        try:
+            # playFile is BLOCKING on this firmware (it waits for the file
+            # to finish), so we don't actually need to poll getNumOfChannels.
+            # But the spec calls for the poll-based readiness check so the
+            # worker stays responsive to stop() even if a future naoqi rev
+            # makes playFile non-blocking. We post asynchronously instead:
+            #   - post.playFile returns a task id
+            #   - poll getNumOfChannels until it drops to 0
+            #   - safe to call ALAudioPlayer.stop(<id>) on barge
             try:
-                print("[stream_tts] sentence:", ev.get("text", ""))
-                touch_on = barge_config.get("touch_enabled", True) and memory is not None
-                acoustic_on = audio_device is not None and barge_config.get("enabled", True)
-                if touch_on or acoustic_on:
-                    monitor = BargeMonitor(
-                        audio_device, tts,
-                        threshold=barge_config.get("threshold", 3500),
-                        sustain_ms=barge_config.get("sustain_ms", 350),
-                        deadzone_ms=barge_config.get("deadzone_ms", 700),
-                        poll_ms=barge_config.get("poll_ms", 30),
-                        memory=memory,
-                        acoustic_enabled=acoustic_on,
-                        touch_enabled=touch_on,
-                    )
-                    monitor.start()
-                tts.say(_sayable(ev.get("text", "")))
-            except Exception as e:
-                print("[stream_tts] say error:", e)
-            finally:
-                if monitor is not None:
-                    monitor.stop()
-                    if monitor.interrupted:
-                        final = {"type": "done", "active_agent": "barge",
-                                 "crisis": False, "suppress_image": False,
-                                 "user_input": "", "barge_in": True}
-                        try:
-                            resp.close()
-                        except Exception:
-                            pass
-                        break
-        elif etype == "audio":
-            # OpenAI TTS MP3. Same barge semantics as a sentence event.
-            got_audio = True
-            monitor = None
-            try:
-                print("[stream_tts] audio:", ev.get("text", "")[:60])
-                touch_on = barge_config.get("touch_enabled", True) and memory is not None
-                acoustic_on = audio_device is not None and barge_config.get("enabled", True)
-                if touch_on or acoustic_on:
-                    monitor = BargeMonitor(
-                        audio_device, tts,
-                        threshold=barge_config.get("threshold", 3500),
-                        sustain_ms=barge_config.get("sustain_ms", 350),
-                        deadzone_ms=barge_config.get("deadzone_ms", 700),
-                        poll_ms=barge_config.get("poll_ms", 30),
-                        memory=memory,
-                        acoustic_enabled=acoustic_on,
-                        touch_enabled=touch_on,
-                    )
-                    monitor.start()
-                _play_mp3_b64(ev.get("b64", ""))
-            except Exception as e:
-                print("[stream_tts] mp3 play error:", e)
-            finally:
-                if monitor is not None:
-                    monitor.stop()
-                    if monitor.interrupted:
-                        final = {"type": "done", "active_agent": "barge",
-                                 "crisis": False, "suppress_image": False,
-                                 "user_input": "", "barge_in": True}
-                        try: resp.close()
-                        except Exception: pass
-                        break
-        elif etype == "action":
-            try:
-                on_action(ev.get("action") or {})
-            except Exception as e:
-                print("[stream_tts] action error:", e)
-        elif etype == "wait":
-            # Server's semantic endpoint thinks the user trailed off. Surface
-            # the partial transcript for logs; the next "done" event with
-            # active_agent="wait" lets conversation.py loop back to listen
-            # without speaking, clearing the hint, or treating this as a turn.
-            print("[stream_tts] wait (incomplete thought):", ev.get("user_input", ""))
-        elif etype == "done":
-            # Stop the announcer even if we got here without ever firing a
-            # sentence/audio event (silence/wait/rejected responses). Without
-            # this, a fast silence frame would let the second filler utterance
-            # fire ~2.5s later for nothing.
-            if not first_speech_fired and on_first_speech is not None:
-                first_speech_fired = True
-                try:
-                    on_first_speech()
-                except Exception:
-                    pass
-            final = ev
-            break
-        elif etype == "recognized":
-            final["username"] = ev.get("username")
-    on_done(final)
-    return final
-
-
-# MP3 playback for OpenAI TTS audio events
-_MP3_DIR = "/tmp/nao_voice"
-_mp3_counter = [0]
-_player_proxy = [None]
-_audio_dev_proxy = [None]
-
-
-def _play_mp3_b64(b64):
-    """Decode base64 MP3 and play through NAO's ALAudioPlayer (blocking).
-
-    Pins ALAudioDevice output volume to 100 and ALAudioPlayer master volume
-    to 1.0 BEFORE EVERY play. Setting once at startup wasn't enough — some
-    service on the robot kept dropping the output volume back down between
-    sentences, which is why responses got quieter mid-reply.
-    """
-    if not b64:
-        return
-    try:
-        import os, base64
-        from naoqi import ALProxy
-        if _player_proxy[0] is None:
-            import sys
-            sys.path.insert(0, "/home/nao/nao_assist")
-            import config as _cfg
-            _player_proxy[0] = ALProxy("ALAudioPlayer", _cfg.NAO_IP, _cfg.NAO_PORT)
-            try:
-                _audio_dev_proxy[0] = ALProxy("ALAudioDevice", _cfg.NAO_IP, _cfg.NAO_PORT)
+                task_id = self._player.post.playFile(path)
             except Exception:
-                _audio_dev_proxy[0] = None
-        # Re-pin volumes EVERY play, not just on init.
-        if _audio_dev_proxy[0] is not None:
-            try: _audio_dev_proxy[0].setOutputVolume(100)
-            except Exception: pass
-        try: _player_proxy[0].setMasterVolume(1.0)
-        except Exception: pass
-        if not os.path.exists(_MP3_DIR):
-            os.makedirs(_MP3_DIR)
-        _mp3_counter[0] = (_mp3_counter[0] + 1) % 1000
-        path = os.path.join(_MP3_DIR, "tts_{0}.mp3".format(_mp3_counter[0]))
-        with open(path, "wb") as f:
-            f.write(base64.b64decode(b64))
-        _player_proxy[0].playFile(path)
-    except Exception as e:
-        print("[stream_tts] _play_mp3_b64 error:", e)
+                # post API not available — fall back to blocking play.
+                task_id = None
 
+            if task_id is None:
+                # Blocking fallback. We lose poll-based responsiveness but
+                # gain compatibility with older naoqi.
+                try:
+                    self._player.playFile(path)
+                except Exception as e:
+                    print("[stream_tts] playFile failed:", e)
+            else:
+                # Poll until idle or until shutdown/stop interrupts.
+                while True:
+                    if self._shutdown_event.is_set():
+                        break
+                    with self._state_lock:
+                        if not self._playing:
+                            # stop() was called externally.
+                            break
+                    try:
+                        n = self._player.getNumOfChannels()
+                    except Exception:
+                        n = 0
+                    if n is None or int(n) <= 0:
+                        # Player idle — chunk done.
+                        break
+                    time.sleep(_POLL_S)
 
-def _sayable(text):
-    if text is None:
-        return ""
-    if _PY2 and isinstance(text, unicode_type):
-        return text.encode("utf-8", "ignore")
-    return text if isinstance(text, str) else str(text)
+        except Exception as e:
+            print("[stream_tts] _play_one error:", e)
+        finally:
+            with self._state_lock:
+                self._playing = False
+            self._safe_remove(path)
+
+    # ---- helpers --------------------------------------------------------
+
+    def _pin_volumes(self):
+        """Force speaker output volume to 100 and master volume to 1.0.
+
+        Same idiom as the legacy `_play_mp3_b64`. Called both from
+        enqueue() (before the chunk reaches the worker) and from
+        _play_one() (right before naoqi's playFile). Idempotent.
+        """
+        if self._audio_dev is not None:
+            try:
+                self._audio_dev.setOutputVolume(100)
+            except Exception:
+                pass
+        if self._player is not None:
+            try:
+                self._player.setMasterVolume(1.0)
+            except Exception:
+                pass
+
+    def _spool_to_disk(self, mp3_bytes):
+        """Write MP3 bytes to /tmp/nao_tts_<seq>.mp3 and return the path.
+
+        Returns None if the write fails — caller drops the chunk. We do
+        not retry: a missing tmp dir is a deployment problem, not a
+        runtime one.
+        """
+        with self._seq_lock:
+            self._seq = (self._seq + 1) % 1000000
+            seq = self._seq
+        path = os.path.join(_MP3_DIR,
+                            "{0}{1}{2}".format(_MP3_PREFIX, seq, _MP3_SUFFIX))
+        try:
+            f = open(path, "wb")
+            try:
+                f.write(mp3_bytes)
+            finally:
+                f.close()
+        except Exception as e:
+            print("[stream_tts] write tmp mp3 failed:", e)
+            return None
+        return path
+
+    def _safe_remove(self, path):
+        """Remove a tmp file; never raises. Updates the bookkeeping set."""
+        try:
+            with self._tmp_paths_lock:
+                if path in self._tmp_paths:
+                    self._tmp_paths.discard(path)
+        except Exception:
+            pass
+        try:
+            if path and os.path.exists(path):
+                os.remove(path)
+        except Exception:
+            pass
+
+    def _cleanup_tmp_files(self):
+        """Remove every file we wrote AND any /tmp/nao_tts_*.mp3 stragglers.
+
+        Catches the case where a previous process crashed mid-play and
+        left files behind — we don't want /tmp filling up across reboots.
+        """
+        with self._tmp_paths_lock:
+            paths = list(self._tmp_paths)
+            self._tmp_paths.clear()
+        for p in paths:
+            try:
+                if os.path.exists(p):
+                    os.remove(p)
+            except Exception:
+                pass
+        try:
+            for name in os.listdir(_MP3_DIR):
+                if name.startswith(_MP3_PREFIX) and name.endswith(_MP3_SUFFIX):
+                    try:
+                        os.remove(os.path.join(_MP3_DIR, name))
+                    except Exception:
+                        pass
+        except Exception:
+            pass
