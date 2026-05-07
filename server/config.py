@@ -1,4 +1,13 @@
-"""Environment-driven configuration for the server."""
+"""Environment-driven configuration for the server.
+
+Centralizes every env var the server reads. Phase 1 of the v2 rework
+(see docs/PRD_v2.md) layers a FastAPI + WebSocket transport on top of
+the existing Flask app behind the ``USE_WS`` feature flag — the new
+``WS_*``/``LOG_*``/``METRICS_*``/``TTS_CHUNK_*``/``MIC_GATE_*``/
+``WS_RECONNECT_*`` exports below are owned by this module per the task
+map in docs/PHASE_1_TASK_MAP.md. All legacy exports are preserved so
+the Flask path keeps booting unchanged when ``USE_WS=0`` (default).
+"""
 import os
 from dotenv import load_dotenv
 
@@ -82,3 +91,44 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
 # Per-session log directory for topology traces (written as JSONL).
 SAGE_LOG_DIR = os.environ.get("SAGE_LOG_DIR", "logs")
+
+# ───────── Phase 1: FastAPI + WebSocket transport (PRD v2) ─────────
+# Feature flag. When 1, run.sh boots `uvicorn server.app_ws:app` instead of
+# the legacy Flask `python -m server.server`. The Flask path stays as-is for
+# the deployment week (backwards compat) — flip this only when the FastAPI
+# app is actually merged.
+USE_WS = os.environ.get("USE_WS", "0") == "1"
+
+# uvicorn bind for the WS server.
+WS_HOST = os.environ.get("WS_HOST", "0.0.0.0")
+WS_PORT = int(os.environ.get("WS_PORT", "5050"))
+
+# structlog wiring used by `server/logging_setup.py` (Phase 1 observability).
+# `json` is the prod default; `console` switches to a human-readable renderer.
+LOG_FORMAT = os.environ.get("LOG_FORMAT", "json")
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
+
+# Toggle the Prometheus exporter exposed at /metrics. Lets dev runs skip the
+# metrics middleware entirely without removing the routes.
+METRICS_ENABLED = os.environ.get("METRICS_ENABLED", "1") == "1"
+
+# Sentence chunker tuning for streaming TTS (server/streaming.py). Emit a
+# chunk once we've buffered at least TTS_CHUNK_MIN_CHARS, or after the model
+# has paused for TTS_CHUNK_TIMEOUT_MS without a sentence boundary so we don't
+# wait forever on a slow tail.
+TTS_CHUNK_MIN_CHARS = int(os.environ.get("TTS_CHUNK_MIN_CHARS", "30"))
+TTS_CHUNK_TIMEOUT_MS = int(os.environ.get("TTS_CHUNK_TIMEOUT_MS", "400"))
+
+# Robot mic gate timing. After the last TTS audio chunk completes, wait this
+# long before resubscribing the mic — catches in-flight buffers + reverb.
+MIC_GATE_GRACE_MS = int(os.environ.get("MIC_GATE_GRACE_MS", "200"))
+
+# Robot WS reconnect backoff schedule, in milliseconds. Comma-separated env
+# string parsed once at import. The robot walks this list on successive
+# reconnect attempts and stays at the last value once exhausted.
+WS_RECONNECT_BACKOFF_MS = [
+    int(x) for x in os.environ.get(
+        "WS_RECONNECT_BACKOFF_MS", "300,600,1200,2400"
+    ).split(",")
+    if x.strip()
+]
