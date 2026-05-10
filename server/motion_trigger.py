@@ -75,11 +75,14 @@ _TRIGGERS: list[tuple[str, dict, str, list[str]]] = [
         "do a robot dance", "do the robot",
     ]),
     ("follow_movement", {}, "Following you now.", [
-        # Canonical short form — fires the Choregraphe `follow-me` pack.
-        # Bare "follow" alone is omitted on purpose — too greedy
-        # ("follow up on what we said" would mis-fire).
-        "follow me", "come follow me", "follow me around",
+        # Canonical phrases — fire the Choregraphe `follow-me` pack.
+        # Bare "follow" omitted ("follow up on what we said" would mis-fire).
+        # Bare "follow me" omitted too — it false-fires on social-media
+        # mentions like "follow me on Instagram for updates". Require
+        # at least one extra word ("around", "now", "come follow me").
+        "come follow me", "follow me around",
         "start following me", "follow me now",
+        "please follow me", "can you follow me",
         # Tracking semantics (these are unambiguous robot commands)
         "track me", "stay close", "stay with me",
         # Mirror-me semantics (legacy — copies user's pose)
