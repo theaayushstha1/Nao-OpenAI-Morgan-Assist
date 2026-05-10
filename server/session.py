@@ -70,6 +70,34 @@ def _conn():
         "proposed_reply TEXT, final_reply TEXT, verdict TEXT, affect TEXT, "
         "invariant_holds INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
     )
+    # nao-therapy: per-turn mood log surfaced in next-session greeting.
+    # Written by server/tools/emotion.py:log_emotion. Read by
+    # server/memory.py:build_context_preamble for the "Recent mood:" line.
+    c.execute(
+        "CREATE TABLE IF NOT EXISTS mood_log ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL, "
+        "mood TEXT NOT NULL, intensity INTEGER NOT NULL, "
+        "trigger TEXT NOT NULL, "
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    c.execute(
+        "CREATE INDEX IF NOT EXISTS idx_mood_log_user_ts "
+        "ON mood_log(username, created_at DESC)"
+    )
+    # nao-therapy: CBT thought records persisted across sessions so the
+    # therapist can refer back ("last time we worked on catastrophizing").
+    # Written by server/tools/emotion.py:identify_distortion + suggest_reframe.
+    c.execute(
+        "CREATE TABLE IF NOT EXISTS thought_records ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL, "
+        "thought TEXT NOT NULL, distortion TEXT NOT NULL, "
+        "reframe TEXT NOT NULL DEFAULT '', "
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    c.execute(
+        "CREATE INDEX IF NOT EXISTS idx_thought_records_user_ts "
+        "ON thought_records(username, created_at DESC)"
+    )
     try:
         yield c
         c.commit()
@@ -260,6 +288,100 @@ def load_recent_recaps(username: str, n: int = 3) -> list[str]:
             (username, n),
         ).fetchall()
         return [r[0] for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# nao-therapy — mood log + thought records persistence.
+# ---------------------------------------------------------------------------
+
+def log_mood(username: str, mood: str, intensity: int, trigger: str) -> None:
+    """Append a mood entry. Caller is the `log_emotion` agent tool."""
+    if not username:
+        return
+    with _conn() as c:
+        c.execute(
+            "INSERT INTO mood_log (username, mood, intensity, trigger) "
+            "VALUES (?, ?, ?, ?)",
+            (username, str(mood)[:32], int(intensity), str(trigger)[:200]),
+        )
+
+
+def load_recent_moods(username: str, n: int = 5) -> list[dict]:
+    """Most recent mood entries, newest first. Each row has
+    `mood`, `intensity`, `trigger`, `created_at` keys.
+    """
+    if not username:
+        return []
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT mood, intensity, trigger, created_at FROM mood_log "
+            "WHERE username = ? ORDER BY id DESC LIMIT ?",
+            (username, n),
+        ).fetchall()
+        return [
+            {"mood": r[0], "intensity": r[1],
+             "trigger": r[2], "created_at": r[3]}
+            for r in rows
+        ]
+
+
+def log_thought_record(username: str, thought: str, distortion: str,
+                        reframe: str = "") -> None:
+    """Append a CBT thought record. Caller is `identify_distortion`
+    (writes thought + distortion, empty reframe). `suggest_reframe`
+    later updates the most recent matching row to fill in the reframe.
+    """
+    if not username:
+        return
+    with _conn() as c:
+        c.execute(
+            "INSERT INTO thought_records (username, thought, distortion, reframe) "
+            "VALUES (?, ?, ?, ?)",
+            (username, str(thought)[:500], str(distortion)[:80],
+             str(reframe)[:500]),
+        )
+
+
+def attach_reframe_to_latest_thought(username: str, thought: str,
+                                       reframe: str) -> None:
+    """When the therapist calls `suggest_reframe`, attach the reframe
+    to the most-recent matching thought row for this user.
+    """
+    if not username or not reframe:
+        return
+    with _conn() as c:
+        # Match on the most recent record with same/contained thought.
+        row = c.execute(
+            "SELECT id FROM thought_records WHERE username = ? "
+            "AND (thought = ? OR thought LIKE ?) "
+            "ORDER BY id DESC LIMIT 1",
+            (username, thought, f"%{thought[:60]}%"),
+        ).fetchone()
+        if row is not None:
+            c.execute(
+                "UPDATE thought_records SET reframe = ? WHERE id = ?",
+                (str(reframe)[:500], row[0]),
+            )
+
+
+def load_recent_thought_records(username: str, n: int = 3) -> list[dict]:
+    """Newest-first list of thought records.
+    Each row: `thought`, `distortion`, `reframe`, `created_at`.
+    """
+    if not username:
+        return []
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT thought, distortion, reframe, created_at "
+            "FROM thought_records WHERE username = ? "
+            "ORDER BY id DESC LIMIT ?",
+            (username, n),
+        ).fetchall()
+        return [
+            {"thought": r[0], "distortion": r[1],
+             "reframe": r[2], "created_at": r[3]}
+            for r in rows
+        ]
 
 
 # ---------------------------------------------------------------------------

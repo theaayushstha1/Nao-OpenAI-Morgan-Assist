@@ -287,12 +287,70 @@ def _safe_profile_notes(face_id: str) -> str:
     return "\n".join(lines)
 
 
+def _therapy_memory_lines(username: str) -> list[str]:
+    """nao-therapy: pull recent mood + last thought record from the SQLite
+    tables added in `server/session.py` and render as scrubbed bullet
+    lines. Returns [] on any error or when no data exists.
+    """
+    if not username:
+        return []
+    lines: list[str] = []
+    try:
+        from server import session as _ses
+        moods = _ses.load_recent_moods(username, n=5) or []
+        if moods:
+            latest = moods[0]
+            mood_line = "- Recent mood: {0} ({1}/10) — {2}".format(
+                _scrub(str(latest.get("mood") or "?"))[:32],
+                int(latest.get("intensity") or 0),
+                _scrub(str(latest.get("trigger") or ""))[:120],
+            )
+            lines.append(mood_line)
+            # 5-entry trajectory hint when there's history.
+            if len(moods) >= 3:
+                trend = ", ".join(
+                    "{0}({1})".format(
+                        _scrub(str(m.get("mood") or "?"))[:16],
+                        int(m.get("intensity") or 0),
+                    ) for m in moods
+                )
+                lines.append("- Mood trajectory (newest first): {0}".format(trend))
+    except Exception:
+        pass
+
+    try:
+        from server import session as _ses
+        thoughts = _ses.load_recent_thought_records(username, n=2) or []
+        for t in thoughts:
+            distortion = _scrub(str(t.get("distortion") or ""))[:32]
+            reframe = _scrub(str(t.get("reframe") or ""))[:200]
+            thought = _scrub(str(t.get("thought") or ""))[:160]
+            if distortion and reframe:
+                lines.append(
+                    "- Last thought record: '{0}' -> {1} -> {2}".format(
+                        thought, distortion, reframe))
+            elif distortion:
+                lines.append(
+                    "- Last thought record: '{0}' -> {1}".format(
+                        thought, distortion))
+    except Exception:
+        pass
+
+    return lines
+
+
 def build_context_preamble(face_id: str) -> str:
     """Return a sandboxed system note about this user's recent history.
 
     Empty string for new users or if anything fails — never raises.
     The output is wrapped in a delimiter that warns the model the contents
     are user-derived data, not instructions.
+
+    nao-therapy: extended with a "Therapy memory" section that surfaces
+    recent mood (latest + 5-entry trajectory) and the last 1-2 CBT
+    thought records (thought -> distortion -> reframe) so the therapist
+    can open the next session with continuity ("Last time you were
+    catastrophizing about finals — how are things now?").
     """
     try:
         fid = _norm(face_id)
@@ -302,13 +360,24 @@ def build_context_preamble(face_id: str) -> str:
             row = c.execute(
                 "SELECT display_name FROM users WHERE face_id = ?", (fid,)
             ).fetchone()
+        # Pull therapy-specific memory keyed by username (face_id is the
+        # username on this branch — same value, same lookup).
+        therapy_lines = _therapy_memory_lines(fid)
         if not row:
-            return ""
-        display = _scrub(str(row[0] or fid))[:60]
-        sessions = recent_sessions(fid, n=3)
-        sessions = [s for s in sessions if s.get("summary")]
-        notes = _safe_profile_notes(fid)
-        if not sessions and not notes:
+            # No display_name row yet, but we may still have therapy
+            # memory if the user logged moods as 'guest' before
+            # naming themselves. Bail only if BOTH sources are empty.
+            if not therapy_lines:
+                return ""
+            display = _scrub(str(fid))[:60]
+            sessions = []
+            notes = ""
+        else:
+            display = _scrub(str(row[0] or fid))[:60]
+            sessions = recent_sessions(fid, n=3)
+            sessions = [s for s in sessions if s.get("summary")]
+            notes = _safe_profile_notes(fid)
+        if not sessions and not notes and not therapy_lines:
             return ""
         now = time.time()
         parts = []
@@ -318,6 +387,8 @@ def build_context_preamble(face_id: str) -> str:
         body = "Returning user: {0}\n".format(display)
         if parts:
             body += "Recent sessions:\n" + "\n".join(parts) + "\n"
+        if therapy_lines:
+            body += "Therapy memory:\n" + "\n".join(therapy_lines) + "\n"
         if notes:
             body += "Saved notes:\n" + notes + "\n"
         return _PREAMBLE_HEADER + body + "[END USER MEMORY]"

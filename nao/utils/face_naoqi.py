@@ -90,14 +90,77 @@ def recognize_face_naoqi(qi_session, tts, subscriber_name="FaceReco", timeout=10
                 pass
 
 
-def learn_new_face_naoqi(qi_session, tts, name, subscriber_name="FaceLearn"):
-    """Try to learn the face currently visible to NAO. Silent — no spoken
-    prompt and no follow-up greeting. The caller already had a conversation
-    with the user (asking their name) so the camera almost always has a face
-    in frame; saying "please look at me" again is redundant and was the main
-    reason onboarding felt slow.
+def _safe_say(tts, text):
+    """Best-effort spoken phrase; never raises. Used by the voiced
+    confirmation flow in `learn_new_face_naoqi` so a flaky TTS proxy
+    can't break the learn path.
+    """
+    if tts is None:
+        return
+    try:
+        tts.say(text)
+    except Exception as e:
+        print("[face_naoqi] tts.say failed:", e)
 
-    Returns True if a face was captured and learnFace was called.
+
+def _attempt_learn_once(face_detection, memory, name, scan_seconds=4):
+    """One pass of: wait for a face in frame, call learnFace, verify the
+    name appears in getLearnedFacesList. Returns True/False/'no_face'.
+    Helper for `learn_new_face_naoqi` so we can retry cleanly.
+    """
+    start_time = time.time()
+    face_found = False
+    while time.time() - start_time < scan_seconds:
+        try:
+            face_data = memory.getData("FaceDetected")
+            if face_data and isinstance(face_data, list) and len(face_data) >= 2:
+                if face_data[1] and len(face_data[1]) > 0:
+                    face_found = True
+                    break
+        except Exception:
+            pass
+        time.sleep(0.2)
+    if not face_found:
+        return "no_face"
+    print("[Learning face as]: {}".format(name))
+    try:
+        ret = face_detection.learnFace(name)
+        print("[learnFace] returned:", ret)
+    except Exception as e:
+        print("[learnFace error]:", e)
+        return False
+    time.sleep(0.4)
+    try:
+        learned = face_detection.getLearnedFacesList() or []
+        if name in learned:
+            return True
+        print("[Learn face] verify FAILED; learned list:", learned)
+        return False
+    except Exception as e:
+        # learnFace didn't raise — treat as optimistic success.
+        print("[Learn face] verify read error:", e)
+        return True
+
+
+def learn_new_face_naoqi(qi_session, tts, name, subscriber_name="FaceLearn"):
+    """Learn the face currently in frame, then run a verification
+    round-trip: re-detect for ~2 s and confirm the name comes back.
+    Speaks spoken cues at each step so the user feels the system worked.
+
+    Sequence:
+      1. Wait up to 4 s for a face in frame.
+      2. Call ``learnFace(name)``; verify via ``getLearnedFacesList()``.
+      3. Speak "Got it, {name}. Let me make sure I see you."
+      4. Subscribe ``FaceVerify`` and recognise for ~2 s.
+      5. If recognised: speak "Yes, I see you, {name}. Pleasure to meet you."
+      6. If not recognised: retry one more learn pass, then accept the
+         persisted learn (we did write to NAOqi's face DB) but warn the
+         user lighting may be poor.
+
+    Returns True if the face was persisted to NAOqi's DB at any point in
+    the flow (so the next session can still try to recognise). Best-effort
+    on TTS — failed `tts.say` calls are swallowed and don't break the
+    learn path.
     """
     face_detection = None
     try:
@@ -107,47 +170,82 @@ def learn_new_face_naoqi(qi_session, tts, name, subscriber_name="FaceLearn"):
             face_detection.subscribe(subscriber_name)
         except Exception:
             pass
-        start_time = time.time()
-        face_found = False
-        while time.time() - start_time < 4:
+
+        # ── Pass 1: learn ───────────────────────────────────────────
+        result = _attempt_learn_once(face_detection, memory, name)
+        if result == "no_face":
+            print("[Learn face]: no face in frame for {0}, skipping".format(name))
+            _safe_say(tts, "I don't see you yet, {0}. Look right at me and tell me again.".format(name))
+            return False
+        if not result:
+            # Hard failure on the first pass — try once more.
+            _safe_say(tts, "Let me try once more, {0}.".format(name))
+            time.sleep(0.4)
+            result = _attempt_learn_once(face_detection, memory, name)
+            if not result or result == "no_face":
+                _safe_say(tts, "I'm having trouble learning your face right now, {0}. We can try again next time.".format(name))
+                return False
+
+        # learnFace succeeded.
+        _safe_say(tts, "Got it, {0}. Let me make sure I see you.".format(name))
+
+        # ── Verification round-trip ─────────────────────────────────
+        try:
+            face_detection.unsubscribe(subscriber_name)
+        except Exception:
+            pass
+        verify_name = "FaceVerify"
+        try:
+            face_detection.subscribe(verify_name)
+        except Exception:
+            pass
+
+        recognized = False
+        verify_start = time.time()
+        target_lower = (name or "").strip().lower()
+        while time.time() - verify_start < 2.0:
             try:
                 face_data = memory.getData("FaceDetected")
                 if face_data and isinstance(face_data, list) and len(face_data) >= 2:
-                    if face_data[1] and len(face_data[1]) > 0:
-                        face_found = True
-                        break
+                    info_list = face_data[1] if len(face_data) > 1 else None
+                    if info_list and len(info_list) > 0:
+                        first = info_list[0]
+                        if isinstance(first, list) and len(first) >= 2:
+                            extra = first[1]
+                            if isinstance(extra, list) and len(extra) >= 3:
+                                seen = (extra[2] or "")
+                                if seen and isinstance(seen, _TEXT_TYPES) \
+                                        and seen.strip().lower() == target_lower:
+                                    recognized = True
+                                    break
             except Exception:
                 pass
             time.sleep(0.2)
-        if face_found:
-            print("[Learning face as]: {}".format(name))
-            try:
-                # learnFace may return bool, None, or raise. Capture the
-                # return so a False ("face not clear enough") doesn't get
-                # silently treated as success and leave us claiming we
-                # learned the user when we didn't.
-                ret = face_detection.learnFace(name)
-                print("[learnFace] returned:", ret)
-            except Exception as e:
-                print("[learnFace error]:", e)
-                return False
-            time.sleep(0.4)
-            # Verify by reading the persisted list. If the name isn't there,
-            # something silently failed (insufficient face data, etc.) and
-            # the caller needs to know so they can retry next session.
-            try:
-                learned = face_detection.getLearnedFacesList() or []
-                if name in learned:
-                    return True
-                print("[Learn face] verify FAILED; learned list:", learned)
-                return False
-            except Exception as e:
-                # If we can't read the list, be optimistic — learnFace
-                # didn't raise, so probably it worked.
-                print("[Learn face] verify read error:", e)
-                return True
-        print("[Learn face]: no face in frame for {0}, skipping".format(name))
-        return False
+
+        try:
+            face_detection.unsubscribe(verify_name)
+        except Exception:
+            pass
+
+        if recognized:
+            _safe_say(tts, "Yes, I see you, {0}. Nice to meet you.".format(name))
+            return True
+
+        # Recognition didn't come back. The face IS in NAOqi's DB
+        # though (verify in pass 1 confirmed). Try one more learn
+        # for a stronger sample, then accept.
+        _safe_say(tts, "Almost there. Hold still for a moment, {0}.".format(name))
+        try:
+            face_detection.subscribe(subscriber_name)
+        except Exception:
+            pass
+        retry_result = _attempt_learn_once(face_detection, memory, name,
+                                            scan_seconds=2)
+        if retry_result is True:
+            _safe_say(tts, "There you are, {0}. I'll remember you.".format(name))
+        else:
+            _safe_say(tts, "I learned your face, {0}, but the lighting is tricky. We'll work on it next time.".format(name))
+        return True
     except Exception as e:
         print("[Learn face error]:", e)
         return False

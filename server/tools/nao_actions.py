@@ -263,6 +263,13 @@ THERAPIST_ACTIONS = [
     stand_up, sit_down,
     play_animation,
     gesture,
+    # nao-therapy: learn_face is the agent-side path for "remember
+    # me as Aayush" / "my name is Aayush" / "call me Aayush". The
+    # motion_trigger fast-path catches the obvious patterns before
+    # the LLM sees them; this is the fallback when the user phrasing
+    # is more conversational ("oh by the way I'm Aayush, would you
+    # remember me?").
+    learn_face,
 ]
 
 ALL_TOOL_NAMES = {t.name for t in CHAT_ACTIONS} | {"set_led_color"}

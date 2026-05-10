@@ -99,6 +99,17 @@ def _log_emotion_impl(ctx, mood: str, intensity: int, trigger: str) -> str:
     store.setdefault("emotion_log", []).append(
         {"mood": mood, "intensity": intensity, "trigger": trigger}
     )
+    # nao-therapy: persist to SQLite so the next-session greeting can
+    # surface the mood trajectory. In-memory `emotion_log` is still
+    # used by the session recap rollup at end-of-conversation.
+    try:
+        from server import session as _ses
+        username = (store.get("username") or "").strip()
+        if username:
+            _ses.log_mood(username, mood, int(intensity), trigger)
+    except Exception:
+        # Persistence is best-effort — never break the agent turn.
+        pass
     return "logged"
 
 
@@ -132,10 +143,40 @@ def _identify_distortion_impl(thought: str) -> dict:
     return _classify_distortion(thought)
 
 
+def _persist_thought(ctx, thought: str, distortion: str) -> None:
+    """nao-therapy: write the thought + identified distortion to
+    SQLite so it's available in next-session memory preamble. Best-
+    effort — never breaks the agent turn.
+    """
+    try:
+        from server import session as _ses
+        store = _unwrap(ctx)
+        username = (store.get("username") or "").strip()
+        if username:
+            _ses.log_thought_record(username, thought, distortion, reframe="")
+    except Exception:
+        pass
+
+
+def _persist_reframe(ctx, thought: str, reframe_text: str) -> None:
+    try:
+        from server import session as _ses
+        store = _unwrap(ctx)
+        username = (store.get("username") or "").strip()
+        if username:
+            _ses.attach_reframe_to_latest_thought(username, thought, reframe_text)
+    except Exception:
+        pass
+
+
 @function_tool
-def identify_distortion(thought: str) -> dict:
+def identify_distortion(ctx: RunContextWrapper, thought: str) -> dict:
     """Identify one CBT cognitive distortion in the user's thought with a gentle explanation."""
-    return _identify_distortion_impl(thought)
+    out = _identify_distortion_impl(thought)
+    distortion_name = (out.get("distortion") or "").strip() if isinstance(out, dict) else ""
+    if distortion_name:
+        _persist_thought(ctx, thought, distortion_name)
+    return out
 
 
 def _reframe_impl(thought: str, distortion: str) -> list[str]:
@@ -157,9 +198,13 @@ def _reframe_impl(thought: str, distortion: str) -> list[str]:
 
 
 @function_tool
-def suggest_reframe(thought: str, distortion: str) -> list[str]:
+def suggest_reframe(ctx: RunContextWrapper, thought: str, distortion: str) -> list[str]:
     """Return two balanced reframes for a thought exhibiting the given distortion."""
-    return _reframe_impl(thought, distortion)
+    reframes = _reframe_impl(thought, distortion)
+    # Persist the first reframe (the one most likely to be offered).
+    if reframes:
+        _persist_reframe(ctx, thought, reframes[0])
+    return reframes
 
 
 # ────────── observe_face ──────────

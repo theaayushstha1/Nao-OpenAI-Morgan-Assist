@@ -1,67 +1,43 @@
-"""Agent graph builders."""
-from server.agents.chat import (
-    chat_agent, chat_embodied_agent, pure_chat_agent,
-)
-from server.agents.chatbot import chatbot_agent
-from server.agents.skills import skills_agent
+"""Agent graph builders.
+
+`nao-therapy` branch: this assistant is therapy-only. The router,
+chatbot (Morgan CS), skills, and pure/embodied chat agents are
+intentionally NOT imported here so they don't load at boot, but their
+source files remain in `server/agents/` and `server/tools/` for
+reference and to make reactivation a one-line change in any future
+multi-mode branch.
+
+Crisis gate (`server/safety.py`) is unchanged and runs pre-agent on
+every turn — it bypasses the LLM entirely on hard-keyword matches.
+"""
 from server.agents.therapist import build_therapist_agent
-from server.agents.router import build_router
 
-
-# Phase 11.11 — embodiment trigger keywords. When the transcript inside
-# a hint='chat' turn matches any of these, route to chat_embodied_agent
-# (which has the 18 NAO action tools + 10 gestures). Otherwise stay on
-# pure_chat_agent for lower-variance, sub-2s replies.
-#
-# Ordered short-to-broad. Matched as case-insensitive substrings.
-_EMBODIED_TRIGGERS: tuple[str, ...] = (
-    # explicit motion verbs
-    "dance", "wave", "spin", "kneel", "stand up", "sit down",
-    "follow me", "follow movement", "stop following",
-    "move forward", "move back", "step forward", "step back",
-    "turn left", "turn right", "rotate",
-    # explicit body action requests
-    "show me", "use your body", "use your hand", "use your arm",
-    "raise your hand", "lift your hand",
-    "nod", "shake your head", "shake head", "clap", "applaud",
-    # gesture-class
-    "gesture", "do a gesture", "make a gesture",
-    # voice picker (Phase 11.8 voice profile)
-    "switch voice", "change voice", "voice 1", "voice 2", "voice 3",
-    "girl voice", "man voice", "neutral voice", "female voice",
-    "male voice",
-    # LED color changes
-    "eye color", "eyes red", "eyes blue", "eyes green", "eyes yellow",
-    "eyes white", "eyes purple", "led",
-    # animation library
-    "play animation", "do an animation", "animate",
-)
+# ---------------------------------------------------------------------------
+# Embodiment trigger keywords are still referenced by `server/app_ws.py`
+# (the pure-chat fast-fallback lane). In therapy mode that lane never
+# fires (hint is never 'chat'), but we keep the symbol exported as a
+# zero-op stub so the import in app_ws.py doesn't break.
+# ---------------------------------------------------------------------------
+_EMBODIED_TRIGGERS: tuple[str, ...] = ()
 
 
 def _wants_embodied(transcript: str | None) -> bool:
-    """True if the transcript suggests the user wants a robot action."""
-    t = (transcript or "").lower()
-    if not t:
-        return False
-    return any(kw in t for kw in _EMBODIED_TRIGGERS)
+    """Therapy mode never enters the pure-chat fast-fallback lane —
+    every turn goes straight to the therapist agent. Return False so
+    the lane selection in `app_ws.py` stays on the default `run_agent_streamed`
+    path with the full agent + tools.
+    """
+    return False
 
 
 def pick_initial_agent(username: str, hint: str | None,
                         transcript: str | None = None):
-    """Return the agent to start a turn with, based on hint + transcript.
+    """Return the agent to start a turn with.
 
-    Phase 11.11: hint='chat' splits into pure_chat (default, no tools)
-    vs chat_embodied (when the transcript triggers an embodiment keyword).
-    Other hints unchanged.
+    `nao-therapy` branch: always returns the therapist agent regardless
+    of the legacy `hint` field. The hint is preserved on the WS frame
+    contract for backward compatibility but has no effect on routing.
+    Skipping the router agent saves the ~250-300 ms LLM hop that was
+    previously spent just deciding to hand off to the therapist.
     """
-    if hint == "chat":
-        if _wants_embodied(transcript):
-            return chat_embodied_agent
-        return pure_chat_agent
-    if hint == "morgan":
-        return chatbot_agent
-    if hint == "therapy":
-        return build_therapist_agent(username)
-    if hint == "skills":
-        return skills_agent
-    return build_router(username)
+    return build_therapist_agent(username)

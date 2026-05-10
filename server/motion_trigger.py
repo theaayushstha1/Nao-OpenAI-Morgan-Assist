@@ -118,34 +118,14 @@ _TRIGGERS: list[tuple[str, dict, str, list[str]]] = [
         "you can see me now", "see me again",
     ]),
 
-    # ── Voice profile picker (Phase 11.8) ───────────────────
-    # Three voices: girl, man, neutral. Recognized via short phrases the
-    # user can say at any time during a session. The handler in app_ws
-    # reads `args.profile` and persists via session.set_voice_profile.
-    ("set_voice_profile", {"profile": "girl"}, "Switching to girl voice.", [
-        "use the girl voice", "use girl voice", "girl voice",
-        "switch to girl voice", "switch to the girl voice",
-        "use a woman's voice", "use the woman voice", "female voice",
-        "use voice one", "voice one", "voice 1", "first voice",
-    ]),
-    ("set_voice_profile", {"profile": "man"}, "Switching to man voice.", [
-        "use the man voice", "use man voice", "man voice",
-        "switch to man voice", "switch to the man voice",
-        "use a man's voice", "use a male voice", "male voice", "guy voice",
-        "use voice two", "voice two", "voice 2", "second voice",
-    ]),
-    ("set_voice_profile", {"profile": "neutral"}, "Switching to neutral voice.", [
-        "use the neutral voice", "use neutral voice", "neutral voice",
-        "switch to neutral voice", "switch to the neutral voice",
-        "use voice three", "voice three", "voice 3", "third voice",
-    ]),
-    ("set_voice_profile", {"profile": "my"}, "Switching to your voice.", [
-        "switch to my voice", "use my voice", "my voice",
-        "switch to your voice", "use your voice", "your voice",
-        "switch to aayush voice", "aayush voice", "use aayush voice",
-        "switch to operator voice", "operator voice",
-        "use voice four", "voice four", "voice 4", "fourth voice",
-    ]),
+    # ── Voice profile picker — DISABLED in nao-therapy ──────
+    # The therapy build locks to a single warm therapeutic voice
+    # (`ELEVENLABS_DEFAULT_PROFILE=neutral` in .env, default River).
+    # Voice-switch requests at the LLM layer fall through to the
+    # therapist agent which acknowledges them conversationally
+    # ("I'll keep this voice — I think it's a good one for our chat").
+    # The session.set_voice_profile write path is preserved for a
+    # future onboarding choice but is no longer LLM-callable.
 
     # ── LEDs ────────────────────────────────────────────────
     ("change_eye_color", {"color": "red"}, "Eyes red.", [
@@ -185,16 +165,102 @@ class MotionMatch:
     ack: str
 
 
+# ---------------------------------------------------------------------------
+# nao-therapy: face-learn fast-path with name extraction.
+# ---------------------------------------------------------------------------
+# Each entry is a regex with a single capture group `(name)`. The
+# captured name is plumbed into the `learn_face` action's `name` arg
+# and ack template. Only HIGH-CONFIDENCE patterns are listed here —
+# ambiguous patterns ("I'm Aayush" can mean "I'm anxious") are left
+# to the LLM which has stronger context.
+#
+# Name validation: must be 2-24 chars, alpha (with apostrophes /
+# hyphens), and not appear in `_NON_NAMES_FAST` (common adjectives /
+# nouns that follow "my name" in idioms). Names get title-cased so
+# "aayush" -> "Aayush" before going to the learn_face tool.
+_NON_NAMES_FAST = frozenset({
+    "tired", "fine", "good", "okay", "ok", "great", "happy", "sad",
+    "anxious", "stressed", "depressed", "lonely", "scared", "angry",
+    "ready", "back", "here", "sorry", "done", "leaving", "going",
+    "trying", "thinking",
+})
+
+
+def _looks_like_name(candidate: str) -> bool:
+    """Conservative gate: don't fire learn_face on common adjectives."""
+    c = (candidate or "").strip().lower()
+    if not c or c in _NON_NAMES_FAST:
+        return False
+    if not (2 <= len(c) <= 24):
+        return False
+    # Letters, apostrophes, hyphens only (so 'O'Hara', 'Anne-Marie').
+    return bool(re.match(r"^[a-z][a-z'\-]+$", c))
+
+
+_LEARN_FACE_PATTERNS: tuple[tuple[re.Pattern, str], ...] = tuple(
+    (re.compile(p, re.IGNORECASE), ack_tmpl)
+    for p, ack_tmpl in (
+        # Highest confidence: explicit teach verbs.
+        (r"\bremember\s+me\s+as\s+([a-z][a-z'\-]+)\b",
+         "Remembering you as {name}."),
+        (r"\bsave\s+my\s+face\s+as\s+([a-z][a-z'\-]+)\b",
+         "Saving your face as {name}."),
+        (r"\blearn\s+my\s+face\s+as\s+([a-z][a-z'\-]+)\b",
+         "Learning your face as {name}."),
+        (r"\bremember\s+(?:that\s+)?my\s+name\s+is\s+([a-z][a-z'\-]+)\b",
+         "Remembering you as {name}."),
+        # Strong context: "name is X" + verbs around face/remembering.
+        (r"\bmy\s+name\s+is\s+([a-z][a-z'\-]+)\b",
+         "Nice to meet you, {name}."),
+        (r"\bcall\s+me\s+([a-z][a-z'\-]+)\b",
+         "Got it, {name}."),
+    )
+)
+
+
+def _detect_learn_face(transcript: str) -> MotionMatch | None:
+    """Try to extract a name + emit a `learn_face` action without an
+    LLM hop. Returns None if no high-confidence pattern matches.
+    """
+    for pattern, ack_tmpl in _LEARN_FACE_PATTERNS:
+        m = pattern.search(transcript)
+        if not m:
+            continue
+        raw = (m.group(1) or "").strip()
+        if not _looks_like_name(raw):
+            continue
+        name = raw[0].upper() + raw[1:].lower()
+        return MotionMatch(
+            action="learn_face",
+            args={"name": name},
+            ack=ack_tmpl.format(name=name),
+        )
+    return None
+
+
 def detect(transcript: str) -> MotionMatch | None:
     """Return MotionMatch if `transcript` clearly requests a NAO body action.
 
     Returns None for ambiguous or non-motion input — those go to the LLM.
+
+    Order:
+      1. Face-learn fast-path (regex with name capture). Highest signal,
+         saves an LLM hop on the very common "remember me as X" turn.
+      2. Static-phrase trigger table (`_COMPILED`). Posture, gestures,
+         dances, follow-me, etc.
     """
     if not transcript:
         return None
     t = transcript.strip()
     if not t:
         return None
+
+    # 1. learn_face fast-path.
+    lf = _detect_learn_face(t)
+    if lf is not None:
+        return lf
+
+    # 2. Static phrases.
     for pattern, action, args, ack in _COMPILED:
         if pattern.search(t):
             return MotionMatch(action=action, args=dict(args), ack=ack)
