@@ -220,6 +220,13 @@ class NaoAudioStreamer(ALModule):
         # incoming buffer aligns cleanly to 20 ms chunks.
         self._tail = b""
 
+        # nao-therapy: liveness watchdog hook. Updated every time PCM is
+        # successfully read (either from ALAudioDevice or from the
+        # fragment recorder). The ws_client mic_watchdog reads this via
+        # `last_pcm_age_ms()` to detect a wedged recorder when the gate
+        # is supposed to be open but no audio is flowing.
+        self._last_pcm_ms = 0.0
+
         # Proxies — created lazily on start().
         self._audio_dev = None
         self._recorder = None
@@ -372,6 +379,21 @@ class NaoAudioStreamer(ALModule):
             "[audio_module] stopped. dropped_frames=%d", self._dropped,
         )
 
+    def last_pcm_age_ms(self):
+        """Milliseconds since the most recent PCM frame was captured.
+
+        Returns ``None`` if no PCM has ever been captured (used by the
+        ws_client mic_watchdog to skip the first few seconds of a fresh
+        session). Returns a large number (~the session uptime) if the
+        recorder is wedged.
+
+        Public read-only — `gate_closed` and `streaming` already exist
+        as @property below for the rest of the state surface.
+        """
+        if not self._last_pcm_ms:
+            return None
+        return time.time() * 1000.0 - self._last_pcm_ms
+
     def gate(self, closed):
         """Mute / unmute the mic (idempotent).
 
@@ -501,6 +523,9 @@ class NaoAudioStreamer(ALModule):
 
             # Build (seq, ts_ms, b64) triples and push.
             base_ts_ms = _now_ms()
+            if sliced:
+                # nao-therapy: liveness for the ws_client mic_watchdog.
+                self._last_pcm_ms = base_ts_ms
             for i, chunk in enumerate(sliced):
                 seq = self._seq
                 self._seq = (self._seq + 1) & 0xFFFFFFFF  # 32-bit wrap-around
@@ -691,6 +716,9 @@ class NaoAudioStreamer(ALModule):
                         len(pcm), cur_size))
                     sys.stderr.flush()
                     first_pcm_logged = True
+                # nao-therapy: update liveness so the ws_client watchdog
+                # can detect a wedged recorder.
+                self._last_pcm_ms = time.time() * 1000.0
                 self._slice_and_enqueue(pcm)
             time.sleep(0.02)
 

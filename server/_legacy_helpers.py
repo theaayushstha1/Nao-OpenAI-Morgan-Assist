@@ -349,19 +349,36 @@ def partial_wait_limit_hit(username: str) -> bool:
 # ───────── ASR ─────────
 
 def transcribe(path: str) -> str:
+    """nao-therapy: tag every STT call with provider + latency in stderr
+    so a `[stt]` grep on the live log shows the path each turn took.
+    Deepgram (when enabled) → Whisper fallback if empty.
+    """
+    import time as _time
     if config.USE_DEEPGRAM:
         from server import deepgram_asr
         text = deepgram_asr.transcribe(path)
+        # `deepgram_asr` already logs its own [stt] line(s).
         if text:
             return text
-        print("[transcribe] deepgram returned empty; falling back to whisper",
+        print("[stt] stt_provider=deepgram stt_outcome=empty_falling_through_to_whisper",
               flush=True)
-    with open(path, "rb") as f:
-        resp = _client.audio.transcriptions.create(
-            model=config.WHISPER_MODEL, file=f,
-            language="en", temperature=0,
-        )
-    return resp.text
+    t0 = _time.perf_counter()
+    try:
+        with open(path, "rb") as f:
+            resp = _client.audio.transcriptions.create(
+                model=config.WHISPER_MODEL, file=f,
+                language="en", temperature=0,
+            )
+        latency_ms = (_time.perf_counter() - t0) * 1000.0
+        print("[stt] stt_provider=whisper stt_outcome=ok stt_latency_ms={0:.1f} "
+              "transcript_len={1}".format(latency_ms, len(resp.text or "")),
+              flush=True)
+        return resp.text
+    except Exception as e:
+        latency_ms = (_time.perf_counter() - t0) * 1000.0
+        print("[stt] stt_provider=whisper stt_outcome=fail stt_latency_ms={0:.1f} "
+              "err={1!r}".format(latency_ms, e), flush=True)
+        return ""
 
 
 # ───────── agent runner ─────────

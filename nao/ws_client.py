@@ -254,6 +254,9 @@ class NaoWsClient(object):
         self._action_queue = _queue.Queue()
         self._action_worker_thread = None
 
+        # nao-therapy: mic liveness watchdog (see _mic_watchdog_loop).
+        self._mic_watchdog_thread = None
+
         # Post-playback waiter thread. tts_ended from the server only
         # means "server is done streaming" — it does NOT mean local
         # playback is finished. The tts_player can still have several
@@ -864,21 +867,47 @@ class NaoWsClient(object):
             if new_stop.is_set():
                 return
 
-            # 3. Reopen the mic and notify the server.
-            try:
-                if self.audio_streamer is not None:
-                    self.audio_streamer.gate(False)
-                self.push_control("mic_resumed",
-                                  {"grace_ms": int(grace_s * 1000)})
-                self.log.info("mic_resume_after_playback",
-                              grace_ms=int(grace_s * 1000))
-            except Exception as exc:
-                self.log.error("mic_gate_open_failed", error=str(exc))
+            # 3. Reopen the mic and notify the server. Wrapped in
+            #    retry-with-backoff so a transient naoqi proxy hiccup
+            #    can't leave the mic stuck closed. On terminal failure
+            #    we tear the WS down so the connect-loop builds a fresh
+            #    audio module.
+            self._open_mic_with_retry(grace_s, source="post_playback")
 
         t = threading.Thread(target=_waiter, name="nao-mic-resume-waiter")
         t.daemon = True
         self._mic_resume_waiter = t
         t.start()
+
+    def _open_mic_with_retry(self, grace_s, source):
+        """Open the mic gate with up to 3 retries (100 ms apart). On
+        persistent failure, force a WS shutdown so the outer connect-
+        loop spawns a fresh audio module + recorder.
+        """
+        if self.audio_streamer is None:
+            return
+        last_err = None
+        for attempt in range(1, 4):
+            try:
+                self.audio_streamer.gate(False)
+                self.push_control("mic_resumed",
+                                  {"grace_ms": int(grace_s * 1000)})
+                self.log.info("mic_resume_after_playback",
+                              grace_ms=int(grace_s * 1000),
+                              source=source, attempt=attempt)
+                return
+            except Exception as exc:
+                last_err = str(exc)
+                self.log.warn("mic_gate_open_failed",
+                              attempt=attempt, error=last_err)
+                time.sleep(0.1)
+        # All retries failed — escalate.
+        self.log.error("mic_gate_open_failed_terminal",
+                       source=source, error=last_err)
+        try:
+            self.shutdown_event.set()
+        except Exception:
+            pass
 
     def _cancel_pending_mic_open(self):
         with self._mic_timer_lock:
@@ -925,12 +954,10 @@ class NaoWsClient(object):
         # buffer flush — 250 ms is comfortably more than one fragment.
         time.sleep(0.25)
 
-        try:
-            self.audio_streamer.gate(False)  # fresh stream.wav
-            self.log.info("recorder_restart_after_self_echo")
-            self.push_control("mic_resumed", {"grace_ms": 0})
-        except Exception as exc:
-            self.log.error("echo_reject_gate_open_failed", error=str(exc))
+        # Reopen the recorder via the retry-with-shutdown helper so a
+        # transient gate failure doesn't leave the mic stuck closed.
+        self._open_mic_with_retry(grace_s=0.0, source="echo_reject_restart")
+        self.log.info("recorder_restart_after_self_echo")
 
     def _on_crisis_lock(self, data):
         """Server flagged a crisis. End the local turn immediately.
@@ -1638,6 +1665,99 @@ class NaoWsClient(object):
         self._action_worker_thread.daemon = True
         self._action_worker_thread.start()
 
+        # nao-therapy: mic watchdog. Polls the audio module's
+        # last_pcm_age_ms() once per 5 s. If the gate is open, TTS is
+        # NOT playing, AND no PCM has been captured for >4 s, we
+        # assume the recorder is wedged and force a restart. This is
+        # the safety net for the "stuck mic, doesn't listen" symptom
+        # the user has been hitting.
+        self._mic_watchdog_thread = threading.Thread(
+            target=self._mic_watchdog_loop, name="nao-mic-watchdog")
+        self._mic_watchdog_thread.daemon = True
+        self._mic_watchdog_thread.start()
+
+    def _mic_watchdog_loop(self):
+        """Periodic recorder liveness check.
+
+        Fires once per 5 s. Conditions to flag a wedged recorder:
+          - audio_streamer exists
+          - gate is currently OPEN (we expect mic to be active)
+          - tts_active is FALSE (we're not gating ourselves)
+          - last PCM was captured > 4000 ms ago (or never received
+            after a 10 s grace from session start)
+        Action: log `mic_silent_too_long` + force a recorder restart
+        via the retry-with-shutdown helper. The first recovery is
+        cheap (gate close + reopen); if it keeps failing we shut the
+        WS down and let the connect-loop spin a fresh audio module.
+        """
+        # Per-loop state.
+        SILENCE_THRESHOLD_MS = 4000.0
+        STARTUP_GRACE_S = 10.0
+        loop_start = time.time()
+        while not self.shutdown_event.is_set():
+            try:
+                # Wait first so we don't fire on the very first tick of
+                # a fresh session (recorder needs ~1-2 s to spin up).
+                if self.shutdown_event.wait(5.0):
+                    return
+                if self.audio_streamer is None:
+                    continue
+                # Skip while TTS is playing (the gate is intentionally
+                # closed during playback, so silence is expected).
+                if self._tts_active.is_set():
+                    continue
+                gate_closed = bool(getattr(
+                    self.audio_streamer, "gate_closed", False))
+                if gate_closed:
+                    continue
+                age_ms = None
+                try:
+                    age_ms = self.audio_streamer.last_pcm_age_ms()
+                except Exception as exc:
+                    self.log.debug("mic_watchdog_age_lookup_failed",
+                                   error=str(exc))
+                    continue
+                if age_ms is None:
+                    # No PCM ever captured. Allow the startup grace
+                    # window before flagging — recorder is still warming
+                    # up on a fresh connection.
+                    if (time.time() - loop_start) < STARTUP_GRACE_S:
+                        continue
+                    self.log.warn("mic_silent_no_pcm",
+                                  uptime_s=round(time.time() - loop_start, 1))
+                    self._force_recorder_restart(reason="no_pcm_ever")
+                    continue
+                if age_ms > SILENCE_THRESHOLD_MS:
+                    self.log.warn("mic_silent_too_long",
+                                  age_ms=round(age_ms, 1))
+                    self._force_recorder_restart(reason="pcm_stale")
+            except Exception as exc:
+                # Watchdog must never die.
+                self.log.debug("mic_watchdog_iter_error", error=str(exc))
+
+    def _force_recorder_restart(self, reason="watchdog"):
+        """Close+reopen the gate to spin a fresh fragment recorder.
+        Used by the watchdog when the recorder appears wedged. Best-
+        effort; on persistent failure the WS is shut down so the
+        connect-loop builds a fresh audio module.
+        """
+        if self.audio_streamer is None:
+            return
+        try:
+            self.audio_streamer.gate(True)
+        except Exception as exc:
+            self.log.error("recorder_restart_close_failed",
+                           reason=reason, error=str(exc))
+            try:
+                self.shutdown_event.set()
+            except Exception:
+                pass
+            return
+        time.sleep(0.25)
+        self._open_mic_with_retry(grace_s=0.0,
+                                   source="watchdog:" + str(reason))
+        self.log.info("recorder_force_restarted", reason=reason)
+
     def _join_workers(self):
         # 1s join — threads are daemon and will get nuked on process exit
         # if they refuse to wake up, but in practice the recv loop exits
@@ -1660,7 +1780,8 @@ class NaoWsClient(object):
             pass
 
         for t in (self._sender_thread, self._receiver_thread,
-                  self._barge_thread, self._action_worker_thread):
+                  self._barge_thread, self._action_worker_thread,
+                  self._mic_watchdog_thread):
             if t is None:
                 continue
             try:
@@ -1671,6 +1792,7 @@ class NaoWsClient(object):
         self._receiver_thread = None
         self._barge_thread = None
         self._action_worker_thread = None
+        self._mic_watchdog_thread = None
 
     def _teardown_ws(self):
         with self._ws_lock:

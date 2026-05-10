@@ -1104,11 +1104,13 @@ async def _should_finalize_turn(sess: _Session,
     # robot hint — preserve the pre-Phase-2 contract.
     if sess.silero is None:
         if sess.robot_eou_hint:
+            sess._vad_decision_reason = "robot_hint_no_silero"  # type: ignore[attr-defined]
             return True
         # Hard ceiling still applies even with no detector.
         if (sess.utterance_start_ms
                 and (now_ms - sess.utterance_start_ms)
                 >= EOU_HARD_CEILING_MS):
+            sess._vad_decision_reason = "hard_ceiling_no_silero"  # type: ignore[attr-defined]
             logger.info(
                 "eou_arbiter_hard_ceiling",
                 user=sess.username, session_id=sess.session_id,
@@ -1127,6 +1129,14 @@ async def _should_finalize_turn(sess: _Session,
     #    the silence accumulator (otherwise we'd auto-finalize before the
     #    user has even started talking).
     if sess.had_speech and silence_ms >= EOU_MIN_SILENCE_MS:
+        sess._vad_decision_reason = "silero_silence"  # type: ignore[attr-defined]
+        logger.info(
+            "eou_arbiter_decision",
+            user=sess.username, session_id=sess.session_id,
+            reason="silero_silence",
+            silence_ms=round(silence_ms, 1), speaking=speaking,
+            audio_buf_bytes=len(sess.audio_buf),
+        )
         return True
 
     # 2. Robot also thinks we're done — only need a brief silero-confirmed
@@ -1134,6 +1144,14 @@ async def _should_finalize_turn(sess: _Session,
     #    `had_speech` because the robot's energy VAD already endpointed
     #    the utterance — we trust it.
     if sess.robot_eou_hint and (silence_ms >= EOU_HINT_CONFIRM_MS or not speaking):
+        sess._vad_decision_reason = "robot_hint_confirmed"  # type: ignore[attr-defined]
+        logger.info(
+            "eou_arbiter_decision",
+            user=sess.username, session_id=sess.session_id,
+            reason="robot_hint_confirmed",
+            silence_ms=round(silence_ms, 1), speaking=speaking,
+            audio_buf_bytes=len(sess.audio_buf),
+        )
         return True
 
     # 3. Semantic-early branch — only when we already have a transcript
@@ -1143,16 +1161,27 @@ async def _should_finalize_turn(sess: _Session,
             and silence_ms >= EOU_SEMANTIC_SILENCE_MS
             and not speaking
             and await _maybe_run_semantic_endpoint(transcript_so_far)):
+        sess._vad_decision_reason = "semantic_complete"  # type: ignore[attr-defined]
+        logger.info(
+            "eou_arbiter_decision",
+            user=sess.username, session_id=sess.session_id,
+            reason="semantic_complete",
+            silence_ms=round(silence_ms, 1), speaking=speaking,
+            audio_buf_bytes=len(sess.audio_buf),
+            transcript_len=len(transcript_so_far),
+        )
         return True
 
     # 4. Hard ceiling.
     if (sess.utterance_start_ms
             and (now_ms - sess.utterance_start_ms) >= EOU_HARD_CEILING_MS):
+        sess._vad_decision_reason = "hard_ceiling"  # type: ignore[attr-defined]
         logger.info(
             "eou_arbiter_hard_ceiling",
             user=sess.username, session_id=sess.session_id,
             duration_ms=round(now_ms - sess.utterance_start_ms, 1),
-            silence_ms=silence_ms, speaking=speaking,
+            silence_ms=round(silence_ms, 1), speaking=speaking,
+            audio_buf_bytes=len(sess.audio_buf),
         )
         return True
 
@@ -1715,11 +1744,20 @@ async def _process_turn(ws: WebSocket, sess: _Session) -> None:
                 phase_ms["e2e_user_to_first_audio"] = round(
                     (time.perf_counter() - t_user_done) * 1000.0, 2,
                 )
+                # nao-therapy: surface VAD context on no_voice rejects
+                # so we can tell whether Silero never saw speech vs.
+                # saw it briefly vs. the audio buffer was empty.
                 logger.info(
                     "turn_complete",
                     user=sess.username, session_id=sess.session_id,
                     turn_idx=sess.turn_idx + 1, phase_ms=phase_ms,
                     outcome="rejected", reject_reason="no_voice",
+                    audio_buf_bytes=len(sess.audio_buf),
+                    vad_decision_reason=getattr(
+                        sess, "_vad_decision_reason", None),
+                    silero_silence_ms=round(_silero_silence_ms(sess), 1)
+                        if sess.silero is not None else None,
+                    had_speech=sess.had_speech,
                 )
                 await _send_json(ws, _control_frame(
                     "transcript", transcript="", reject_reason="no_voice",
