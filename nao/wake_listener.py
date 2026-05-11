@@ -79,26 +79,17 @@ def _safe_unsub(asr, name):
     except: pass
 
 def _say_paused(tts, asr, text):
-    try: asr.pause(True)
-    except: pass
-    try: tts.say(text)
-    except: pass
-    time.sleep(0.02)
-    try: asr.pause(False)
-    except: pass
+    # nao-therapy: silenced. All wake-side spoken prompts (e.g.
+    # "Ready. Say nao to begin.", "Say chat, therapy, Morgan
+    # assist, or skills.", mode-entry greetings) used NAO's local
+    # ALTextToSpeech voice, which clashes with the ElevenLabs
+    # streaming TTS the therapist agent uses. The therapy build is
+    # single-voice; only ElevenLabs speaks to the user.
+    return
 
 def _say_nowait(tts, asr, text):
-    def _work():
-        try:
-            tts.say(text)
-        finally:
-            try: asr.pause(False)
-            except: pass
-    try: asr.pause(True)
-    except: pass
-    th = threading.Thread(target=_work)
-    th.daemon = True
-    th.start()
+    # nao-therapy: silenced. See _say_paused.
+    return
 
 def _flush_word(memory):
     try: memory.insertData("WordRecognized", ["", 0.0])
