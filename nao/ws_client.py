@@ -1010,6 +1010,12 @@ class NaoWsClient(object):
           2. tts_player is currently playing real reply audio.
           3. tts_active server flag set (server says it's now sending TTS).
         """
+        try:
+            import os as _os
+            if _os.environ.get("ENABLE_NATIVE_FILLER", "0") != "1":
+                return
+        except Exception:
+            return
         if getattr(self, "_reply_audio_arrived", False):
             return
         try:

@@ -579,9 +579,13 @@ class StreamTtsPlayer(object):
                 self._player.setMasterVolume(1.0)
             except Exception:
                 pass
+        # Do not unmute NAO's built-in ALTextToSpeech here. Real reply
+        # audio is played through ALAudioPlayer; raising the native TTS
+        # volume makes local fallback/filler phrases leak as the robot's
+        # kid voice alongside ElevenLabs.
         try:
             from naoqi import ALProxy as _ALProxy  # noqa
-            _ALProxy("ALTextToSpeech", self._nao_ip, self._nao_port).setVolume(1.0)
+            _ALProxy("ALTextToSpeech", self._nao_ip, self._nao_port).setVolume(0.0)
         except Exception:
             pass
         # ALSA hardware mixer — sits ABOVE NAOqi's setOutputVolume on
