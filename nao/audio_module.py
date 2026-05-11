@@ -664,6 +664,8 @@ class NaoAudioStreamer(ALModule):
         last_offset = header_size
         first_pcm_logged = False
         last_size_check = time.time()
+        stall_started_at = None  # wall-clock when stall first detected
+        STALL_RESTART_S = 5.0    # restart recorder if stalled this long
         while not self._fragment_stop.is_set() and self._streaming:
             if self._gate_closed:
                 time.sleep(0.05)
@@ -677,13 +679,50 @@ class NaoAudioStreamer(ALModule):
                 # Once a second, log if file isn't growing — that means
                 # ALAudioRecorder isn't actually capturing.
                 now = time.time()
+                if stall_started_at is None:
+                    stall_started_at = now
                 if now - last_size_check > 1.0:
                     last_size_check = now
-                    print("[audio_module] WAV not growing (size={0} last={1})".format(
-                        cur_size, last_offset))
+                    stall_s = now - stall_started_at
+                    print("[audio_module] WAV not growing (size={0} last={1}) stalled_s={2:.1f}".format(
+                        cur_size, last_offset, stall_s))
                     sys.stderr.flush()
+                # Recovery: if stall persists past STALL_RESTART_S, kill
+                # the recorder and restart it. Real-world cause is the
+                # firmware's ALAudioRecorder getting wedged after long
+                # uptime; the only reliable cure is a stop/start cycle.
+                if now - stall_started_at >= STALL_RESTART_S:
+                    print("[audio_module] mic stalled too long — restarting recorder")
+                    sys.stderr.flush()
+                    try:
+                        self._recorder.stopMicrophonesRecording()
+                    except Exception as _exc:
+                        print("[audio_module] stopMicrophonesRecording on stall: {0}".format(_exc))
+                    try:
+                        if os.path.exists(big_path):
+                            os.unlink(big_path)
+                    except Exception:
+                        pass
+                    try:
+                        self._recorder.startMicrophonesRecording(
+                            big_path, "wav", SAMPLE_RATE_HZ, FRAGMENT_CHANNELS_MASK,
+                        )
+                        print("[audio_module] recorder restarted after stall")
+                        sys.stderr.flush()
+                    except Exception as _exc:
+                        print("[audio_module] startMicrophonesRecording on stall: {0}".format(_exc))
+                    # Give the recorder a moment to write the header, then
+                    # reset the read offset so we start tailing the fresh
+                    # file from the top (past the new 44-byte header).
+                    time.sleep(0.30)
+                    last_offset = header_size
+                    stall_started_at = None
+                    last_size_check = time.time()
+                    continue
                 time.sleep(0.02)
                 continue
+            # File grew — clear stall marker.
+            stall_started_at = None
             try:
                 with open(big_path, "rb") as fh:
                     fh.seek(last_offset)
