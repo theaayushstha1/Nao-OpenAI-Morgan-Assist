@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<package uuid="nao-therapy-autostart" version="1.0.0">
+    <names>
+        <name lang="en_US">NAO Therapy Autostart</name>
+    </names>
+    <supportedLanguages>
+        <language>en_US</language>
+    </supportedLanguages>
+    <requirements>
+        <naoqiRequirement minVersion="1.18"/>
+    </requirements>
+    <contents>
+        <behaviorContent path="behavior_1" />
+    </contents>
+</package>

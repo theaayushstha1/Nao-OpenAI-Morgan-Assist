@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ChoregrapheProject xmlns="http://www.aldebaran-robotics.com/schema/choregraphe/project.xsd" xar_version="3">
+    <Box name="root" id="-1" localization="8" tooltip="Launch NAO Therapy main.py at boot" x="0" y="0">
+        <bitmap>media/images/box/root.png</bitmap>
+        <script language="4">
+            <content>
+                <![CDATA[
+import subprocess
+class MyClass(GeneratedClass):
+    def __init__(self):
+        GeneratedClass.__init__(self)
+    def onLoad(self):
+        pass
+    def onUnload(self):
+        pass
+    def onInput_onStart(self):
+        try:
+            subprocess.Popen(['/bin/bash', '/home/nao/launch_nao_assist.sh'])
+            self.logger.info("nao-therapy autostart triggered launcher")
+        except Exception as e:
+            self.logger.warning("nao-therapy autostart failed: " + str(e))
+        self.onStopped()
+    def onInput_onStop(self):
+        self.onUnload()
+        self.onStopped()
+                ]]>
+            </content>
+        </script>
+        <Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="" id="1" />
+        <Input name="onStart" type="1" type_size="1" nature="2" inner="0" tooltip="" id="2" />
+        <Input name="onStop" type="1" type_size="1" nature="3" inner="0" tooltip="" id="3" />
+        <Output name="onStopped" type="1" type_size="1" nature="1" inner="0" tooltip="" id="4" />
+    </Box>
+</ChoregrapheProject>
