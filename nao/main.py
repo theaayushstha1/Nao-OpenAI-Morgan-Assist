@@ -110,8 +110,18 @@ def _set_volume(ip, port, level=100):
             print("[volume] mic input volume set to {0}".format(level))
         except Exception as exc:
             print("[volume] setInputVolume failed (older firmware?):", exc)
+    # nao-therapy: silence the native ALTextToSpeech voice entirely.
+    # The therapy build only speaks via streaming ElevenLabs MP3 (played
+    # through ALAudioDevice's speaker output, which we just set to `level`).
+    # ALTextToSpeech still runs (Aldebaran services depend on it) but its
+    # output volume is 0.0 so wake_listener prompts, AnimatedSpeech body
+    # cues, signs-and-feedback announcements, and any other legacy
+    # tts.say() callers are inaudible. This UNDOES the previous behavior
+    # which set ALTextToSpeech volume to 1.0 on every boot — that was
+    # the reason the launcher's qicli mute never stuck across main.py
+    # restarts.
     try:
-        ALProxy("ALTextToSpeech", ip, port).setVolume(min(1.0, level / 100.0))
+        ALProxy("ALTextToSpeech", ip, port).setVolume(0.0)
     except Exception:
         pass
 
