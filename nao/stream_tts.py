@@ -327,10 +327,22 @@ class StreamTtsPlayer(object):
                 except Exception:
                     preview = ""
             preview = preview[:60]
+            # Python 2.7 print to ASCII stdout (NAO's default locale) raises
+            # UnicodeEncodeError on smart quotes like u'’' which the LLM
+            # uses in "I'm", "what's", etc. Encode preemptively so the print
+            # never raises — if it did, enqueue() would exit before
+            # self._queue.put() and the MP3 would silently never play.
+            if isinstance(preview, unicode):  # noqa: F821 (py2.7 builtin)
+                preview = preview.encode("utf-8", "replace")
         except Exception:
-            preview = ""
-        print("[stream_tts] enqueue:", preview,
-              "(", len(mp3_bytes), "bytes ->", path, ")")
+            preview = b"<preview-unavailable>"
+        try:
+            print("[stream_tts] enqueue:", preview,
+                  "(", len(mp3_bytes), "bytes ->", path, ")")
+        except Exception:
+            # Last-ditch safety: even the bytes preview shouldn't raise, but
+            # don't let logging break MP3 playback enqueue under any case.
+            pass
         self._queue.put((path, text))
 
     def is_playing(self):
