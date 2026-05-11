@@ -185,16 +185,97 @@ class MotionMatch:
     ack: str
 
 
+# ---------------------------------------------------------------------------
+# Face-learn fast-path with name extraction.
+# ---------------------------------------------------------------------------
+# Catches high-confidence "remember me as X" / "my name is X" / "call me X"
+# patterns *before* the LLM routes the turn. Without this the router
+# (default agent on bare-wake) sends "remember me as Aayush" to the
+# chatbot agent, which replies with the Morgan State greeting instead of
+# learning the face.
+_NON_NAMES_FAST = frozenset({
+    "tired", "fine", "good", "okay", "ok", "great", "happy", "sad",
+    "anxious", "stressed", "depressed", "lonely", "scared", "angry",
+    "ready", "back", "here", "sorry", "done", "leaving", "going",
+    "trying", "thinking",
+})
+
+
+def _looks_like_name(candidate: str) -> bool:
+    """Conservative gate: don't fire learn_face on common adjectives."""
+    c = (candidate or "").strip().lower()
+    if not c or c in _NON_NAMES_FAST:
+        return False
+    if not (2 <= len(c) <= 24):
+        return False
+    return bool(re.match(r"^[a-z][a-z'\-]+$", c))
+
+
+_LEARN_FACE_PATTERNS: tuple[tuple[re.Pattern, str], ...] = tuple(
+    (re.compile(p, re.IGNORECASE), ack_tmpl)
+    for p, ack_tmpl in (
+        # Highest confidence: explicit teach verbs.
+        (r"\bremember\s+me\s+as\s+([a-z][a-z'\-]+)\b",
+         "Remembering you as {name}."),
+        (r"\bsave\s+my\s+face\s+as\s+([a-z][a-z'\-]+)\b",
+         "Saving your face as {name}."),
+        (r"\blearn\s+my\s+face\s+as\s+([a-z][a-z'\-]+)\b",
+         "Learning your face as {name}."),
+        (r"\bremember\s+(?:that\s+)?my\s+name\s+is\s+([a-z][a-z'\-]+)\b",
+         "Remembering you as {name}."),
+        # Strong context: "name is X" + verbs around face/remembering.
+        (r"\bmy\s+name\s+is\s+([a-z][a-z'\-]+)\b",
+         "Nice to meet you, {name}."),
+        (r"\bcall\s+me\s+([a-z][a-z'\-]+)\b",
+         "Got it, {name}."),
+    )
+)
+
+
+def _detect_learn_face(transcript: str) -> MotionMatch | None:
+    """Extract a name + emit a `learn_face` action without an LLM hop.
+    Returns None when no high-confidence pattern matches.
+    """
+    for pattern, ack_tmpl in _LEARN_FACE_PATTERNS:
+        m = pattern.search(transcript)
+        if not m:
+            continue
+        raw = (m.group(1) or "").strip()
+        if not _looks_like_name(raw):
+            continue
+        name = raw[0].upper() + raw[1:].lower()
+        return MotionMatch(
+            action="learn_face",
+            args={"name": name},
+            ack=ack_tmpl.format(name=name),
+        )
+    return None
+
+
 def detect(transcript: str) -> MotionMatch | None:
     """Return MotionMatch if `transcript` clearly requests a NAO body action.
 
     Returns None for ambiguous or non-motion input — those go to the LLM.
+
+    Order:
+      1. Face-learn fast-path (regex with name capture). Saves an LLM
+         hop on the very common "remember me as X" turn and avoids the
+         router sending it to chatbot/Morgan by mistake.
+      2. Static-phrase trigger table (`_COMPILED`). Posture, gestures,
+         dances, follow-me, voice picker, etc.
     """
     if not transcript:
         return None
     t = transcript.strip()
     if not t:
         return None
+
+    # 1. learn_face fast-path.
+    lf = _detect_learn_face(t)
+    if lf is not None:
+        return lf
+
+    # 2. Static phrases.
     for pattern, action, args, ack in _COMPILED:
         if pattern.search(t):
             return MotionMatch(action=action, args=dict(args), ack=ack)
