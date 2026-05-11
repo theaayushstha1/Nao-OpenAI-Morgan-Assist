@@ -121,14 +121,29 @@ _TRIGGERS: list[tuple[str, dict, str, list[str]]] = [
         "you can see me now", "see me again",
     ]),
 
-    # ── Voice profile picker — DISABLED in nao-therapy ──────
-    # The therapy build locks to a single warm therapeutic voice
-    # (`ELEVENLABS_DEFAULT_PROFILE=neutral` in .env, default River).
-    # Voice-switch requests at the LLM layer fall through to the
-    # therapist agent which acknowledges them conversationally
-    # ("I'll keep this voice — I think it's a good one for our chat").
-    # The session.set_voice_profile write path is preserved for a
-    # future onboarding choice but is no longer LLM-callable.
+    # ── Voice profile picker — three voices: male, female, my-clone ──
+    # User can switch at any time. The write path persists the choice
+    # to user_prefs.voice_profile so the next turn (and next session)
+    # uses the new voice automatically.
+    ("set_voice_profile", {"profile": "man"}, "Switching to my male voice.", [
+        "switch to a man voice", "switch to the man voice", "switch to man voice",
+        "use a man voice", "use the man voice", "use man voice",
+        "male voice", "man voice", "boy voice",
+        "talk like a man", "sound like a man",
+    ]),
+    ("set_voice_profile", {"profile": "girl"}, "Switching to my female voice.", [
+        "switch to a girl voice", "switch to the girl voice", "switch to girl voice",
+        "switch to a female voice", "switch to the female voice", "switch to female voice",
+        "use a girl voice", "use the girl voice", "use a female voice", "use the female voice",
+        "female voice", "girl voice", "woman voice",
+        "talk like a girl", "sound like a girl", "talk like a woman", "sound like a woman",
+    ]),
+    ("set_voice_profile", {"profile": "my"}, "Switching to my cloned voice.", [
+        "switch to my voice", "use my voice", "talk in my voice",
+        "sound like me", "talk like me",
+        "switch to the cloned voice", "use the cloned voice", "cloned voice",
+        "my voice", "ayush voice",
+    ]),
 
     # ── LEDs ────────────────────────────────────────────────
     ("change_eye_color", {"color": "red"}, "Eyes red.", [
