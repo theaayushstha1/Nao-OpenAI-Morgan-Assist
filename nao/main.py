@@ -110,8 +110,14 @@ def _set_volume(ip, port, level=100):
             print("[volume] mic input volume set to {0}".format(level))
         except Exception as exc:
             print("[volume] setInputVolume failed (older firmware?):", exc)
+    # Keep NAO's local ALTextToSpeech permanently muted. The robot's native
+    # kid voice clashes with the ElevenLabs streaming TTS (dual-voice on
+    # every reply, and on connection-error filler phrases). All "real"
+    # speech comes from server-streamed MP3 played through the audio
+    # player; ALTextToSpeech is only used for short announcer fillers,
+    # which we silence here so they never leak.
     try:
-        ALProxy("ALTextToSpeech", ip, port).setVolume(min(1.0, level / 100.0))
+        ALProxy("ALTextToSpeech", ip, port).setVolume(0.0)
     except Exception:
         pass
 
