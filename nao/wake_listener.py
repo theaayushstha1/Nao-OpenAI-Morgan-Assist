@@ -630,11 +630,16 @@ def listen_for_command(nao_ip, port=9559):
 
 
             elif word == "nao":
-                _say_paused(tts, asr, ASSIST_LINE)
+                # nao-therapy: bare "nao" goes straight to therapist.
+                # The legacy mode-picker (chat / therapy / Morgan / skills)
+                # is gone in the therapy-only build; defaulting to therapist
+                # on wake means the user just says "nao" and starts talking.
+                _stop_move_now(nao_ip, port)
+                head_flag["stop"] = True
+                _tracker_stop_now(nao_ip, port)
                 _flush_word(memory)
-                mode_armed_until = time.time() + MODE_SELECTION_TIMEOUT_S
-                mode_ignore_until = time.time() + MODE_PROMPT_DEADZONE_S
-                print("[wake gate armed] waiting for mode for {:.1f}s".format(MODE_SELECTION_TIMEOUT_S))
+                print("[wake] bare 'nao' -> therapist (mode picker bypassed)")
+                return "therapist"
 
             # ALL CHAT TRIGGERS NOW RETURN "chat" 
             elif word in ["chat", "let's chat", "let's talk", "chat mode", "talk mode",
