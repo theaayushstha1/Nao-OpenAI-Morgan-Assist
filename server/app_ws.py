@@ -936,6 +936,10 @@ class _Session:
         "_therapy_turn_count",
         # Phase 11.10 — per-session streaming STT (ElevenLabs Scribe Realtime).
         "_streaming_stt",
+        # nao-therapy: tag of the most recent EoU arbiter branch that fired
+        # (silero_silence / robot_hint_confirmed / hard_ceiling / etc.).
+        # Surfaced on turn_complete + no_voice rejects for VAD debugging.
+        "_vad_decision_reason",
     )
 
     def __init__(self, username: str) -> None:
@@ -989,6 +993,7 @@ class _Session:
         # emits partial + final transcripts. Used in place of the
         # buffer-then-upload Whisper/Deepgram path when configured.
         self._streaming_stt: Any | None = None
+        self._vad_decision_reason: str | None = None
 
     def reset_turn(self) -> None:
         self.audio_buf = bytearray()
