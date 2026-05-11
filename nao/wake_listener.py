@@ -13,36 +13,20 @@ import os
 from utils.speech import random_phrase, time_of_day_greeting, format_expressive
 
 _MODE_HINT_MAP = {
-    "chat": "chat",
-    "let's chat": "chat",
-    "chat mode": "chat",
-    "let's talk": "chat",
-    "talk mode": "chat",
-    "start chat": "chat",
-    "chatbot": "chat",
-    "chatbot mode": "chat",
-    "morgan assist": "morgan",
-    "morgan chat": "morgan",
-    "morgan chatbot": "morgan",
-    "morgan mode": "morgan",
-    "morgan state": "morgan",
-    "morgan state mode": "morgan",
+    # nao-therapy: therapy is the only mode. All wake hints map to it.
+    # Chat / Morgan / mini-nao / skills entries removed — those agents
+    # are unimported on this branch.
     "therapist": "therapy",
     "therapist mode": "therapy",
     "therapy": "therapy",
     "therapy mode": "therapy",
     "talk to someone": "therapy",
     "i need help": "therapy",
-    "mini nao": "skills",
-    "mini": "skills",
-    "mininao": "skills",
-    "mini-nao": "skills",
-    "skills": "skills",
 }
 
 
 def extract_hint(phrase):
-    """Return one of chat/morgan/therapy/skills, or None if no match."""
+    """Return 'therapy' for any recognized wake-mode phrase, else None."""
     if not phrase:
         return None
     key = phrase.strip().lower()
@@ -69,7 +53,10 @@ MAX_VALID_DIST      = 3.00
 YES_WORDS = ["yes","yeah","yep","sure","ok","okay","please"]
 NO_WORDS  = ["no","nope","nah","not now","later","maybe later","no thanks"]
 
-ASSIST_LINE = "Say chat, therapy, Morgan assist, or skills."
+# nao-therapy: ASSIST_LINE used to enumerate the legacy modes. Therapy is
+# the only mode now; keep the symbol around in case external callers
+# still reference it, but blank it out so it can never speak stale options.
+ASSIST_LINE = ""
 
 
 # --- small utils ---
@@ -130,9 +117,6 @@ def _set_vocab(asr, vocab, spotting=False):
 def _word_threshold(word):
     if word == "nao":
         return NAO_WAKE_MIN_CONF
-    if word in ("morgan assist", "morgan chat", "morgan chatbot",
-                "morgan mode", "morgan state", "morgan state mode"):
-        return MORGAN_MIN_CONF
     return MIN_CONF
 
 def _accept_word(word, conf, vocab):
@@ -520,26 +504,13 @@ def listen_for_command(nao_ip, port=9559):
     asr     = ALProxy("ALSpeechRecognition", nao_ip, port)
     memory  = ALProxy("ALMemory",            nao_ip, port)
 
-    # Vocab is intentionally tight — only mode triggers. Random ambient noise
-    # used to match "sit down" / "dance" / "sleep" and made NAO act on its own.
+    # Vocab is intentionally tight — only the wake word and therapy
+    # synonyms. Random ambient noise used to match "sit down" / "dance" /
+    # "sleep" and made NAO act on its own; tightness is the cure.
+    # nao-therapy: chat / morgan / mini-nao / skills triggers removed —
+    # those agents are unimported on this branch.
     MAIN_VOCAB = [
         "nao",
-        "chat",
-        "let's chat",
-        "let's talk",
-        "chat mode",
-        "talk mode",
-        "start chat",
-        "morgan assist",
-        "morgan chat",
-        "morgan chatbot",
-        "morgan mode",
-        "morgan state",
-        "morgan state mode",
-        "chatbot",
-        "chatbot mode",
-        "skills",
-        "mini nao",
         "therapy",
         "therapist",
         "therapy mode",
@@ -641,33 +612,10 @@ def listen_for_command(nao_ip, port=9559):
                 print("[wake] bare 'nao' -> therapist (mode picker bypassed)")
                 return "therapist"
 
-            # ALL CHAT TRIGGERS NOW RETURN "chat" 
-            elif word in ["chat", "let's chat", "let's talk", "chat mode", "talk mode",
-                          "start chat", "chatbot", "chatbot mode"]:
-                _stop_move_now(nao_ip, port)
-                head_flag["stop"] = True
-                _tracker_stop_now(nao_ip, port)
-                _say_paused(tts, asr, format_expressive(random_phrase("entering_chat"), "warm"))
-                _flush_word(memory)
-                return "chat"
-            
-            # Morgan triggers route to Realtime with Morgan-specific instructions.
-            elif word in ["morgan assist", "morgan chat", "morgan chatbot",
-                          "morgan mode", "morgan state", "morgan state mode"]:
-                _stop_move_now(nao_ip, port)
-                head_flag["stop"] = True
-                _tracker_stop_now(nao_ip, port)
-                _say_paused(tts, asr, format_expressive(random_phrase("entering_chatbot"), "warm"))
-                _flush_word(memory)
-                return "morgan assist"
-            
-            elif word in ["mini nao", "mininao", "skills"]:
-                _stop_move_now(nao_ip, port)
-                head_flag["stop"] = True
-                _tracker_stop_now(nao_ip, port) 
-                _say_paused(tts, asr, format_expressive(random_phrase("entering_mininao") + " Let me stand up first.", "warm"))
-                _flush_word(memory)
-                return "mininao"
+            # nao-therapy: chat / morgan / mini-nao branches removed.
+            # Bare "nao" already routes to therapist above; any explicit
+            # "therapy" / "therapist" wake word is handled by the earlier
+            # therapy branch. Nothing else takes you off-mode.
 
             elif word == "stand up":
                 _go_to_posture_bg_delayed(nao_ip, port, "StandInit", 0.6, delay=0.05)

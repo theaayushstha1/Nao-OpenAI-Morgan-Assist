@@ -26,29 +26,14 @@ PHRASE_POOLS = {
         "Hello there! I'm NAO, and it's a pleasure to meet you.",
         "Hi! I'm NAO. I'd love to get to know you.",
     ],
-    "entering_chat": [
-        "Conversation mode is ready. I'm all ears.",
-        "Let's talk! What would you like to discuss?",
-        "I'm ready for a great conversation.",
-        "Chat mode activated. Feel free to speak naturally.",
-    ],
-    "entering_chatbot": [
-        "Morgan State assistant is ready to help.",
-        "I'm here to answer your Morgan State questions.",
-        "Let's explore what Morgan State has to offer. Ask away!",
-        "Morgan State knowledge base is ready. How can I help?",
-    ],
+    # nao-therapy: entering_chat / entering_chatbot / entering_mininao
+    # pools removed — those agents are unimported on this branch. The
+    # therapy entry pool stays.
     "entering_therapist": [
         "I'm here to listen and support you.",
         "This is a safe and confidential space. Take your time.",
         "I'm here for you, whenever you're ready to talk.",
         "Take your time. I'm right here with you.",
-    ],
-    "entering_mininao": [
-        "Mini NAO utilities are ready. What can I help you with?",
-        "Your personal assistant tools are ready.",
-        "Mini NAO is at your service. What would you like to do?",
-        "Let me help you with that. What do you need?",
     ],
     "farewell": [
         "It was a pleasure, {name}. Take care!",
