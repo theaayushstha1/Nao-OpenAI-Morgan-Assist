@@ -1579,11 +1579,30 @@ async def _emit_agent_turn(ws: WebSocket, sess: _Session,
     barged = False
     handoff_sent_for: str | None = None
     tts_total_t0 = time.perf_counter()
+    # nao-therapy: per-turn dedup of synthesized sentences. The streaming
+    # agent occasionally re-yields the same sentence (especially around
+    # tool calls — e.g. learn_face / vision — where the runner re-plays
+    # accumulated deltas after the tool returns). Without dedup the robot
+    # speaks each sentence twice, doubling reply time and stealing the
+    # user's next speaking window. Normalize on lower+stripped text and
+    # short-circuit before synthesis to also save ElevenLabs cost.
+    _sentences_seen_this_turn: set[str] = set()
     try:
         # chunk_for_tts collapses delta tokens into sentence-sized chunks.
         # We then synthesize each one in a background task so the next
         # synth can start while the current one is being emitted.
         async for sentence in chunk_for_tts(_delta_iter()):
+            # Per-turn duplicate sentence guard.
+            _dedup_key = (sentence or "").strip().lower()
+            if _dedup_key and _dedup_key in _sentences_seen_this_turn:
+                logger.info(
+                    "tts_duplicate_sentence_skipped",
+                    user=sess.username, session_id=sess.session_id,
+                    sentence_preview=sentence[:80],
+                )
+                continue
+            if _dedup_key:
+                _sentences_seen_this_turn.add(_dedup_key)
             # Barge guard between chunks.
             if sess.barge_event.is_set():
                 barged = True
