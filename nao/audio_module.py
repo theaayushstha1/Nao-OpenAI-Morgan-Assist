@@ -640,7 +640,10 @@ class NaoAudioStreamer(ALModule):
         first_pcm_logged = False
         last_size_check = time.time()
         stall_started_at = None  # wall-clock when stall first detected
-        STALL_RESTART_S = 5.0    # restart recorder if stalled this long
+        # Tighter than 5s so a user speaking through a stall only loses
+        # ~2s of audio instead of ~5s. Real ALAudioRecorder wedges
+        # always last more than 2s, so false-positive restarts are rare.
+        STALL_RESTART_S = 2.0    # restart recorder if stalled this long
         while not self._fragment_stop.is_set() and self._streaming:
             if self._gate_closed:
                 time.sleep(0.05)
