@@ -91,10 +91,18 @@ def recognize_face_naoqi(qi_session, tts, subscriber_name="FaceReco", timeout=10
 
 
 def _safe_say(tts, text):
-    """Best-effort spoken phrase; never raises. Used by the voiced
-    confirmation flow in `learn_new_face_naoqi` so a flaky TTS proxy
-    can't break the learn path.
+    """Voiced learn-face confirmation: now a no-op.
+
+    Earlier this used NAO's local ALTextToSpeech which talks over the
+    streaming ElevenLabs TTS the therapist agent uses for its reply,
+    producing a dual-voice. The therapist agent's reply already
+    acknowledges name capture (e.g., "Thanks for sharing your name,
+    Michelle.") so the local prompt is redundant.
+
+    Keep the function signature so call sites stay intact; just return.
     """
+    return
+    # Legacy path retained for reference but unreachable.
     if tts is None:
         return
     try:

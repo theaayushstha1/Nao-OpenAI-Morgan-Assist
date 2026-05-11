@@ -203,7 +203,15 @@ def _looks_like_name(candidate: str) -> bool:
 _LEARN_FACE_PATTERNS: tuple[tuple[re.Pattern, str], ...] = tuple(
     (re.compile(p, re.IGNORECASE), ack_tmpl)
     for p, ack_tmpl in (
-        # Highest confidence: explicit teach verbs.
+        # Only HIGH-confidence teach verbs short-circuit to learn_face.
+        # The looser "my name is X" / "call me X" patterns were removed
+        # because NAO's own STT echo (Deepgram transcribing its own TTS
+        # playback in the room) made learn_face fire every time the
+        # therapist's reply mentioned a name — producing
+        # learn_face('Nao') and learn_face('Michelle') on the wrong
+        # turns. Defer that inference to the therapist agent, which
+        # has surrounding context and can decide whether to actually
+        # call the learn_face tool.
         (r"\bremember\s+me\s+as\s+([a-z][a-z'\-]+)\b",
          "Remembering you as {name}."),
         (r"\bsave\s+my\s+face\s+as\s+([a-z][a-z'\-]+)\b",
@@ -212,11 +220,6 @@ _LEARN_FACE_PATTERNS: tuple[tuple[re.Pattern, str], ...] = tuple(
          "Learning your face as {name}."),
         (r"\bremember\s+(?:that\s+)?my\s+name\s+is\s+([a-z][a-z'\-]+)\b",
          "Remembering you as {name}."),
-        # Strong context: "name is X" + verbs around face/remembering.
-        (r"\bmy\s+name\s+is\s+([a-z][a-z'\-]+)\b",
-         "Nice to meet you, {name}."),
-        (r"\bcall\s+me\s+([a-z][a-z'\-]+)\b",
-         "Got it, {name}."),
     )
 )
 
