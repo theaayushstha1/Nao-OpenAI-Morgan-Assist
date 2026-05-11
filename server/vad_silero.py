@@ -44,6 +44,7 @@ Public API:
 from __future__ import annotations
 
 import logging
+import os
 import struct
 import tempfile
 import threading
@@ -56,14 +57,14 @@ log = logging.getLogger("sage.vad_silero")
 # Silero defaults documented above.
 SAMPLE_RATE = 16000
 FRAME_SAMPLES = 512  # 32 ms @ 16 kHz — Silero v5 inference window
-THRESHOLD = 0.4
+THRESHOLD = float(os.environ.get("SILERO_THRESHOLD", "0.15"))
 MIN_SILENCE_MS = 500
 SPEECH_PAD_MS = 100
 
 # Adaptive threshold bounds and cadence.
-ADAPTIVE_MIN = 0.2
+ADAPTIVE_MIN = float(os.environ.get("SILERO_ADAPTIVE_MIN", "0.05"))
 ADAPTIVE_MAX = 0.7
-ADAPTIVE_FALLBACK = 0.4
+ADAPTIVE_FALLBACK = float(os.environ.get("SILERO_ADAPTIVE_FALLBACK", "0.15"))
 ADAPTIVE_HISTOGRAM_BINS = 50
 ADAPTIVE_RECOMPUTE_MS = 5_000  # recompute every 5 s of processed audio
 ADAPTIVE_MIN_SAMPLES = 50      # need at least this much history before tuning
@@ -531,6 +532,23 @@ class StreamingSilero:
             self._last_speech_at_ms = now_ms
         else:
             self._last_silence_at_ms = now_ms
+
+        # Diagnostic: every ~32 frames (~1 s of audio) log peak/mean conf.
+        # Lets us see whether Silero is reading audio at all and what
+        # confidence values it's producing — invaluable when the arbiter
+        # keeps rejecting turns as no_voice despite clearly-audible PCM.
+        if self._frames_processed % 32 == 0:
+            window = list(self._confidence_history)[-32:]
+            if window:
+                peak = max(window)
+                mean = sum(window) / len(window)
+                print(
+                    "[silero_trace] frames={0} peak={1:.3f} mean={2:.3f} "
+                    "thr={3:.3f} speaking={4}".format(
+                        self._frames_processed, peak, mean, thr, speaking
+                    ),
+                    flush=True,
+                )
 
     def _mean_last_n_seconds(self, n: float) -> float | None:
         if not self._confidence_history:
