@@ -446,6 +446,14 @@ class StreamingSilero:
         """
         return self._is_speech_now
 
+    def has_seen_speech(self) -> bool:
+        """True if ANY inference frame since the last reset crossed the
+        threshold. Used to set per-utterance ``had_speech`` durably so
+        transient speech bursts don't get dropped because the final frame
+        in a chunk happened to be silence.
+        """
+        return self._last_speech_at_ms is not None
+
     def silence_duration_ms(self) -> int:
         """Milliseconds since the most recent frame whose confidence
         crossed the current threshold.

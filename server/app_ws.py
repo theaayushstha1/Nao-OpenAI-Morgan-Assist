@@ -1054,6 +1054,20 @@ def _silero_speaking(sess: _Session) -> bool:
         return False
 
 
+def _has_seen_speech(sess: _Session) -> bool:
+    """True if Silero has crossed its speech threshold on any frame since
+    the last reset. Durable across momentary silence frames within an
+    utterance, unlike ``_silero_speaking``.
+    """
+    sl = sess.silero
+    if sl is None:
+        return False
+    try:
+        return bool(sl.has_seen_speech())
+    except Exception:
+        return False
+
+
 async def _maybe_run_semantic_endpoint(transcript: str | None) -> bool:
     """Async-tolerant wrapper around ``semantic_endpoint.is_complete_thought``.
 
@@ -2110,9 +2124,12 @@ async def _ingest_frame(ws: WebSocket, sess: _Session,
             try:
                 sess.silero.feed(pcm)
                 # Mark that speech has been heard at least once in this
-                # utterance. Silero's `is_speech_now()` flips between True
-                # during talking and False during pauses; we just OR it in.
-                if not sess.had_speech and _silero_speaking(sess):
+                # utterance. We use `has_seen_speech()` (durable across
+                # all frames since the last reset) rather than
+                # `is_speech_now()` (only the last frame), because a chunk
+                # ending on a non-speech frame would otherwise let a
+                # real speech burst slip past unrecorded.
+                if not sess.had_speech and _has_seen_speech(sess):
                     sess.had_speech = True
             except Exception as e:  # noqa: BLE001
                 logger.warning(
