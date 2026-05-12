@@ -555,6 +555,8 @@ class NaoWsClient(object):
         except Exception:
             pass
 
+        stopped_behaviors = []
+
         # 2. Stop any in-flight behavior on the robot.
         try:
             from naoqi import ALProxy as _ALProxy  # type: ignore
@@ -565,16 +567,42 @@ class NaoWsClient(object):
             mgr = _ALProxy("ALBehaviorManager",
                            _config.NAO_IP, _config.NAO_PORT)
             try:
+                running = mgr.getRunningBehaviors() or []
+            except Exception:
+                running = []
+            for behavior in running:
+                try:
+                    mgr.stopBehavior(behavior)
+                    stopped_behaviors.append(behavior)
+                except Exception:
+                    pass
+            try:
                 mgr.stopAllBehaviors()
+            except Exception:
+                pass
+            try:
+                motion = _ALProxy("ALMotion",
+                                  _config.NAO_IP, _config.NAO_PORT)
+                for method in ("stopMove", "killAll"):
+                    try:
+                        fn = getattr(motion, method, None)
+                        if callable(fn):
+                            fn()
+                    except Exception:
+                        pass
             except Exception:
                 pass
         except Exception:
             # naoqi unavailable on dev box — silently skip.
             pass
 
-        if dropped:
-            self.log.info("actions_cancelled",
-                          dropped=dropped, reason=reason)
+        self.log.info("actions_cancelled",
+                      dropped=dropped, reason=reason,
+                      stopped_behaviors=stopped_behaviors)
+
+    def cancel_actions(self, reason="cancel"):
+        """Public wrapper used by main.py for rear-head motion stop."""
+        self._cancel_actions(reason=reason)
 
     def _action_worker_loop(self):
         """Single-worker thread that drains _action_queue and runs the

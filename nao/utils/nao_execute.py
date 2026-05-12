@@ -184,6 +184,11 @@ _GESTURE_BEHAVIOR_MAP = {
 }
 
 _FOLLOW_BEHAVIOR = "follow-me"
+_FOLLOW_BEHAVIOR_CANDIDATES = (
+    "follow-me",
+    "follow-me/.",
+    "follow-me/behavior",
+)
 
 
 # Lookup table for the play_animation tool. Each key is a logical name the
@@ -919,12 +924,30 @@ def run(action, session, motion, posture, leds, behav_mgr, tts,
             # or by saying a phrase that maps to it.
             _run_first_available(
                 behav_mgr,
-                [_FOLLOW_BEHAVIOR, "animations/Stand/Gestures/Follow_1"],
+                list(_FOLLOW_BEHAVIOR_CANDIDATES) +
+                ["animations/Stand/Gestures/Follow_1"],
                 blocking=False,
             )
         elif name == "stop_follow":
+            stopped = []
             try: behav_mgr.stopBehavior(_FOLLOW_BEHAVIOR)
             except Exception as e: print("[nao_execute] stop_follow:", e)
+            try:
+                running = behav_mgr.getRunningBehaviors() or []
+            except Exception:
+                running = []
+            for behavior in list(_FOLLOW_BEHAVIOR_CANDIDATES) + list(running):
+                if behavior in stopped:
+                    continue
+                try:
+                    behav_mgr.stopBehavior(behavior)
+                    stopped.append(behavior)
+                except Exception:
+                    pass
+            try:
+                print("[nao_execute] stop_follow stopped={0}".format(stopped))
+            except Exception:
+                pass
         elif name == "play_animation":
             anim = (args.get("animation") or "").strip().lower()
             # Normalize a few common variants the user might say.

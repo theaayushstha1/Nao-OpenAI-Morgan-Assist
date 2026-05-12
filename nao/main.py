@@ -915,8 +915,8 @@ def main():
 
             # Head-touch barge-in: when the user touches NAO's head while
             # TTS is playing, stop the audio immediately so they can speak.
-            def on_barge():
-                log.info("wake_barge_requested")
+            def on_barge(touch_key=None):
+                log.info("wake_barge_requested", touch_key=touch_key)
                 try:
                     if tts is not None:
                         tts.stop()
@@ -927,7 +927,14 @@ def main():
                 try:
                     cli = session._client if session is not None else None
                     if cli is not None:
-                        cli.push_control("barge_in", {"source": "touch"})
+                        if touch_key == "RearTactilTouched":
+                            cancel = getattr(cli, "cancel_actions", None)
+                            if callable(cancel):
+                                cancel(reason="rear_head_touch")
+                        cli.push_control("barge_in", {
+                            "source": "touch",
+                            "touch_key": touch_key,
+                        })
                 except Exception as exc:
                     log.debug("barge_control_push_failed", error=str(exc))
 

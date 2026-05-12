@@ -58,6 +58,14 @@ _MP3_SUFFIX = ".mp3"
 # under 30 ms once the next file is queued.
 _POLL_S = 0.05
 
+# NAOqi ALAudioPlayer occasionally wedges inside blocking playFile() when
+# another behavior has the audio/motion stack busy. Use post.playFile() plus
+# polling so a single bad task cannot strand the TTS worker forever.
+_PLAY_TIMEOUT_MIN_S = 4.0
+_PLAY_TIMEOUT_GRACE_S = 5.0
+_PLAY_TIMEOUT_MAX_S = 30.0
+_PLAY_START_GRACE_S = 0.80
+
 # Hard cap on individual MP3 size we will accept (defensive). The OpenAI TTS
 # server emits sentence-sized chunks well under this; anything over likely
 # means we are buffering an entire reply instead of streaming it, which is a
@@ -105,6 +113,43 @@ def _ffprobe_audio(path):
         return out.strip().replace("\n", " ")
     except Exception as exc:
         return "probe_failed:{0}".format(exc)
+
+
+def _ffprobe_duration_s(path):
+    """Best-effort duration probe. Returns float seconds or None."""
+    if not os.path.exists(_FFPROBE_BIN):
+        return None
+    try:
+        out = _subprocess.check_output(
+            [_FFPROBE_BIN, "-v", "error", "-show_entries",
+             "format=duration", "-of",
+             "default=noprint_wrappers=1:nokey=1", path],
+            stderr=_subprocess.STDOUT,
+        )
+        if isinstance(out, bytes):
+            out = out.decode("utf-8", "ignore")
+        val = float(str(out).strip().splitlines()[-1])
+        if val > 0:
+            return val
+    except Exception:
+        pass
+    return None
+
+
+def _estimate_duration_s(path):
+    """Return a conservative duration estimate used only for timeouts."""
+    dur = _ffprobe_duration_s(path)
+    if dur is not None:
+        return dur
+    try:
+        size = float(os.path.getsize(path))
+    except Exception:
+        size = 0.0
+    # ElevenLabs MP3 chunks are usually around 32-64 kbps. 4000 bytes/s is a
+    # conservative lower bitrate estimate, so the timeout errs long.
+    if size > 0:
+        return max(0.5, size / 4000.0)
+    return 1.0
 
 
 def _convert_mp3_to_wav(mp3_path, wav_path):
@@ -228,6 +273,7 @@ class StreamTtsPlayer(object):
         # because TTS chunks arrive faster than playback when the network
         # spurts; the queue absorbs the spike. shutdown()/stop() drain it.
         self._queue = _queue.Queue()
+        self._play_abort_event = threading.Event()
 
         # Monotonic seq used in tmp filenames so two concurrent enqueues
         # never collide on the same path.
@@ -360,6 +406,7 @@ class StreamTtsPlayer(object):
         """
         with self._state_lock:
             self._playing = False
+        self._play_abort_event.set()
 
         drained = 0
         while True:
@@ -440,7 +487,103 @@ class StreamTtsPlayer(object):
             # before the chunk has actually started.
             with self._state_lock:
                 self._playing = True
+            self._play_abort_event.clear()
             self._play_one(path)
+
+    def _play_file_with_timeout(self, path, label):
+        """Play through NAOqi post.playFile and wait with a hard timeout.
+
+        Returns (rv, elapsed_s, observed_playback). The third value is False
+        when NAOqi accepted the task but we never saw it running or using an
+        output channel, which is how silent MP3 rejection shows up on this
+        firmware.
+        """
+        expected_s = _estimate_duration_s(path)
+        timeout_s = max(_PLAY_TIMEOUT_MIN_S,
+                        min(_PLAY_TIMEOUT_MAX_S,
+                            expected_s + _PLAY_TIMEOUT_GRACE_S))
+        t0 = time.time()
+        observed = False
+        rv = None
+        print("[tts_trace] blocking_play_start path={0} ({1}) timeout_s={2:.2f}".format(
+            path, label, timeout_s))
+        sys.stderr.flush()
+
+        try:
+            post = getattr(self._player, "post", None)
+            post_play = getattr(post, "playFile", None) if post is not None else None
+            if post_play is not None:
+                rv = post_play(path)
+                print("[tts_trace] post_playFile path={0} task_id={1!r}".format(
+                    path, rv))
+                sys.stderr.flush()
+                while not self._shutdown_event.is_set():
+                    elapsed = time.time() - t0
+                    if self._play_abort_event.is_set():
+                        self._stop_player_task(rv)
+                        break
+                    if elapsed >= timeout_s:
+                        print("[tts_trace] play_timeout path={0} task_id={1!r} elapsed_s={2:.2f}".format(
+                            path, rv, elapsed))
+                        sys.stderr.flush()
+                        self._stop_player_task(rv)
+                        break
+
+                    running = None
+                    if rv is not None:
+                        try:
+                            running = bool(self._player.isRunning(rv))
+                        except Exception:
+                            running = None
+
+                    channels = None
+                    try:
+                        channels = int(self._player.getNumOfChannels())
+                    except Exception:
+                        channels = None
+
+                    if running is True or (channels is not None and channels > 0):
+                        observed = True
+                    if running is False and (observed or elapsed >= 0.30):
+                        break
+                    if (not observed and channels == 0 and
+                            elapsed >= _PLAY_START_GRACE_S):
+                        break
+                    if (running is None and channels == 0 and elapsed >= 0.30
+                            and observed):
+                        break
+                    time.sleep(_POLL_S)
+                elapsed = time.time() - t0
+                print("[tts_trace] blocking_play_done path={0} rv={1!r} elapsed_s={2:.2f} observed={3}".format(
+                    path, rv, elapsed, observed))
+                sys.stderr.flush()
+                return rv, elapsed, observed
+
+            # Last-resort fallback for dev/fake proxies without post.
+            rv = self._player.playFile(path)
+            elapsed = time.time() - t0
+            observed = elapsed >= 0.30
+            print("[tts_trace] blocking_play_done path={0} rv={1!r} elapsed_s={2:.2f} observed={3}".format(
+                path, rv, elapsed, observed))
+            sys.stderr.flush()
+            return rv, elapsed, observed
+        except Exception as e:
+            elapsed = time.time() - t0
+            print("[tts_trace] blocking_play FAILED on {0} path={1} err={2}: {3} elapsed_s={4:.2f}".format(
+                label, path, type(e).__name__, e, elapsed))
+            sys.stderr.flush()
+            return rv, elapsed, observed
+
+    def _stop_player_task(self, task_id):
+        try:
+            if task_id is not None:
+                self._player.stop(task_id)
+        except Exception:
+            pass
+        try:
+            self._player.stopAll()
+        except Exception:
+            pass
 
     def _play_one(self, path):
         """Play a single MP3 file, blocking until the player drains it.
@@ -494,22 +637,10 @@ class StreamTtsPlayer(object):
             print("[tts_trace] mp3_probe path={0} info={1!r}".format(path, mp3_info))
             sys.stderr.flush()
 
-            # Try blocking playFile with the original MP3 first.
-            t0 = time.time()
-            try:
-                print("[tts_trace] blocking_play_start path={0} (mp3)".format(path))
-                sys.stderr.flush()
-                rv = self._player.playFile(path)
-                elapsed = time.time() - t0
-                print("[tts_trace] blocking_play_done path={0} rv={1!r} elapsed_s={2:.2f}".format(
-                    path, rv, elapsed))
-                sys.stderr.flush()
-            except Exception as e:
-                elapsed = time.time() - t0
-                rv = None
-                print("[tts_trace] blocking_play FAILED on mp3 path={0} err={1}: {2} elapsed_s={3:.2f}".format(
-                    path, type(e).__name__, e, elapsed))
-                sys.stderr.flush()
+            # Try the original MP3 first. Playback is started with
+            # post.playFile() and polled with a hard timeout so NAOqi cannot
+            # wedge the TTS worker forever.
+            rv, elapsed, observed = self._play_file_with_timeout(path, "mp3")
 
             # If playback returned suspiciously fast (< 0.3 s for any non-trivial
             # MP3), assume the firmware silently rejected the format. Convert
@@ -518,7 +649,7 @@ class StreamTtsPlayer(object):
                 file_bytes = os.path.getsize(path)
             except Exception:
                 file_bytes = 0
-            if elapsed < 0.30 and file_bytes > 4096:
+            if (elapsed < 0.30 or not observed) and file_bytes > 4096:
                 wav_path = path.rsplit(".", 1)[0] + ".wav"
                 t1 = time.time()
                 ok = _convert_mp3_to_wav(path, wav_path)
@@ -535,20 +666,7 @@ class StreamTtsPlayer(object):
                     sys.stderr.flush()
                     with self._tmp_paths_lock:
                         self._tmp_paths.add(wav_path)
-                    t2 = time.time()
-                    try:
-                        print("[tts_trace] blocking_play_start path={0} (wav)".format(wav_path))
-                        sys.stderr.flush()
-                        rv2 = self._player.playFile(wav_path)
-                        wav_elapsed = time.time() - t2
-                        print("[tts_trace] blocking_play_done path={0} rv={1!r} elapsed_s={2:.2f}".format(
-                            wav_path, rv2, wav_elapsed))
-                        sys.stderr.flush()
-                    except Exception as e:
-                        wav_elapsed = time.time() - t2
-                        print("[tts_trace] wav play FAILED path={0} err={1}: {2} elapsed_s={3:.2f}".format(
-                            wav_path, type(e).__name__, e, wav_elapsed))
-                        sys.stderr.flush()
+                    self._play_file_with_timeout(wav_path, "wav")
                 else:
                     print("[tts_trace] wav_convert FAILED conv_elapsed_s={0:.2f}".format(
                         conv_elapsed))

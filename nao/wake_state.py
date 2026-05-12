@@ -1234,6 +1234,7 @@ class WakeStateMachine(object):
         prev_touched = False
         while not self._stop_event.is_set():
             touched = False
+            touched_key = None
             for key in _HEAD_TOUCH_KEYS:
                 try:
                     val = self._memory_proxy.getData(key)
@@ -1244,10 +1245,12 @@ class WakeStateMachine(object):
                 try:
                     if float(val) >= 0.5:
                         touched = True
+                        touched_key = key
                         break
                 except Exception:
                     if val:
                         touched = True
+                        touched_key = key
                         break
             if touched and not prev_touched:
                 cur = self.current_state()
@@ -1270,11 +1273,16 @@ class WakeStateMachine(object):
                     # short-circuits to no-op if nothing is actually
                     # playing, so over-firing is safe.
                     print("[wake_state] head touch during conversation "
-                          "(state={0}) → barge".format(cur))
+                          "(state={0}, key={1}) → barge".format(
+                              cur, touched_key))
                     _sys.stderr.flush()
                     if self._on_barge is not None:
                         try:
-                            self._on_barge()
+                            try:
+                                self._on_barge(touched_key)
+                            except TypeError:
+                                # Legacy callback signature.
+                                self._on_barge()
                         except Exception as exc:
                             self._log.warn("barge_callback_failed",
                                            err=str(exc))
