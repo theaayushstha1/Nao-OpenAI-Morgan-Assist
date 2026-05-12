@@ -417,7 +417,8 @@ class _SessionController(object):
         self._sound_localizer = None
         self._face_tracker = None
 
-    def engage(self, face_id, gate, confidence, distance_m):
+    def engage(self, face_id, gate, confidence, distance_m,
+               returning_user_hint=None):
         """Open the audio subscriber + spawn WS client + send wake_event."""
         with self._lock:
             if self._client is not None:
@@ -436,6 +437,8 @@ class _SessionController(object):
                     )
                 except Exception as exc:
                     self._log.warn("wake_event_refresh_failed", error=str(exc))
+                self._push_early_identity(
+                    returning_user_hint, face_id, gate, confidence)
                 return
 
             # 1. Start mic subscription (deferred from boot until wake).
@@ -506,11 +509,15 @@ class _SessionController(object):
             except Exception as exc:
                 self._log.warn("wake_event_send_failed", error=str(exc))
 
+            self._push_early_identity(
+                returning_user_hint, face_id, gate, confidence)
+
             self._log.info(
                 "session_engaged",
                 face_id=face_id, gate=gate,
                 confidence=float(confidence or 0.0),
                 distance_m=float(distance_m or 0.0),
+                returning_user_hint=returning_user_hint,
             )
 
             # 5b. Start lifelike head behavior:
@@ -530,6 +537,58 @@ class _SessionController(object):
             # for their name (the user can say "remember me as X" to
             # trigger the learn_face tool).
             self._spawn_face_recognition()
+
+    def _hint_to_name(self, returning_user_hint):
+        if not returning_user_hint:
+            return None
+        try:
+            if isinstance(returning_user_hint, dict):
+                for key in ("display_name", "name", "username"):
+                    val = returning_user_hint.get(key)
+                    if val:
+                        return str(val).strip() or None
+                return None
+        except Exception:
+            pass
+        try:
+            name = str(returning_user_hint).strip()
+            return name or None
+        except Exception:
+            return None
+
+    def _push_early_identity(self, returning_user_hint, face_id, gate,
+                             confidence):
+        """Send the WSM's immediate face identity before the async scan.
+
+        The old 4-arg callback discarded `returning_user_hint`, so the
+        first turn could run as guest. This early control frame preserves
+        recognized names and also marks face-gated unknown users visible so
+        the server can ask for their name deterministically.
+        """
+        if self._client is None:
+            return
+        name = self._hint_to_name(returning_user_hint)
+        face_visible = bool(name)
+        if not face_visible:
+            try:
+                conf = float(confidence or 0.0)
+            except Exception:
+                conf = 0.0
+            face_visible = bool(face_id) and conf > 0.0 and gate != "touch"
+        if not name and not face_visible:
+            return
+        payload = {
+            "name": name,
+            "recognized": bool(name),
+            "face_visible": bool(face_visible),
+            "source": "wake_hint" if name else "wake_unknown",
+        }
+        try:
+            self._client.push_control("user_identified", payload)
+            self._log.info("user_identified_early",
+                           name=name, face_visible=face_visible)
+        except Exception as exc:
+            self._log.debug("user_identified_early_failed", error=str(exc))
 
     def _spawn_face_recognition(self):
         """Run a quick (~3 s) face-recognition scan on a daemon thread.
@@ -577,6 +636,13 @@ class _SessionController(object):
                         recognized_name = res
                 except Exception as exc:
                     self._log.debug("face_recognize_failed", error=str(exc))
+
+            try:
+                if recognized_name and str(recognized_name).strip().lower() in (
+                        "guest", "unknown"):
+                    recognized_name = None
+            except Exception:
+                pass
 
             payload = {
                 "name": recognized_name or None,
@@ -817,12 +883,15 @@ def main():
             # heavy work (audio.start / WS client thread) to ``session`` so the
             # WSM stays responsive to face detection.
             # ------------------------------------------------------------------
-            def on_engaged(face_id, gate, confidence, distance_m):
+            def on_engaged(face_id, gate, confidence, distance_m,
+                           returning_user_hint=None):
                 log.info("wake_engaged",
                          face_id=face_id, gate=gate,
                          confidence=float(confidence or 0.0),
-                         distance_m=float(distance_m or 0.0))
-                session.engage(face_id, gate, confidence, distance_m)
+                         distance_m=float(distance_m or 0.0),
+                         returning_user_hint=returning_user_hint)
+                session.engage(face_id, gate, confidence, distance_m,
+                               returning_user_hint)
 
             def on_lost():
                 log.info("wake_lost", reason="aware_timeout_or_face_lost")

@@ -287,7 +287,36 @@ def test_camera_negative_unrelated_sentence() -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 7. Misc edge cases — empty / whitespace / None-equivalent input
+# 7. Face onboarding name-answer fast path
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("transcript, expected", [
+    ("Aayush", "Aayush"),
+    ("aayush", "Aayush"),
+    ("I'm Aayush", "Aayush"),
+    ("my name is Aayush", "Aayush"),
+])
+def test_detect_name_answer_positive(transcript: str, expected: str) -> None:
+    m = motion_trigger.detect_name_answer(transcript)
+    assert isinstance(m, MotionMatch)
+    assert m.action == "learn_face"
+    assert m.args == {"name": expected}
+
+
+@pytest.mark.parametrize("transcript", [
+    "yes",
+    "no",
+    "hello",
+    "I feel anxious",
+    "Aayush is my friend",
+])
+def test_detect_name_answer_negative(transcript: str) -> None:
+    assert motion_trigger.detect_name_answer(transcript) is None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 8. Misc edge cases — empty / whitespace / None-equivalent input
 # ─────────────────────────────────────────────────────────────────────────────
 
 

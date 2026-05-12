@@ -1279,6 +1279,68 @@ async def _emit_motion(ws: WebSocket, sess: _Session, transcript: str,
     )
 
 
+_ONBOARDING_NAME_PROMPT = "Hi, I'm NAO. What should I call you?"
+
+
+async def _emit_onboarding_name_prompt(
+    ws: WebSocket,
+    sess: _Session,
+    *,
+    reason: str,
+) -> None:
+    """Ask an unknown visible face for their name via the ElevenLabs path."""
+    if sess.asking_name:
+        return
+    sess.asking_name = True
+
+    text = _ONBOARDING_NAME_PROMPT
+    phase_ms: dict[str, float] = {}
+    with _phase("onboarding_name_prompt_synth", phase_ms):
+        try:
+            mp3 = await asyncio.to_thread(_synth_for, sess.username, text)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "onboarding_name_prompt_tts_failed",
+                user=sess.username,
+                session_id=sess.session_id,
+                error=repr(exc),
+            )
+            mp3 = b""
+
+    try:
+        _reset_reply_chunks(sess.username, text)
+    except Exception:
+        pass
+
+    if mp3:
+        await _send_json(
+            ws,
+            _audio_chunk_frame(sess.next_seq(), text, mp3),
+        )
+        try:
+            legacy.LAST_REPLY[sess.username] = text
+        except Exception:
+            pass
+        _arm_post_tts_cooldown(sess)
+        await _send_json(
+            ws,
+            _control_frame("tts_ended", sentences=1, asking_name=True),
+        )
+    else:
+        await _send_json(
+            ws,
+            _control_frame("tts_chunk_skipped", text=text, asking_name=True),
+        )
+
+    logger.info(
+        "onboarding_name_prompt",
+        user=sess.username,
+        session_id=sess.session_id,
+        reason=reason,
+        phase_ms=phase_ms,
+    )
+
+
 # ───────── full agent path ─────────
 
 async def _emit_agent_turn(ws: WebSocket, sess: _Session,
@@ -1890,6 +1952,14 @@ async def _process_turn(ws: WebSocket, sess: _Session) -> None:
         legacy.consume_partial(sess.username, transcript)
         await _emit_crisis(ws, sess, transcript, phase_ms)
         return
+
+    if sess.asking_name:
+        name_motion = motion_trigger.detect_name_answer(transcript)
+        if name_motion is not None:
+            _cancel_pending_vision(sess)
+            sess.asking_name = False
+            await _emit_motion(ws, sess, transcript, name_motion, phase_ms)
+            return
 
     # Semantic endpointing — wait for more audio if the user trailed off.
     from server import semantic_endpoint
@@ -2603,7 +2673,16 @@ async def _ingest_control(ws: WebSocket, sess: _Session,
         #   • Prompt unknown user for their name + suggest `learn_face`
         face_name = (data.get("name") or "").strip() or None
         recognized = bool(data.get("recognized"))
+        if face_name and face_name.lower() in {"guest", "unknown"}:
+            face_name = None
+            recognized = False
         face_visible = bool(data.get("face_visible"))
+        prev_identity = _IDENTIFIED_USERS.get(sess.session_id) or {}
+        prompted = bool(prev_identity.get("prompted"))
+        greeted = bool(prev_identity.get("greeted", False))
+        if recognized and face_name:
+            prompted = False
+            greeted = False
         # Store on session — tolerated even though _Session uses __slots__
         # because we go through a module-level dict (same trick the
         # mic_trace counters use).
@@ -2612,7 +2691,8 @@ async def _ingest_control(ws: WebSocket, sess: _Session,
             "recognized": recognized,
             "face_visible": face_visible,
             "ts": time.time(),
-            "greeted": False,
+            "greeted": greeted,
+            "prompted": prompted,
         }
         # If we recognized the user, set sess.username so SQLite-backed
         # memory + voice-profile-prefs persist correctly across sessions.
@@ -2629,6 +2709,12 @@ async def _ingest_control(ws: WebSocket, sess: _Session,
             recognized=recognized,
             face_visible=face_visible,
         )
+        if face_visible and not recognized and not face_name and not prompted:
+            _IDENTIFIED_USERS[sess.session_id]["prompted"] = True
+            _IDENTIFIED_USERS[sess.session_id]["greeted"] = True
+            await _emit_onboarding_name_prompt(
+                ws, sess, reason=str(data.get("source") or "unknown_face"),
+            )
         return True
 
     if sub == "end_of_utterance":

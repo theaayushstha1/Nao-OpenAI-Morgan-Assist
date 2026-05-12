@@ -177,6 +177,8 @@ for action, args, ack, phrases in _TRIGGERS:
         pattern = re.compile(r"\b" + re.escape(p) + r"\b", re.IGNORECASE)
         _COMPILED.append((pattern, action, args, ack))
 
+_FOLLOW_SOCIAL_RE = re.compile(r"\bfollow\s+me\s+on\b", re.IGNORECASE)
+
 
 @dataclass
 class MotionMatch:
@@ -197,7 +199,8 @@ _NON_NAMES_FAST = frozenset({
     "tired", "fine", "good", "okay", "ok", "great", "happy", "sad",
     "anxious", "stressed", "depressed", "lonely", "scared", "angry",
     "ready", "back", "here", "sorry", "done", "leaving", "going",
-    "trying", "thinking",
+    "trying", "thinking", "yes", "yeah", "yep", "no", "nope", "hi",
+    "hello", "hey", "thanks", "thank", "nao",
 })
 
 
@@ -252,6 +255,40 @@ def _detect_learn_face(transcript: str) -> MotionMatch | None:
     return None
 
 
+def detect_name_answer(transcript: str) -> MotionMatch | None:
+    """Handle a bare name answer during the onboarding name prompt.
+
+    This is intentionally separate from `detect()` so random one-word turns
+    do not teach faces unless the caller already knows it is asking for a
+    name.
+    """
+    text = (transcript or "").strip()
+    if not text:
+        return None
+    text = re.sub(r"^[\"'\s]+|[\"'.,!?\s]+$", "", text)
+    if not text:
+        return None
+
+    m = re.match(
+        r"^(?:it(?:'| i)?s|i am|i'm|my name is|call me)\s+(.+)$",
+        text,
+        re.IGNORECASE,
+    )
+    raw = (m.group(1) if m else text).strip()
+    raw = re.sub(r"[\"'.,!?\s]+$", "", raw)
+    parts = raw.split()
+    if not (1 <= len(parts) <= 2):
+        return None
+    if not all(_looks_like_name(p) for p in parts):
+        return None
+    name = " ".join(p[0].upper() + p[1:].lower() for p in parts)
+    return MotionMatch(
+        action="learn_face",
+        args={"name": name},
+        ack="Nice to meet you, {name}.".format(name=name),
+    )
+
+
 def detect(transcript: str) -> MotionMatch | None:
     """Return MotionMatch if `transcript` clearly requests a NAO body action.
 
@@ -274,6 +311,9 @@ def detect(transcript: str) -> MotionMatch | None:
     lf = _detect_learn_face(t)
     if lf is not None:
         return lf
+
+    if _FOLLOW_SOCIAL_RE.search(t):
+        return None
 
     # 2. Static phrases.
     for pattern, action, args, ack in _COMPILED:

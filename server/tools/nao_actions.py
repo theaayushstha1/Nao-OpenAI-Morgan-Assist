@@ -261,7 +261,7 @@ THERAPIST_ACTIONS = [
     wave_hand, wave_both_hands, clap_hands,
     dance, follow_movement, stop_follow,
     stand_up, sit_down,
-    play_animation,
+    play_animation, learn_face,
     gesture,
 ]
 

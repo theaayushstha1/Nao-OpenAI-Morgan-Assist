@@ -34,3 +34,7 @@ def test_chat_actions_bundle_populated():
 
 def test_therapist_actions_bundle_populated():
     assert len(nao_actions.THERAPIST_ACTIONS) >= 2
+
+
+def test_therapist_can_learn_face():
+    assert nao_actions.learn_face in nao_actions.THERAPIST_ACTIONS
