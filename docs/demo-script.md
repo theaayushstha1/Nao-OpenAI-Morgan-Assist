@@ -41,20 +41,20 @@ flowchart TB
     classDef scB fill:#6a1b9a,stroke:#4a148c,color:#fff
     classDef scC fill:#ef6c00,stroke:#bf360c,color:#fff
 
-    A[Scenario A · "Meet me"]:::scA --> A1[Face learn via motion_trigger]
-    A --> A2[Bare wake → therapist default]
+    A[Scenario A Meet me]:::scA --> A1[Face learn via motion_trigger]
+    A --> A2[Bare wake to therapist default]
     A --> A3[Proactive name use]
     A --> A4[Mood log written]
 
-    B[Scenario B · "Therapy that remembers"]:::scB --> B1[Memory preamble surfaces last mood]
-    B --> B2[CBT thought record + reframe]
+    B[Scenario B Therapy that remembers]:::scB --> B1[Memory preamble surfaces last mood]
+    B --> B2[CBT thought record plus reframe]
     B --> B3[Empathic gestures]
     B --> B4[Mood trajectory across turns]
 
-    C[Scenario C · "Show off the rest"]:::scC --> C1[Multi-mode router · Morgan / chat / skills]
-    C --> C2[Embodiment · wave / dance / sit / stand]
-    C --> C3[Voice profile picker · man / girl / my]
-    C --> C4[Vision · what am I wearing]
+    C[Scenario C Show off the rest]:::scC --> C1[Multi-mode router Morgan chat skills]
+    C --> C2[Embodiment wave dance sit stand]
+    C --> C3[Voice profile picker man girl my]
+    C --> C4[Vision what am I wearing]
     C --> C5[LED color change]
 ```
 
