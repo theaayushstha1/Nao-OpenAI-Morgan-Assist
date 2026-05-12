@@ -394,6 +394,54 @@ cp .env.example .env             # fill keys
 
 ---
 
+## Always‑on deployment (Raspberry Pi server)
+
+Dev mode runs the server on your laptop via `./run.sh`. For demos and 24/7 availability we now also host the server on a Raspberry Pi 4 (Ubuntu Server 24.04) so the robot is reachable without anyone's laptop being online.
+
+```mermaid
+flowchart LR
+    classDef box fill:#0d47a1,stroke:#0d47a1,color:#fff
+    NAO["NAO robot<br/>172.20.95.127<br/>Choregraphe autostart<br/>→ launch_nao_assist.sh"]:::box
+    PI["Raspberry Pi 4<br/>172.20.95.106<br/>systemd nao-server.service<br/>uvicorn server.app_ws:app"]:::box
+    NAO -- "WebSocket :5050<br/>audio_chunk / control / image" --> PI
+    PI -- "audio_chunk MP3 / action / transcript" --> NAO
+```
+
+- **Robot side**: power on → NAOqi boots → Choregraphe default behavior `nao-therapy-autostart/behavior_1` fires → `/home/nao/launch_nao_assist.sh` mutes NAO's native ALTextToSpeech (ElevenLabs is the only voice), disables autonomous life, and launches `python /home/nao/nao_assist/main.py`. Nothing to do by hand.
+- **Server side**: Pi runs `nao-server.service` (enabled at boot). Server pulls latest `main` on `git pull && sudo systemctl restart nao-server`.
+
+```bash
+# Deploy code updates to the Pi server
+ssh -t nao@172.20.95.106 'cd ~/nao-sagecbt && git pull && sudo systemctl restart nao-server && sudo systemctl is-active nao-server'
+
+# Deploy code updates to the robot
+./run.sh deploy-only        # rsyncs full nao/ folder + clears .pyc
+
+# Restart main.py on the robot
+ssh -t nao@172.20.95.127 'pkill -9 -f main.py; sleep 2; bash /home/nao/launch_nao_assist.sh'
+
+# Tail server logs
+ssh -t nao@172.20.95.106 'sudo journalctl -u nao-server -f'
+```
+
+The robot's `~/.bash_profile` previously auto‑started a separate Feb‑2026 project that collided with the new app over the mic and speaker (the "two main.py at different paths" bug); that autostart is now neutralized — see `~/.bash_profile.old_nao_chat_backup.*` for the original.
+
+---
+
+## Recent changes (May 2026)
+
+- **Pi migration**: server now runs on a Raspberry Pi 4 via systemd; robot autostarts via Choregraphe default behavior. The robot can be unboxed, powered on, and talked to without any laptop.
+- **Mic‑stall watchdog** (`nao/audio_module.py`): detects when `ALAudioRecorder` wedges (WAV stops growing) and restarts the recorder after 2 s. Prevents mid‑conversation silence.
+- **VAD adaptive threshold** (`server/vad_silero.py`): Silero VAD threshold lowered to 0.15 with an adaptive floor at 0.05 so NAO actually hears quiet voices instead of rejecting every turn as `no_voice`. Per‑second `[silero_trace]` log line for tuning.
+- **Durable `had_speech`** (`server/app_ws.py`, `server/vad_silero.py`): per‑utterance flag captures speech bursts that end on a quiet syllable, so the end‑of‑utterance arbiter doesn't drop the turn.
+- **TTS sentence dedupe** (`server/app_ws.py`): prevents the agent from speaking the same sentence twice when an LLM tool call interrupts streaming.
+- **Native voice locked off** (`nao/main.py`, `nao/stream_tts.py`, `nao/ws_client.py`): `ALTextToSpeech.setVolume(0.0)` is now pinned at every collision point (boot, TTS playback, announcer fillers gated behind `ENABLE_NATIVE_FILLER=1`). NAO's kid voice never leaks.
+- **`learn_face` fast‑path** (`server/motion_trigger.py`): "remember me as X" / "save my face as X" / "my name is X" short‑circuit before any agent routes, so face learning works from any mode (router, chat, therapy, morgan).
+- **Persistent therapy memory** (`server/session.py`, `server/tools/emotion.py`, `server/memory.py`): two new SQLite tables — `mood_log` and `thought_records` — populated by the `log_emotion`, `identify_distortion`, and `suggest_reframe` tools. The system preamble now surfaces a `Therapy memory` section with the latest mood, a 5‑entry trajectory, and the last CBT thought record so the therapist can open the next session with continuity.
+- **Proactive name use** (`server/agents/therapist.py`, `server/agents/chat.py`): both agents weave the user's name into ~1 in 3 replies (greetings, transitions, validations, peaks). Memory‑aware first turn for the therapist references recent mood / thought records.
+
+---
+
 ## Talking to NAO
 
 | Say | Triggers |
