@@ -452,6 +452,28 @@ def _run_first_available(behav_mgr, candidates, blocking=False):
     return None
 
 
+def _call_post_or_direct(proxy, method_name, *args):
+    """Prefer NAOqi's non-blocking post API, fall back to direct call.
+
+    Some motion/posture calls can block for seconds or wedge when the robot
+    is not in the expected state. The WS action worker is single-threaded,
+    so one blocking `goToPosture` can prevent every later action from
+    running. `proxy.post.<method>` returns immediately while NAOqi performs
+    the move asynchronously.
+    """
+    if proxy is None:
+        print("[nao_execute] {0}: proxy missing".format(method_name))
+        return None
+    try:
+        post = getattr(proxy, "post", None)
+        fn = getattr(post, method_name, None) if post is not None else None
+        if fn is not None:
+            return fn(*args)
+    except Exception as e:
+        print("[nao_execute] post.{0} failed: {1}".format(method_name, e))
+    return getattr(proxy, method_name)(*args)
+
+
 # ---------------------------------------------------------------------------
 # Phase 4 — body-language gesture dispatch
 # ---------------------------------------------------------------------------
@@ -827,12 +849,13 @@ def run(action, session, motion, posture, leds, behav_mgr, tts,
     name = action.get("name")
     args = action.get("args") or {}
     try:
+        print("[nao_execute] action {0} args={1}".format(name, args))
         if name == "stand_up":
-            posture.goToPosture("StandInit", 0.6)
+            _call_post_or_direct(posture, "goToPosture", "StandInit", 0.6)
         elif name == "sit_down":
-            posture.goToPosture("Sit", 0.6)
+            _call_post_or_direct(posture, "goToPosture", "Sit", 0.6)
         elif name == "kneel":
-            posture.goToPosture("Crouch", 0.6)
+            _call_post_or_direct(posture, "goToPosture", "Crouch", 0.6)
         elif name == "wave_hand":
             hand = args.get("hand", "right")
             # Non-blocking; gestures should run parallel to TTS.
@@ -858,18 +881,26 @@ def run(action, session, motion, posture, leds, behav_mgr, tts,
             # iteration. One startBehavior is enough.
             behav_mgr.startBehavior("animations/Stand/Gestures/Applause_1")
         elif name == "move_forward":
-            motion.moveTo(float(args.get("meters", 0.3)), 0.0, 0.0)
+            _call_post_or_direct(
+                motion, "moveTo", float(args.get("meters", 0.3)), 0.0, 0.0)
         elif name == "move_backward":
-            motion.moveTo(-float(args.get("meters", 0.3)), 0.0, 0.0)
+            _call_post_or_direct(
+                motion, "moveTo", -float(args.get("meters", 0.3)), 0.0, 0.0)
         elif name == "turn_left":
             import math
-            motion.moveTo(0.0, 0.0, math.radians(float(args.get("degrees", 45.0))))
+            _call_post_or_direct(
+                motion, "moveTo", 0.0, 0.0,
+                math.radians(float(args.get("degrees", 45.0))))
         elif name == "turn_right":
             import math
-            motion.moveTo(0.0, 0.0, -math.radians(float(args.get("degrees", 45.0))))
+            _call_post_or_direct(
+                motion, "moveTo", 0.0, 0.0,
+                -math.radians(float(args.get("degrees", 45.0))))
         elif name == "spin":
             import math
-            motion.moveTo(0.0, 0.0, math.radians(float(args.get("degrees", 360.0))))
+            _call_post_or_direct(
+                motion, "moveTo", 0.0, 0.0,
+                math.radians(float(args.get("degrees", 360.0))))
         elif name == "dance":
             style = (args.get("style") or "robot").strip().lower()
             primary = _DANCE_BEHAVIORS.get(style)

@@ -521,11 +521,14 @@ class NaoWsClient(object):
         action onto a single-worker queue means recv stays hot.
         """
         if self.action_dispatcher is None:
+            self.log.warn("action_dropped_no_dispatcher",
+                          name=frame.get("name"))
             return
         name = frame.get("name")
         args = frame.get("args") or {}
         try:
             self._action_queue.put_nowait((name, args))
+            self.log.info("action_enqueued", name=name)
         except Exception as exc:
             # Queue should never reject (unbounded), but if it does
             # we'd rather log + drop than block the recv loop.
@@ -589,11 +592,17 @@ class NaoWsClient(object):
                 return
             name, args = item
             try:
+                self.log.info("action_dispatch_start", name=name)
                 self.action_dispatcher(name, args)
+                self.log.info("action_dispatch_done", name=name)
             except TypeError:
                 # Legacy dispatcher signatures take a single dict.
                 try:
+                    self.log.info("action_dispatch_start", name=name,
+                                  legacy=True)
                     self.action_dispatcher({"name": name, "args": args})
+                    self.log.info("action_dispatch_done", name=name,
+                                  legacy=True)
                 except Exception as exc:
                     self.log.error("action_dispatch_failed", name=name,
                                    error=str(exc))
