@@ -231,6 +231,7 @@ class NaoWsClient(object):
         self._sender_thread = None
         self._receiver_thread = None
         self._barge_thread = None
+        self._rear_touch_thread = None
 
         # Connection-scoped flag flipped by tts_started / tts_ended frames.
         # The barge thread checks this in addition to tts_player.is_playing()
@@ -253,6 +254,7 @@ class NaoWsClient(object):
         # actions don't trample each other on shared joint resources.
         self._action_queue = _queue.Queue()
         self._action_worker_thread = None
+        self._rear_touch_stop_event = threading.Event()
 
         # Post-playback waiter thread. tts_ended from the server only
         # means "server is done streaming" — it does NOT mean local
@@ -637,6 +639,58 @@ class NaoWsClient(object):
             except Exception as exc:
                 self.log.error("action_dispatch_failed", name=name,
                                error=str(exc))
+
+    def _rear_touch_stop_loop(self):
+        """Independent rear-head hard stop while a WS session is active.
+
+        WakeStateMachine also reads the tactile sensors, but rear touch is a
+        safety/control surface now. Keeping a second reader here means a stuck
+        behavior can be stopped even if the wake state happens to be IDLE/AWARE
+        and would otherwise interpret touch as engagement.
+        """
+        memory = None
+        try:
+            from naoqi import ALProxy as _ALProxy  # type: ignore
+            try:
+                from . import config as _config
+            except Exception:
+                import config as _config
+            memory = _ALProxy("ALMemory", _config.NAO_IP, _config.NAO_PORT)
+        except Exception as exc:
+            self.log.debug("rear_touch_loop_skipped", error=str(exc))
+            return
+
+        prev = False
+        while (not self.shutdown_event.is_set() and
+               not self._rear_touch_stop_event.is_set()):
+            touched = False
+            try:
+                val = memory.getData("RearTactilTouched")
+                try:
+                    touched = float(val) >= 0.5
+                except Exception:
+                    touched = bool(val)
+            except Exception:
+                touched = False
+
+            if touched and not prev:
+                self.log.info("rear_head_touch_stop")
+                self._cancel_actions(reason="rear_head_touch_ws")
+                try:
+                    if self.tts_player is not None:
+                        self.tts_player.stop()
+                except Exception as exc:
+                    self.log.debug("rear_touch_tts_stop_failed",
+                                   error=str(exc))
+                try:
+                    self.push_control("barge_in", {
+                        "source": "rear_head_touch",
+                        "touch_key": "RearTactilTouched",
+                    })
+                except Exception:
+                    pass
+            prev = touched
+            self._rear_touch_stop_event.wait(timeout=0.05)
 
     def _handle_control(self, frame):
         sub = frame.get("subtype")
@@ -1717,6 +1771,8 @@ class NaoWsClient(object):
         return True
 
     def _spawn_workers(self, ws):
+        self._rear_touch_stop_event.clear()
+
         self._receiver_thread = threading.Thread(
             target=self._recv_loop, args=(ws,), name="nao-ws-recv")
         self._receiver_thread.daemon = True
@@ -1731,6 +1787,11 @@ class NaoWsClient(object):
             target=self._barge_loop, name="nao-ws-barge")
         self._barge_thread.daemon = True
         self._barge_thread.start()
+
+        self._rear_touch_thread = threading.Thread(
+            target=self._rear_touch_stop_loop, name="nao-ws-rear-touch")
+        self._rear_touch_thread.daemon = True
+        self._rear_touch_thread.start()
 
         # Action worker — drains queued body actions off the recv thread.
         # Daemon so we don't have to coordinate exit on a hard shutdown.
@@ -1760,8 +1821,11 @@ class NaoWsClient(object):
         except Exception:
             pass
 
+        self._rear_touch_stop_event.set()
+
         for t in (self._sender_thread, self._receiver_thread,
-                  self._barge_thread, self._action_worker_thread):
+                  self._barge_thread, self._rear_touch_thread,
+                  self._action_worker_thread):
             if t is None:
                 continue
             try:
@@ -1771,6 +1835,7 @@ class NaoWsClient(object):
         self._sender_thread = None
         self._receiver_thread = None
         self._barge_thread = None
+        self._rear_touch_thread = None
         self._action_worker_thread = None
 
     def _teardown_ws(self):

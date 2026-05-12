@@ -183,6 +183,56 @@ def _stop_audio_proxies(ip, port):
         pass
 
 
+def _stop_motion_behaviors_safe(log, reason="manual_stop"):
+    """Best-effort hard stop for long Choregraphe behaviors and motion tasks."""
+    stopped_behaviors = []
+    if not _HAS_NAOQI:
+        return stopped_behaviors
+    try:
+        mgr = ALProxy("ALBehaviorManager", config.NAO_IP, config.NAO_PORT)
+        try:
+            running = mgr.getRunningBehaviors() or []
+        except Exception:
+            running = []
+        for behavior in running:
+            try:
+                mgr.stopBehavior(behavior)
+                stopped_behaviors.append(behavior)
+            except Exception:
+                pass
+        try:
+            mgr.stopAllBehaviors()
+        except Exception:
+            pass
+    except Exception as exc:
+        try:
+            log.debug("motion_behavior_stop_failed", error=str(exc))
+        except Exception:
+            pass
+
+    try:
+        motion = ALProxy("ALMotion", config.NAO_IP, config.NAO_PORT)
+        for method in ("stopMove", "killAll"):
+            try:
+                fn = getattr(motion, method, None)
+                if callable(fn):
+                    fn()
+            except Exception:
+                pass
+    except Exception as exc:
+        try:
+            log.debug("motion_task_stop_failed", error=str(exc))
+        except Exception:
+            pass
+
+    try:
+        log.info("motion_stop_requested",
+                 reason=reason, stopped_behaviors=stopped_behaviors)
+    except Exception:
+        pass
+    return stopped_behaviors
+
+
 # ---------------------------------------------------------------------------
 # Component factories. Imports are deferred so this file ``py_compile``s
 # even while sibling agents are still authoring ``nao/wake_state.py`` and
@@ -917,6 +967,9 @@ def main():
             # TTS is playing, stop the audio immediately so they can speak.
             def on_barge(touch_key=None):
                 log.info("wake_barge_requested", touch_key=touch_key)
+                if touch_key == "RearTactilTouched":
+                    _stop_motion_behaviors_safe(
+                        log, reason="rear_head_touch_wake_state")
                 try:
                     if tts is not None:
                         tts.stop()

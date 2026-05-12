@@ -1254,6 +1254,22 @@ class WakeStateMachine(object):
                         break
             if touched and not prev_touched:
                 cur = self.current_state()
+                if touched_key == "RearTactilTouched":
+                    print("[wake_state] rear head touch stop "
+                          "(state={0})".format(cur))
+                    _sys.stderr.flush()
+                    if self._on_barge is not None:
+                        try:
+                            try:
+                                self._on_barge(touched_key)
+                            except TypeError:
+                                self._on_barge()
+                        except Exception as exc:
+                            self._log.warn("barge_callback_failed",
+                                           err=str(exc))
+                    prev_touched = touched
+                    self._stop_event.wait(timeout=0.1)
+                    continue
                 if cur in (STATE_IDLE, STATE_AWARE):
                     print("[wake_state] head touch detected → engage")
                     _sys.stderr.flush()
