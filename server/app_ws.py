@@ -1867,6 +1867,12 @@ async def _process_turn(ws: WebSocket, sess: _Session) -> None:
     if not sess.audio_buf:
         return
 
+    # Capture the streaming-VAD verdict before reset_turn() clears the
+    # per-utterance state. The legacy WAV VAD/STT path can still produce
+    # hallucinated text from low-level noise; Silero is the stricter gate
+    # that tells us whether the user actually spoke.
+    turn_silero_available = sess.silero is not None
+    turn_had_speech = bool(sess.had_speech)
     pcm = bytes(sess.audio_buf)
     image_b64 = sess.image_b64
     sess.reset_turn()
@@ -1963,6 +1969,24 @@ async def _process_turn(ws: WebSocket, sess: _Session) -> None:
                 os.unlink(wav_path)
             except Exception:
                 pass
+
+    if turn_silero_available and not turn_had_speech:
+        phase_ms["e2e_user_to_first_audio"] = round(
+            (time.perf_counter() - t_user_done) * 1000.0, 2,
+        )
+        logger.info(
+            "turn_complete",
+            user=sess.username, session_id=sess.session_id,
+            turn_idx=sess.turn_idx + 1, phase_ms=phase_ms,
+            transcript=(transcript or "")[:200],
+            outcome="rejected", reject_reason="silero_no_speech",
+        )
+        await _send_json(ws, _control_frame(
+            "transcript",
+            transcript=transcript,
+            reject_reason="silero_no_speech",
+        ))
+        return
 
     # Phase 11 / Option B: kick off the vision call IN PARALLEL with the
     # downstream pipeline (echo guard, crisis check, semantic endpoint,

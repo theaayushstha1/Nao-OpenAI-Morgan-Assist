@@ -338,6 +338,7 @@ def test_camera_negative_unrelated_sentence() -> None:
     ("aayush", "Aayush"),
     ("I'm Aayush", "Aayush"),
     ("my name is Aayush", "Aayush"),
+    ("my name is Rafael", "Rafael"),
 ])
 def test_detect_name_answer_positive(transcript: str, expected: str) -> None:
     m = motion_trigger.detect_name_answer(transcript)
@@ -350,6 +351,9 @@ def test_detect_name_answer_positive(transcript: str, expected: str) -> None:
     "yes",
     "no",
     "hello",
+    "Use",
+    "Rafael",
+    "switch voice",
     "I feel anxious",
     "Aayush is my friend",
 ])

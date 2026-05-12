@@ -283,7 +283,18 @@ _NON_NAMES_FAST = frozenset({
     "anxious", "stressed", "depressed", "lonely", "scared", "angry",
     "ready", "back", "here", "sorry", "done", "leaving", "going",
     "trying", "thinking", "yes", "yeah", "yep", "no", "nope", "hi",
-    "hello", "hey", "thanks", "thank", "nao",
+    "hello", "hey", "thanks", "thank", "nao", "use", "using", "switch",
+    "voice", "terminal", "obsidian", "money", "update", "process",
+    "medicine", "camera", "therapy", "therapist",
+})
+
+_SUSPICIOUS_BARE_NAME_ANSWERS = frozenset({
+    # Common STT hallucinations seen while the robot is waiting for a name.
+    # A real person can still enroll with an explicit phrase like
+    # "my name is Rafael"; this only blocks a bare one-word answer.
+    "rafael",
+    "rafaell",
+    "raphael",
 })
 
 
@@ -352,10 +363,14 @@ def detect_name_answer(transcript: str) -> MotionMatch | None:
         text,
         re.IGNORECASE,
     )
+    explicit_intro = m is not None
     raw = (m.group(1) if m else text).strip()
     raw = re.sub(r"[\"'.,!?\s]+$", "", raw)
     parts = raw.split()
     if not (1 <= len(parts) <= 2):
+        return None
+    if (not explicit_intro and len(parts) == 1
+            and parts[0].strip().lower() in _SUSPICIOUS_BARE_NAME_ANSWERS):
         return None
     if not all(_looks_like_name(p) for p in parts):
         return None
