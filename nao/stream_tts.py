@@ -432,6 +432,14 @@ class StreamTtsPlayer(object):
                 self._safe_remove(path)
                 continue
 
+            # Mark playback active before handing the job to _play_one.
+            # Otherwise there is a short race where the worker has already
+            # removed the job from the queue, but _play_one has not yet set
+            # _playing=True. The mic-resume waiter can observe
+            # queue-empty + not-playing in that gap and reopen the mic
+            # before the chunk has actually started.
+            with self._state_lock:
+                self._playing = True
             self._play_one(path)
 
     def _play_one(self, path):
