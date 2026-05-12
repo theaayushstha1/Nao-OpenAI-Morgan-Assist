@@ -223,6 +223,28 @@ def test_follow_negative_instagram() -> None:
     _assert_no_match("follow me on Instagram for updates")
 
 
+@pytest.mark.parametrize("transcript, animation", [
+    ("do an elephant", "elephant"),
+    ("act like a gorilla", "gorilla"),
+    ("do a gorrila", "gorilla"),
+    ("do kung fu", "kungfu"),
+    ("play air guitar", "air_guitar"),
+    ("pretend to be a bird", "bird"),
+    ("show me a zombie", "zombie"),
+])
+def test_named_animation_positive(transcript: str, animation: str) -> None:
+    _assert_match(transcript, "play_animation", args={"animation": animation})
+
+
+@pytest.mark.parametrize("transcript", [
+    "I saw an elephant at the zoo",
+    "My friend likes gorillas",
+    "Kung fu movies are fun",
+])
+def test_named_animation_requires_action_verb(transcript: str) -> None:
+    _assert_no_match(transcript)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 5. LEDs — eye color
 # ─────────────────────────────────────────────────────────────────────────────
@@ -313,6 +335,18 @@ def test_detect_name_answer_positive(transcript: str, expected: str) -> None:
 ])
 def test_detect_name_answer_negative(transcript: str) -> None:
     assert motion_trigger.detect_name_answer(transcript) is None
+
+
+def test_plain_name_intro_does_not_enroll_outside_onboarding() -> None:
+    _assert_no_match("Hey. My name is Ayush.")
+
+
+def test_explicit_remember_me_still_enrolls() -> None:
+    _assert_match(
+        "remember me as Aayush",
+        "learn_face",
+        args={"name": "Aayush"},
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

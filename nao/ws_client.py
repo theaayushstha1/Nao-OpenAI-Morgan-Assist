@@ -284,11 +284,10 @@ class NaoWsClient(object):
         self._reply_audio_arrived = False
 
         # Speaking-gesture loop state. While TTS is active, a daemon
-        # thread picks a random body-language gesture from the canonical
-        # 10-intent table every ~2.5 s. ``_speaking_gesture_stop`` is set
-        # on tts_ended / barge to cleanly exit the loop. Stand-up
-        # posture is also fired once when TTS first starts so gestures
-        # have presence (sitting NAO with arm-waving looks weird).
+        # thread adds low-amplitude body language: head beats, small
+        # hand beats, soft palm openings, and breath/shoulder motions.
+        # Big Choregraphe animations stay reserved for explicit user
+        # requests ("do kung fu", "act like an elephant", etc).
         self._speaking_gesture_thread = None
         self._speaking_gesture_stop = threading.Event()
         self._stood_up_once = False
@@ -1047,38 +1046,28 @@ class NaoWsClient(object):
             pass
 
     # ------------------------------------------------------------------
-    # Embodiment: stand-up posture + random gestures during TTS playback
+    # Embodiment: stand-up posture + subtle gestures during TTS playback
     # ------------------------------------------------------------------
-    # Speaking-gesture pool. Mix of:
-    #   - "stock" — gestures from nao_execute._GESTURE_TABLE (proven,
-    #     tested, auto-restoring or paired with neutral reset).
-    #   - "custom_*" — inline mini-gestures defined in this class.
-    #     Built directly via ALMotion.angleInterpolation so we can ship
-    #     more variety without touching the central gesture table.
-    # Weighted so conversational moves dominate (nod, open_arms, head
-    # tilts) and dramatic/large moves (full-body) appear rarely.
+    # Weighted pool for automatic body language while ElevenLabs speaks.
+    # These are all inline micro-gestures: small amplitude, self-restoring,
+    # and safe to fire often. Full Choregraphe behaviors are intentionally
+    # not used here; they are expressive but too theatrical as background
+    # body language.
     _SPEAKING_GESTURE_POOL = (
-        # Stock — well-tested
-        "nod", "nod", "nod",
-        "open_arms", "open_arms",
-        "point_self", "point_self",
-        "point_listener",
-        "tilt_curious", "tilt_curious",
-        "shake",
-        # Custom — inline mini-gestures (see _run_custom_gesture)
-        "custom_head_tilt_right", "custom_head_tilt_right",
-        "custom_head_tilt_left", "custom_head_tilt_left",
-        "custom_wave_right",
-        "custom_wave_left",
-        "custom_palms_up", "custom_palms_up",
-        "custom_arm_sweep_right",
-        "custom_arm_sweep_left",
-        "custom_shoulder_shrug_quick",
-        "custom_chest_breath",
-        "custom_hand_circle_right",
-        "custom_point_up",
-        "custom_head_bow_slight",
-        "custom_both_hands_forward",
+        "micro_nod", "micro_nod", "micro_nod", "micro_nod",
+        "micro_double_nod", "micro_double_nod",
+        "micro_head_right", "micro_head_left",
+        "micro_head_dip", "micro_head_dip",
+        "micro_glance_up",
+        "micro_hand_beat_right", "micro_hand_beat_right",
+        "micro_hand_beat_left", "micro_hand_beat_left",
+        "micro_two_hand_beat", "micro_two_hand_beat",
+        "micro_palm_open_right", "micro_palm_open_left",
+        "micro_palms_low", "micro_palms_low",
+        "micro_explain_right", "micro_explain_left",
+        "micro_self_reference",
+        "micro_soft_shrug",
+        "micro_breath",
     )
 
     def _kick_stand_up(self):
@@ -1120,8 +1109,8 @@ class NaoWsClient(object):
             pass
 
     def _start_speaking_gestures(self):
-        """Spin a daemon thread that fires a random gesture every ~2.5 s
-        while TTS is active. Idempotent — restarting before stop is a
+        """Spin a daemon thread that fires natural micro-gestures while
+        TTS is active. Idempotent — restarting before stop is a
         no-op (so back-to-back tts_started frames don't spawn N threads).
         """
         if self._speaking_gesture_thread is not None and \
@@ -1152,6 +1141,129 @@ class NaoWsClient(object):
     # NOTE: NAO H25 head is 2-DOF (HeadYaw + HeadPitch only — there is
     # NO HeadRoll). "head tilt" gestures use HeadYaw (turn left/right).
     _CUSTOM_GESTURES = {
+        # Natural conversational micro-gestures. Every sequence returns
+        # its own joints to a relaxed stand pose, so the loop does not need
+        # a hard full-body reset after each beat.
+        "micro_nod": (
+            ["HeadPitch"],
+            [[0.07, 0.0]],
+            [[0.28, 0.56]],
+        ),
+        "micro_double_nod": (
+            ["HeadPitch"],
+            [[0.06, 0.0, 0.05, 0.0]],
+            [[0.22, 0.42, 0.62, 0.86]],
+        ),
+        "micro_head_right": (
+            ["HeadYaw"],
+            [[-0.14, 0.0]],
+            [[0.45, 0.90]],
+        ),
+        "micro_head_left": (
+            ["HeadYaw"],
+            [[0.14, 0.0]],
+            [[0.45, 0.90]],
+        ),
+        "micro_head_dip": (
+            ["HeadPitch"],
+            [[0.10, 0.03, 0.0]],
+            [[0.35, 0.75, 1.05]],
+        ),
+        "micro_glance_up": (
+            ["HeadPitch"],
+            [[-0.07, 0.0]],
+            [[0.35, 0.75]],
+        ),
+        "micro_hand_beat_right": (
+            ["RShoulderPitch", "RShoulderRoll", "RElbowYaw", "RElbowRoll", "RWristYaw"],
+            [[1.18, 1.48],
+             [-0.22, -0.15],
+             [1.12, 1.20],
+             [0.72, 0.50],
+             [0.16, 0.0]],
+            [[0.34, 0.78]] * 5,
+        ),
+        "micro_hand_beat_left": (
+            ["LShoulderPitch", "LShoulderRoll", "LElbowYaw", "LElbowRoll", "LWristYaw"],
+            [[1.18, 1.48],
+             [0.22, 0.15],
+             [-1.12, -1.20],
+             [-0.72, -0.50],
+             [-0.16, 0.0]],
+            [[0.34, 0.78]] * 5,
+        ),
+        "micro_two_hand_beat": (
+            ["LShoulderPitch", "RShoulderPitch",
+             "LElbowRoll", "RElbowRoll"],
+            [[1.22, 1.48], [1.22, 1.48],
+             [-0.72, -0.50], [0.72, 0.50]],
+            [[0.42, 0.92]] * 4,
+        ),
+        "micro_palm_open_right": (
+            ["RShoulderPitch", "RShoulderRoll", "RElbowRoll", "RWristYaw"],
+            [[1.24, 1.48],
+             [-0.28, -0.15],
+             [0.72, 0.50],
+             [0.42, 0.0]],
+            [[0.45, 0.95]] * 4,
+        ),
+        "micro_palm_open_left": (
+            ["LShoulderPitch", "LShoulderRoll", "LElbowRoll", "LWristYaw"],
+            [[1.24, 1.48],
+             [0.28, 0.15],
+             [-0.72, -0.50],
+             [-0.42, 0.0]],
+            [[0.45, 0.95]] * 4,
+        ),
+        "micro_palms_low": (
+            ["LShoulderPitch", "RShoulderPitch",
+             "LElbowRoll", "RElbowRoll",
+             "LWristYaw", "RWristYaw"],
+            [[1.30, 1.50], [1.30, 1.50],
+             [-0.78, -0.50], [0.78, 0.50],
+             [-0.35, 0.0], [0.35, 0.0]],
+            [[0.55, 1.10]] * 6,
+        ),
+        "micro_explain_right": (
+            ["RShoulderPitch", "RShoulderRoll", "RElbowYaw", "RElbowRoll"],
+            [[1.22, 1.05, 1.48],
+             [-0.20, -0.28, -0.15],
+             [1.05, 1.18, 1.20],
+             [0.68, 0.62, 0.50]],
+            [[0.32, 0.64, 1.02]] * 4,
+        ),
+        "micro_explain_left": (
+            ["LShoulderPitch", "LShoulderRoll", "LElbowYaw", "LElbowRoll"],
+            [[1.22, 1.05, 1.48],
+             [0.20, 0.28, 0.15],
+             [-1.05, -1.18, -1.20],
+             [-0.68, -0.62, -0.50]],
+            [[0.32, 0.64, 1.02]] * 4,
+        ),
+        "micro_self_reference": (
+            ["RShoulderPitch", "RShoulderRoll", "RElbowYaw", "RElbowRoll"],
+            [[1.14, 1.48],
+             [-0.10, -0.15],
+             [0.72, 1.20],
+             [1.02, 0.50]],
+            [[0.48, 1.05]] * 4,
+        ),
+        "micro_soft_shrug": (
+            ["LShoulderPitch", "RShoulderPitch",
+             "LShoulderRoll", "RShoulderRoll",
+             "HeadPitch"],
+            [[1.18, 1.50], [1.18, 1.50],
+             [0.22, 0.15], [-0.22, -0.15],
+             [-0.04, 0.0]],
+            [[0.40, 0.88]] * 5,
+        ),
+        "micro_breath": (
+            ["LShoulderPitch", "RShoulderPitch", "HeadPitch"],
+            [[1.34, 1.52, 1.48],
+             [1.34, 1.52, 1.48],
+             [0.04, -0.02, 0.0]],
+            [[0.75, 1.55, 2.10]] * 3,
+        ),
         "custom_head_tilt_right": (
             ["HeadYaw"],
             [[-0.35, 0.0]],
@@ -1271,11 +1383,10 @@ class NaoWsClient(object):
         ),
     }
 
-    # Joints we explicitly reset to neutral between gestures so each
-    # new gesture starts from the same known pose — without this, a
-    # `nod` after a `point_self` looks invisible because the head and
-    # arms haven't returned to neutral. Values are NAOqi standard
-    # "StandInit" angles for these joints (radians).
+    # Relaxed stand angles kept for future/diagnostic settling. The live
+    # speaking loop now uses self-restoring micro-gestures instead of a
+    # full neutral reset after every beat; that avoids the robotic
+    # "gesture, snap back, gesture" look.
     _NEUTRAL_POSE = {
         "HeadYaw":         0.0,
         "HeadPitch":       0.0,
@@ -1294,22 +1405,11 @@ class NaoWsClient(object):
     }
 
     def _speaking_gesture_loop(self):
-        """Loop: pick a random gesture, fire it, reset to neutral, repeat.
+        """Loop: pick a random micro-gesture, play it, pause, repeat.
 
-        Architecture (each iteration):
-            1. Pin upper-body stiffness so motors actually move (NAO
-               drops stiffness on idle joints to save power).
-            2. Run the gesture function directly against ALMotion.
-            3. Wait ~0.8 s for the gesture animation to play out.
-            4. Reset head + arms to neutral so the NEXT gesture starts
-               from a known pose (without this, a 'nod' after a
-               'point_self' looks invisible — the head's already off
-               center and the small nod delta is barely visible).
-            5. Wait ~1.5 s before the next gesture so consecutive
-               moves don't blur into each other.
-
-        Total cadence: ~2.5 s per gesture cycle, same as before, but
-        with deterministic per-gesture reset.
+        The motions are deliberately small and self-restoring. This makes
+        NAO look alive while speaking without doing a full theatrical
+        animation on every sentence.
         """
         try:
             import random as _random
@@ -1338,112 +1438,70 @@ class NaoWsClient(object):
         if motion is None:
             self.log.debug("speak_gesture_no_motion_proxy")
             return
-        try:
-            from utils.nao_execute import _GESTURE_TABLE
-        except Exception as exc:
-            self.log.debug("speak_gesture_table_import_failed",
-                           error=str(exc))
-            return
-
         import sys as _sys
-        # Initial delay so a 1 s reply isn't gestured over.
-        if self._speaking_gesture_stop.wait(timeout=0.6):
+        # Initial delay so a very short reply is not over-gestured.
+        initial_delay = _random.uniform(0.35, 0.75)
+        if self._speaking_gesture_stop.wait(timeout=initial_delay):
             return
         print("[speaking_gesture] loop active (motion=%s)" % (motion is not None,))
         _sys.stderr.flush()
 
-        # Wake actuators + pin stiffness on the upper body once. This is
-        # the load-bearing fix — without stiffness on the head/arm chains,
-        # angleInterpolation calls return immediately but no joint moves.
+        # Wake actuators + keep moderate stiffness on the upper body. Full
+        # stiffness makes small conversational gestures look snappy and
+        # mechanical; 0.85 still moves reliably but looks softer.
         try:
             motion.wakeUp()
         except Exception:
             pass
-        # NAOqi expands chain names internally, so passing a list of
-        # chain names with a same-length list of values fails ("expected
-        # the number of stiffnesses to equal the number of joints"
-        # because Head=2 joints, LArm=6, RArm=6 = 14 joints, not 3
-        # values). Issue per-chain calls so each chain expands to its
-        # own joint set and applies the single value to all of them.
-        for _chain in ("Head", "LArm", "RArm"):
-            try:
-                motion.setStiffnesses(_chain, 1.0)
-            except Exception as exc:
-                self.log.debug("speak_gesture_stiffness_failed",
-                               chain=_chain, error=str(exc))
+
+        def _pin_stiffness():
+            # NAOqi expands chain names internally, so issue per-chain
+            # calls rather than batching Head/LArm/RArm.
+            for _chain in ("Head", "LArm", "RArm"):
+                try:
+                    motion.setStiffnesses(_chain, 0.85)
+                except Exception as exc:
+                    self.log.debug("speak_gesture_stiffness_failed",
+                                   chain=_chain, error=str(exc))
+
+        _pin_stiffness()
         print("[speaking_gesture] stiffness pinned on Head + arms")
         _sys.stderr.flush()
 
-        neutral_names = list(self._NEUTRAL_POSE.keys())
-        neutral_angles = [self._NEUTRAL_POSE[n] for n in neutral_names]
-
         while not self._speaking_gesture_stop.is_set() and \
                 self._tts_active.is_set():
-            # Avoid back-to-back identical picks — feels more natural.
-            for _retry in range(3):
+            _pin_stiffness()
+
+            # Avoid back-to-back identical picks. With a small humanoid,
+            # repetition is what makes otherwise good motions feel fake.
+            for _retry in range(4):
                 intent = _random.choice(self._SPEAKING_GESTURE_POOL)
                 if intent != getattr(self, "_last_gesture_intent", None):
                     break
             self._last_gesture_intent = intent
 
-            # Re-pin stiffness EACH iteration — naoqi can drop it after
-            # ~5 s of inactivity on a chain, and we want every gesture
-            # to actually actuate. Per-chain calls (chain expansion
-            # mismatches the values list when batched).
-            for _chain in ("Head", "LArm", "RArm"):
-                try:
-                    motion.setStiffnesses(_chain, 1.0)
-                except Exception:
-                    pass
-
-            # Dispatch: custom_* gestures use the inline table; everything
-            # else hits the stock _GESTURE_TABLE.
             print("[speaking_gesture] -> {0}".format(intent))
             _sys.stderr.flush()
-            if intent.startswith("custom_"):
-                cg = self._CUSTOM_GESTURES.get(intent)
-                if cg is not None:
-                    names, angles, times = cg
-                    try:
-                        motion.angleInterpolation(names, angles, times, True)
-                    except Exception as exc:
-                        self.log.debug("speak_custom_gesture_failed",
-                                       intent=intent, error=str(exc))
-                else:
-                    self.log.debug("speak_custom_gesture_unknown",
-                                   intent=intent)
-            else:
-                fn = _GESTURE_TABLE.get(intent)
-                if fn is not None:
-                    try:
-                        fn(motion, posture, leds)
-                    except Exception as exc:
-                        self.log.debug("speak_gesture_failed",
-                                       intent=intent, error=str(exc))
-            # Wait for the gesture itself to complete (~0.6-0.8 s for
-            # most). Bail early if stop event fires.
-            if self._speaking_gesture_stop.wait(timeout=0.8):
-                return
-            # Reset head + arms to a known neutral pose so the next
-            # gesture starts from a clean baseline. Use angleInterpolation
-            # over 0.6 s — slow enough to look natural, fast enough to
-            # not stretch the cadence. Skip if shutdown landed during
-            # the previous wait.
-            if self._speaking_gesture_stop.is_set() or \
-                    not self._tts_active.is_set():
-                break
+            cg = self._CUSTOM_GESTURES.get(intent)
+            if cg is None:
+                self.log.debug("speak_custom_gesture_unknown",
+                               intent=intent)
+                if self._speaking_gesture_stop.wait(timeout=0.4):
+                    return
+                continue
+
+            names, angles, times = cg
             try:
-                motion.angleInterpolation(
-                    neutral_names,
-                    [[a] for a in neutral_angles],
-                    [[0.6] for _ in neutral_angles],
-                    True,  # absolute
-                )
+                motion.angleInterpolation(names, angles, times, True)
             except Exception as exc:
-                self.log.debug("speak_gesture_neutral_reset_failed",
-                               error=str(exc))
-            # Brief pause so back-to-back gestures don't blur together.
-            if self._speaking_gesture_stop.wait(timeout=1.1):
+                self.log.debug("speak_custom_gesture_failed",
+                               intent=intent, error=str(exc))
+
+            # Randomized cadence keeps it alive without looking like a
+            # metronome. The gesture itself already blocked for its own
+            # duration, so this is just the gap before the next beat.
+            pause_s = _random.uniform(0.35, 0.95)
+            if self._speaking_gesture_stop.wait(timeout=pause_s):
                 return
 
     def _announcer_stop_all(self):

@@ -40,12 +40,17 @@ _DANCE_BEHAVIORS = {
     "salsa":      "animations/Stand/Waiting/FunnyDancer_1",
     "kungfu":     "animations/Stand/Waiting/KungFu_1",
     "kung-fu":    "animations/Stand/Waiting/KungFu_1",
+    "kung fu":    "animations/Stand/Waiting/KungFu_1",
+    "martial arts": "animations/Stand/Waiting/KungFu_1",
     "headbang":   "animations/Stand/Waiting/Headbang_1",
+    "head bang":  "animations/Stand/Waiting/Headbang_1",
     "metal":      "animations/Stand/Waiting/Headbang_1",
     "guitar":     "animations/Stand/Waiting/AirGuitar_1",
     "airguitar":  "animations/Stand/Waiting/AirGuitar_1",
+    "air guitar": "animations/Stand/Waiting/AirGuitar_1",
     "bandmaster": "animations/Stand/Waiting/Bandmaster_1",
     "conduct":    "animations/Stand/Waiting/Bandmaster_1",
+    "conductor":  "animations/Stand/Waiting/Bandmaster_1",
     "fitness":    "animations/Stand/Waiting/Fitness_1",
     "workout":    "animations/Stand/Waiting/Fitness_2",
     "monster":    "animations/Stand/Waiting/Monster_1",
@@ -204,21 +209,117 @@ _ANIMATION_FALLBACK = "animations/Stand/Waiting/FunnyDancer_1"
 _ANIMATION_MAP = {
     # Animals — no real animal animations on this robot, map to closest
     # emotional/movement equivalent so the LLM doesn't just play FunnyDancer.
-    "elephant":  ["animations/Stand/Waiting/ShowMuscles_1", _ANIMATION_FALLBACK],
-    "monkey":    ["animations/Stand/Emotions/Positive/Mocker_1", _ANIMATION_FALLBACK],
-    "dragon":    ["animations/Stand/Emotions/Negative/Angry_3", _ANIMATION_FALLBACK],
-    "rabbit":    ["animations/Stand/Emotions/Positive/Shy_1", _ANIMATION_FALLBACK],
-    "chicken":   ["animations/Stand/Emotions/Negative/Anxious_1", _ANIMATION_FALLBACK],
-    "donkey":    ["animations/Stand/Emotions/Negative/Disappointed_1", _ANIMATION_FALLBACK],
-    "bear":      ["animations/Stand/Waiting/ShowMuscles_2", _ANIMATION_FALLBACK],
+    "elephant":  ["animations/Stand/Waiting/Waddle_2",
+                  "animations/Stand/Waiting/ShowMuscles_4",
+                  "animations/Stand/Waiting/ShowMuscles_1",
+                  _ANIMATION_FALLBACK],
+    "gorilla":   ["animations/Stand/Waiting/Monster_1",
+                  "animations/Stand/Gestures/Claw_2",
+                  "animations/Stand/Waiting/ShowMuscles_5",
+                  _ANIMATION_FALLBACK],
+    "gorrila":   ["animations/Stand/Waiting/Monster_1",
+                  "animations/Stand/Gestures/Claw_2",
+                  "animations/Stand/Waiting/ShowMuscles_5",
+                  _ANIMATION_FALLBACK],
+    "ape":       ["animations/Stand/Waiting/Monster_1",
+                  "animations/Stand/Waiting/ShowMuscles_5",
+                  _ANIMATION_FALLBACK],
+    "monkey":    ["animations/Stand/Emotions/Positive/Mocker_1",
+                  "animations/Stand/Gestures/CatchFly_1",
+                  "animations/Stand/Waiting/PlayHands_3",
+                  _ANIMATION_FALLBACK],
+    "dragon":    ["animations/Stand/Gestures/Claw_1",
+                  "animations/Stand/Emotions/Negative/Angry_3",
+                  "animations/Stand/Waiting/MysticalPower_1",
+                  _ANIMATION_FALLBACK],
+    "dinosaur":  ["animations/Stand/Waiting/Monster_1",
+                  "animations/Stand/Gestures/Claw_2",
+                  _ANIMATION_FALLBACK],
+    "dino":      ["animations/Stand/Waiting/Monster_1",
+                  "animations/Stand/Gestures/Claw_2",
+                  _ANIMATION_FALLBACK],
+    "lion":      ["animations/Stand/Gestures/Claw_1",
+                  "animations/Stand/Emotions/Negative/Angry_4",
+                  _ANIMATION_FALLBACK],
+    "tiger":     ["animations/Stand/Gestures/Claw_2",
+                  "animations/Stand/Emotions/Negative/Angry_3",
+                  _ANIMATION_FALLBACK],
+    "bear":      ["animations/Stand/Waiting/ShowMuscles_2",
+                  "animations/Stand/Waiting/Monster_1",
+                  _ANIMATION_FALLBACK],
+    "bird":      ["animations/Stand/Gestures/Wings_4",
+                  "animations/Stand/Gestures/Wings_1",
+                  _ANIMATION_FALLBACK],
+    "eagle":     ["animations/Stand/Gestures/Wings_5",
+                  "animations/Stand/Gestures/Wings_3",
+                  _ANIMATION_FALLBACK],
+    "chicken":   ["animations/Stand/Waiting/Waddle_1",
+                  "animations/Stand/Gestures/Wings_2",
+                  "animations/Stand/Emotions/Negative/Anxious_1",
+                  _ANIMATION_FALLBACK],
+    "penguin":   ["animations/Stand/Waiting/Waddle_2",
+                  "animations/Stand/Waiting/Waddle_1",
+                  _ANIMATION_FALLBACK],
+    "duck":      ["animations/Stand/Waiting/Waddle_1",
+                  "animations/Stand/Gestures/Wings_1",
+                  _ANIMATION_FALLBACK],
+    "rabbit":    ["animations/Stand/Emotions/Positive/Shy_1",
+                  "animations/Stand/Waiting/HideHands_1",
+                  _ANIMATION_FALLBACK],
+    "bunny":     ["animations/Stand/Emotions/Positive/Shy_1",
+                  "animations/Stand/Waiting/HideHands_1",
+                  _ANIMATION_FALLBACK],
+    "cat":       ["animations/Stand/Gestures/Caress_1",
+                  "animations/Stand/Waiting/Stretch_3",
+                  _ANIMATION_FALLBACK],
+    "dog":       ["animations/Stand/Gestures/ComeOn_1",
+                  "animations/Stand/Emotions/Positive/Happy_4",
+                  _ANIMATION_FALLBACK],
+    "puppy":     ["animations/Stand/Gestures/ComeOn_1",
+                  "animations/Stand/Emotions/Positive/Happy_4",
+                  _ANIMATION_FALLBACK],
+    "horse":     ["animations/Stand/Waiting/Taxi_1",
+                  "animations/Stand/Waiting/Waddle_2",
+                  _ANIMATION_FALLBACK],
+    "donkey":    ["animations/Stand/Emotions/Negative/Disappointed_1",
+                  "animations/Stand/Waiting/Waddle_2",
+                  _ANIMATION_FALLBACK],
+    "snake":     ["animations/Stand/Waiting/MysticalPower_1",
+                  "animations/Stand/Gestures/Hide_1",
+                  _ANIMATION_FALLBACK],
+    "spider":    ["animations/Stand/Gestures/Claw_2",
+                  "animations/Stand/Gestures/Claw_1",
+                  _ANIMATION_FALLBACK],
+    "shark":     ["animations/Stand/Gestures/Far_1",
+                  "animations/Stand/Gestures/Claw_1",
+                  _ANIMATION_FALLBACK],
+    "frog":      ["animations/Stand/Emotions/Positive/Excited_2",
+                  "animations/Stand/Waiting/Fitness_3",
+                  _ANIMATION_FALLBACK],
     # Dances — taichi & follow-me are real installed packs.
     "taichi":    ["taichi-dance-free", _ANIMATION_FALLBACK],
     "tai-chi":   ["taichi-dance-free", _ANIMATION_FALLBACK],
     "kungfu":    ["animations/Stand/Waiting/KungFu_1", "taichi-dance-free", _ANIMATION_FALLBACK],
     "kung-fu":   ["animations/Stand/Waiting/KungFu_1", "taichi-dance-free", _ANIMATION_FALLBACK],
+    "kung_fu":   ["animations/Stand/Waiting/KungFu_1", "taichi-dance-free", _ANIMATION_FALLBACK],
+    "martial_arts": ["animations/Stand/Waiting/KungFu_1", "taichi-dance-free", _ANIMATION_FALLBACK],
     "robot":     ["animations/Stand/Waiting/Robot_1", _ANIMATION_FALLBACK],
     "slide":     ["animations/Stand/Waiting/FunnySlide_1", _ANIMATION_FALLBACK],
     "funny":     [_ANIMATION_FALLBACK],
+    "air_guitar": ["animations/Stand/Waiting/AirGuitar_1", _ANIMATION_FALLBACK],
+    "airguitar": ["animations/Stand/Waiting/AirGuitar_1", _ANIMATION_FALLBACK],
+    "guitar":    ["animations/Stand/Waiting/AirGuitar_1", _ANIMATION_FALLBACK],
+    "headbang":  ["animations/Stand/Waiting/Headbang_1", _ANIMATION_FALLBACK],
+    "head_bang": ["animations/Stand/Waiting/Headbang_1", _ANIMATION_FALLBACK],
+    "bandmaster": ["animations/Stand/Waiting/Bandmaster_1", _ANIMATION_FALLBACK],
+    "conductor": ["animations/Stand/Waiting/Bandmaster_1", _ANIMATION_FALLBACK],
+    "fitness":   ["animations/Stand/Waiting/Fitness_1",
+                  "animations/Stand/Waiting/Fitness_2",
+                  "animations/Stand/Waiting/Fitness_3",
+                  _ANIMATION_FALLBACK],
+    "workout":   ["animations/Stand/Waiting/Fitness_2",
+                  "animations/Stand/Waiting/Fitness_1",
+                  _ANIMATION_FALLBACK],
     # Positive emotions
     "happy":     ["animations/Stand/Emotions/Positive/Happy_4",
                   "animations/Stand/Emotions/Positive/Happy_1"],
@@ -261,6 +362,11 @@ _ANIMATION_MAP = {
     "show_muscle": ["animations/Stand/Waiting/ShowMuscles_1",
                     "animations/Stand/Waiting/ShowMuscles_2",
                     "animations/Stand/Emotions/Positive/Winner_1"],
+    "muscles":     ["animations/Stand/Waiting/ShowMuscles_5",
+                    "animations/Stand/Waiting/ShowMuscles_3",
+                    "animations/Stand/Waiting/ShowMuscles_1"],
+    "flex":        ["animations/Stand/Waiting/ShowMuscles_5",
+                    "animations/Stand/Waiting/ShowMuscles_2"],
     "bow":         ["animations/Stand/Gestures/BowShort_1"],
     "look_around": ["animations/Sit/Waiting/LookHand_1",
                     "animations/Sit/Waiting/LookHand_2"],
@@ -276,6 +382,43 @@ _ANIMATION_MAP = {
                   "animations/Sit/Emotions/Neutral/Sneeze_1"],
     "ask":       ["animations/Stand/Emotions/Neutral/AskForAttention_1",
                   "animations/Stand/Emotions/Neutral/AskForAttention_2"],
+    # Big set pieces from the installed Stand/Waiting pack.
+    "air_juggle": ["animations/Stand/Waiting/AirJuggle_1", _ANIMATION_FALLBACK],
+    "juggle":     ["animations/Stand/Waiting/AirJuggle_1", _ANIMATION_FALLBACK],
+    "back_rub":   ["animations/Stand/Waiting/BackRubs_1", _ANIMATION_FALLBACK],
+    "backrub":    ["animations/Stand/Waiting/BackRubs_1", _ANIMATION_FALLBACK],
+    "binoculars": ["animations/Stand/Waiting/Binoculars_1", _ANIMATION_FALLBACK],
+    "drive_car":  ["animations/Stand/Waiting/DriveCar_1", _ANIMATION_FALLBACK],
+    "car":        ["animations/Stand/Waiting/DriveCar_1", _ANIMATION_FALLBACK],
+    "helicopter": ["animations/Stand/Waiting/Helicopter_1", _ANIMATION_FALLBACK],
+    "hide_eyes":  ["animations/Stand/Waiting/HideEyes_1", _ANIMATION_FALLBACK],
+    "hide_hands": ["animations/Stand/Waiting/HideHands_1", _ANIMATION_FALLBACK],
+    "knight":     ["animations/Stand/Waiting/Knight_1", _ANIMATION_FALLBACK],
+    "love_you":   ["animations/Stand/Waiting/LoveYou_1", _ANIMATION_FALLBACK],
+    "monster":    ["animations/Stand/Waiting/Monster_1", _ANIMATION_FALLBACK],
+    "magic":      ["animations/Stand/Waiting/MysticalPower_1", _ANIMATION_FALLBACK],
+    "mystic":     ["animations/Stand/Waiting/MysticalPower_1", _ANIMATION_FALLBACK],
+    "wizard":     ["animations/Stand/Waiting/MysticalPower_1", _ANIMATION_FALLBACK],
+    "space":      ["animations/Stand/Waiting/SpaceShuttle_1", _ANIMATION_FALLBACK],
+    "spaceship":  ["animations/Stand/Waiting/SpaceShuttle_1", _ANIMATION_FALLBACK],
+    "space_shuttle": ["animations/Stand/Waiting/SpaceShuttle_1", _ANIMATION_FALLBACK],
+    "rocket":     ["animations/Stand/Waiting/SpaceShuttle_1", _ANIMATION_FALLBACK],
+    "take_picture": ["animations/Stand/Waiting/TakePicture_1", _ANIMATION_FALLBACK],
+    "camera_pose": ["animations/Stand/Waiting/TakePicture_1", _ANIMATION_FALLBACK],
+    "taxi":       ["animations/Stand/Waiting/Taxi_1", _ANIMATION_FALLBACK],
+    "vacuum":     ["animations/Stand/Waiting/Vacuum_1", _ANIMATION_FALLBACK],
+    "waddle":     ["animations/Stand/Waiting/Waddle_1",
+                   "animations/Stand/Waiting/Waddle_2",
+                   _ANIMATION_FALLBACK],
+    "wake_up":    ["animations/Stand/Waiting/WakeUp_1", _ANIMATION_FALLBACK],
+    "zombie":     ["animations/Stand/Waiting/Zombie_1", _ANIMATION_FALLBACK],
+    "claw":       ["animations/Stand/Gestures/Claw_2",
+                   "animations/Stand/Gestures/Claw_1",
+                   _ANIMATION_FALLBACK],
+    "wings":      ["animations/Stand/Gestures/Wings_4",
+                   "animations/Stand/Gestures/Wings_1",
+                   _ANIMATION_FALLBACK],
+    "shoot":      ["animations/Stand/Gestures/Shoot_1", _ANIMATION_FALLBACK],
 }
 
 
@@ -402,30 +545,35 @@ def _gesture_shake(motion, posture, leds, sound_localize=None):
 
 
 def _gesture_lean_in(motion, posture, leds, sound_localize=None):
-    """Torso forward ~5 degrees, ~1.2 s ramp.
+    """Subtle attentive lean-in cue using valid H25 joints.
 
-    Spec: do NOT auto-restore — the body stays leaned-in for the duration of
-    the reply. The matching ``lean_back`` (or a future ``lean_neutral`` /
-    end-of-turn signal) restores it. We use ``setAngles`` rather than
-    ``angleInterpolation`` so this call returns immediately and the agent
-    can keep talking while the robot ramps the hip.
+    NAO H25 does not expose a single central ``HipPitch`` joint in this
+    environment, so the fallback reads as a small head dip plus shoulder
+    softening instead of a torso pitch.
     """
     if motion is None:
-        _log("gesture[lean_in] motion=None; would set HipPitch=0.08 over ~1.2 s")
+        _log("gesture[lean_in] motion=None; would set HeadPitch + shoulders")
         return False
-    # fractionMaxSpeed ~ 0.07 yields ~1.2 s for the 0.08 rad excursion on a
-    # NAO H25. Tune in robot trials.
-    return _safe_set_angles(motion, ["HipPitch"], [0.08], 0.07, "lean_in")
+    return _safe_set_angles(
+        motion,
+        ["HeadPitch", "LShoulderPitch", "RShoulderPitch"],
+        [0.06, 1.42, 1.42],
+        0.08,
+        "lean_in",
+    )
 
 
 def _gesture_lean_back(motion, posture, leds, sound_localize=None):
-    """Torso back ~3 degrees, 800 ms. Uses angleInterpolation so the
-    motion completes and returns to the LLM-controlled pose."""
+    """Small give-space cue, then return to relaxed head/shoulders."""
     return _safe_interpolate(
         motion,
-        ["HipPitch"],
-        [[-0.05, 0.0]],
-        [[0.50, 0.80]],
+        ["HeadPitch", "LShoulderPitch", "RShoulderPitch"],
+        [[-0.05, 0.0],
+         [1.55, 1.50],
+         [1.55, 1.50]],
+        [[0.45, 0.90],
+         [0.45, 0.90],
+         [0.45, 0.90]],
         "lean_back",
     )
 
@@ -550,12 +698,14 @@ def _gesture_shrug(motion, posture, leds, sound_localize=None):
 
 
 def _gesture_tilt_curious(motion, posture, leds, sound_localize=None):
-    """Head roll +0.21 rad (~12 deg) for a "huh?" tilt. ~500 ms."""
+    """Curious head cue using HeadYaw/HeadPitch; H25 has no HeadRoll."""
     return _safe_interpolate(
         motion,
-        ["HeadRoll"],
-        [[0.21, 0.21, 0.0]],
-        [[0.20, 0.40, 0.50]],
+        ["HeadYaw", "HeadPitch"],
+        [[0.16, 0.16, 0.0],
+         [-0.04, -0.02, 0.0]],
+        [[0.25, 0.55, 0.85],
+         [0.25, 0.55, 0.85]],
         "tilt_curious",
     )
 
@@ -564,14 +714,14 @@ def _gesture_breath_deep(motion, posture, leds, sound_localize=None):
     """Slow chest-pitch breathing cycle. ~3 s.
 
     NAO doesn't expose a ``ChestPitch`` joint, so we simulate the breath by
-    rocking the hips slightly back-and-forward + raising/lowering the
-    shoulders together. Symmetric, slow, low-amplitude — no abrupt moves.
+    raising/lowering the shoulders together with a tiny head movement.
+    Symmetric, slow, low-amplitude — no abrupt moves.
     """
     return _safe_interpolate(
         motion,
-        ["HipPitch", "LShoulderPitch", "RShoulderPitch"],
+        ["HeadPitch", "LShoulderPitch", "RShoulderPitch"],
         [
-            [-0.04, 0.04, 0.0],    # inhale tilt back, exhale forward, settle
+            [0.03, -0.02, 0.0],
             [1.35, 1.55, 1.45],
             [1.35, 1.55, 1.45],
         ],

@@ -109,7 +109,7 @@ def run(
             return fallback
         return getattr(res, "final_output", fallback)
 
-    draft_t = _reply_from(res_t, "I hear you. Say a bit more?")
+    draft_t = _reply_from(res_t, "Say a bit more?")
     draft_c = _reply_from(res_c, "What thought went through your mind just then?")
     draft_g = _reply_from(res_g, "Let's take one slow breath together first.")
 

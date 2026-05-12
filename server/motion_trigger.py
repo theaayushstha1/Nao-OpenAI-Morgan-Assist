@@ -137,6 +137,8 @@ _TRIGGERS: list[tuple[str, dict, str, list[str]]] = [
     ("set_voice_profile", {"profile": "neutral"}, "Switching to neutral voice.", [
         "use the neutral voice", "use neutral voice", "neutral voice",
         "switch to neutral voice", "switch to the neutral voice",
+        # Deepgram has misheard "neutral voice" as "bureau voice".
+        "bureau voice", "switch to the bureau voice", "use the bureau voice",
         "use voice three", "voice three", "voice 3", "third voice",
     ]),
     ("set_voice_profile", {"profile": "my"}, "Switching to your voice.", [
@@ -180,6 +182,83 @@ for action, args, ack, phrases in _TRIGGERS:
 _FOLLOW_SOCIAL_RE = re.compile(r"\bfollow\s+me\s+on\b", re.IGNORECASE)
 
 
+# Animation names NAO can map to installed Choregraphe behaviors. These are
+# deliberately behind an action verb ("do", "act like", "pretend to be",
+# etc.) so "I saw an elephant" remains normal conversation while "do an
+# elephant" becomes an immediate robot action.
+_ANIMATION_ALIASES: dict[str, tuple[str, ...]] = {
+    "elephant": ("elephant",),
+    "gorilla": ("gorilla", "gorrila", "ape"),
+    "monkey": ("monkey",),
+    "dragon": ("dragon",),
+    "dinosaur": ("dinosaur", "dino"),
+    "lion": ("lion",),
+    "tiger": ("tiger",),
+    "bear": ("bear",),
+    "bird": ("bird",),
+    "eagle": ("eagle",),
+    "chicken": ("chicken",),
+    "penguin": ("penguin",),
+    "duck": ("duck",),
+    "rabbit": ("rabbit", "bunny"),
+    "cat": ("cat",),
+    "dog": ("dog", "puppy"),
+    "horse": ("horse",),
+    "snake": ("snake",),
+    "spider": ("spider",),
+    "shark": ("shark",),
+    "frog": ("frog",),
+    "kungfu": ("kung fu", "kung-fu", "kungfu", "martial arts"),
+    "air_guitar": ("air guitar", "air-guitar", "airguitar", "guitar"),
+    "headbang": ("headbang", "head bang", "head-bang"),
+    "bandmaster": ("bandmaster", "conductor", "conducting"),
+    "fitness": ("fitness", "workout", "exercise"),
+    "air_juggle": ("air juggle", "juggle", "juggling"),
+    "binoculars": ("binoculars",),
+    "drive_car": ("drive car", "driving", "car"),
+    "helicopter": ("helicopter",),
+    "knight": ("knight",),
+    "monster": ("monster",),
+    "magic": ("magic", "mystic", "wizard"),
+    "spaceship": ("spaceship", "space shuttle", "rocket"),
+    "take_picture": ("take picture", "camera pose"),
+    "taxi": ("taxi",),
+    "vacuum": ("vacuum",),
+    "waddle": ("waddle",),
+    "zombie": ("zombie",),
+    "claw": ("claw", "claws"),
+    "wings": ("wings", "flap your wings"),
+    "love_you": ("love you", "heart"),
+}
+
+_ANIMATION_PATTERNS: list[tuple[re.Pattern, str, str]] = []
+for _animation, _aliases in _ANIMATION_ALIASES.items():
+    for _alias in sorted(_aliases, key=len, reverse=True):
+        _a = re.escape(_alias).replace(r"\ ", r"\s+")
+        _ANIMATION_PATTERNS.extend([
+            (
+                re.compile(
+                    r"\b(?:can\s+you\s+|could\s+you\s+|please\s+)?"
+                    r"(?:do|perform|play|run|show\s+me|show\s+us)\s+"
+                    r"(?:a|an|the)?\s*" + _a + r"\b",
+                    re.IGNORECASE,
+                ),
+                _animation,
+                _alias,
+            ),
+            (
+                re.compile(
+                    r"\b(?:can\s+you\s+|could\s+you\s+|please\s+)?"
+                    r"(?:act\s+like|pretend\s+to\s+be|pretend\s+you're|be)\s+"
+                    r"(?:a|an|the)?\s*" + _a + r"\b",
+                    re.IGNORECASE,
+                ),
+                _animation,
+                _alias,
+            ),
+        ])
+
+
 @dataclass
 class MotionMatch:
     action: str
@@ -190,8 +269,12 @@ class MotionMatch:
 # ---------------------------------------------------------------------------
 # Face-learn fast-path with name extraction.
 # ---------------------------------------------------------------------------
-# Catches high-confidence "remember me as X" / "my name is X" / "call me X"
-# patterns *before* the LLM routes the turn. Without this the router
+# Catches high-confidence "remember me as X" / "save my face as X"
+# patterns *before* the LLM routes the turn. Plain "my name is X" is
+# handled only while the server is explicitly asking for a name; otherwise
+# it pollutes the face DB when a recognized user casually reintroduces
+# themselves.
+# Without this the router
 # (default agent on bare-wake) sends "remember me as Aayush" to the
 # chatbot agent, which replies with the Morgan State greeting instead of
 # learning the face.
@@ -226,11 +309,6 @@ _LEARN_FACE_PATTERNS: tuple[tuple[re.Pattern, str], ...] = tuple(
          "Learning your face as {name}."),
         (r"\bremember\s+(?:that\s+)?my\s+name\s+is\s+([a-z][a-z'\-]+)\b",
          "Remembering you as {name}."),
-        # Strong context: "name is X" + verbs around face/remembering.
-        (r"\bmy\s+name\s+is\s+([a-z][a-z'\-]+)\b",
-         "Nice to meet you, {name}."),
-        (r"\bcall\s+me\s+([a-z][a-z'\-]+)\b",
-         "Got it, {name}."),
     )
 )
 
@@ -289,6 +367,20 @@ def detect_name_answer(transcript: str) -> MotionMatch | None:
     )
 
 
+def _detect_animation_request(transcript: str) -> MotionMatch | None:
+    """Catch explicit requests for a named installed/aliased animation."""
+    for pattern, animation, alias in _ANIMATION_PATTERNS:
+        if not pattern.search(transcript):
+            continue
+        pretty = alias.replace("_", " ")
+        return MotionMatch(
+            action="play_animation",
+            args={"animation": animation},
+            ack="Doing {0}.".format(pretty),
+        )
+    return None
+
+
 def detect(transcript: str) -> MotionMatch | None:
     """Return MotionMatch if `transcript` clearly requests a NAO body action.
 
@@ -298,7 +390,9 @@ def detect(transcript: str) -> MotionMatch | None:
       1. Face-learn fast-path (regex with name capture). Saves an LLM
          hop on the very common "remember me as X" turn and avoids the
          router sending it to chatbot/Morgan by mistake.
-      2. Static-phrase trigger table (`_COMPILED`). Posture, gestures,
+      2. Named animation fast-path for phrases like "do a gorilla" or
+         "act like an elephant".
+      3. Static-phrase trigger table (`_COMPILED`). Posture, gestures,
          dances, follow-me, voice picker, etc.
     """
     if not transcript:
@@ -314,6 +408,10 @@ def detect(transcript: str) -> MotionMatch | None:
 
     if _FOLLOW_SOCIAL_RE.search(t):
         return None
+
+    anim = _detect_animation_request(t)
+    if anim is not None:
+        return anim
 
     # 2. Static phrases.
     for pattern, action, args, ack in _COMPILED:

@@ -225,10 +225,10 @@ flowchart TB
     classDef issue fill:#b71c1c,stroke:#7f0000,color:#fff
     classDef fix fill:#1565c0,stroke:#0d47a1,color:#fff
 
-    NV[Hearing NAO native kid voice]:::issue --> NVfix[verify .bash_profile autostart<br/>still disabled · check setVolume(1.0)<br/>did not slip back in]:::fix
-    NL[No reply for >10 seconds<br/>after speaking clearly]:::issue --> NLfix[mic stalled · launcher.log will show<br/>'mic stalled too long' followed by<br/>'recorder restarted after stall']:::fix
-    MG[Morgan greeting on bare wake]:::issue --> MGfix[server out of sync · pull main on Pi<br/>and restart nao-server]:::fix
-    NM[No memory callback on return]:::issue --> NMfix[face DB empty or face_id mismatch<br/>· run forgetPerson if duplicate, relearn]:::fix
+    NV["Hearing NAO native kid voice"]:::issue --> NVfix["verify bash_profile autostart still disabled<br/>check setVolume back to zero<br/>did not slip back in"]:::fix
+    NL["No reply for 10+ seconds after speaking clearly"]:::issue --> NLfix["mic stalled<br/>launcher.log will show mic stalled too long<br/>followed by recorder restarted after stall"]:::fix
+    MG["Morgan greeting on bare wake"]:::issue --> MGfix["server out of sync<br/>pull main on Pi and restart nao-server"]:::fix
+    NM["No memory callback on return"]:::issue --> NMfix["face DB empty or face_id mismatch<br/>run forgetPerson if duplicate, relearn"]:::fix
 ```
 
 | Symptom                                        | Quick fix                                                                                          |

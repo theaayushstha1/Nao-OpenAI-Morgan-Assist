@@ -1222,6 +1222,26 @@ async def _emit_crisis(ws: WebSocket, sess: _Session, transcript: str,
 
 # ───────── motion-trigger short-circuit ─────────
 
+def _persist_voice_profile(sess: _Session, profile: str) -> None:
+    """Persist a voice-profile change for this session's user."""
+    from server import session as _ses
+
+    clean = (profile or "").strip().lower()
+    if clean not in {"girl", "man", "neutral", "my"}:
+        logger.warning(
+            "voice_profile_invalid",
+            user=sess.username, session_id=sess.session_id,
+            voice_profile=clean,
+        )
+        return
+    _ses.set_voice_profile(sess.username, clean)
+    logger.info(
+        "voice_profile_set",
+        user=sess.username, session_id=sess.session_id,
+        voice_profile=clean,
+    )
+
+
 async def _emit_motion(ws: WebSocket, sess: _Session, transcript: str,
                        motion: motion_trigger.MotionMatch,
                        phase_ms: dict[str, float]) -> None:
@@ -1239,14 +1259,8 @@ async def _emit_motion(ws: WebSocket, sess: _Session, transcript: str,
     # the canonical "Switching to X voice." reply.
     if motion.action == "set_voice_profile":
         try:
-            from server import session as _ses
             profile = (motion.args or {}).get("profile") or ""
-            _ses.set_voice_profile(sess.username, profile)
-            logger.info(
-                "voice_profile_set",
-                user=sess.username, session_id=sess.session_id,
-                voice_profile=profile,
-            )
+            _persist_voice_profile(sess, profile)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "voice_profile_set_error",
@@ -1280,6 +1294,67 @@ async def _emit_motion(ws: WebSocket, sess: _Session, transcript: str,
 
 
 _ONBOARDING_NAME_PROMPT = "Hi, I'm NAO. What should I call you?"
+
+
+async def _emit_returning_identity_greeting(
+    ws: WebSocket,
+    sess: _Session,
+    display_name: str,
+    *,
+    reason: str,
+) -> None:
+    """Say a deterministic welcome when robot-side face recognition succeeds."""
+    name = (display_name or "").strip()
+    if not name:
+        return
+
+    recap_line = await asyncio.to_thread(_last_recap_line, sess.username)
+    text = _build_returning_greeting(name, recap_line)
+    phase_ms: dict[str, float] = {}
+    with _phase("returning_identity_greeting_synth", phase_ms):
+        try:
+            mp3 = await asyncio.to_thread(_synth_for, sess.username, text)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "returning_identity_greeting_tts_failed",
+                user=sess.username,
+                session_id=sess.session_id,
+                face_name=name,
+                error=repr(exc),
+            )
+            mp3 = b""
+
+    try:
+        _reset_reply_chunks(sess.username, text)
+    except Exception:
+        pass
+
+    if mp3:
+        await _send_json(
+            ws,
+            _audio_chunk_frame(sess.next_seq(), text, mp3),
+        )
+        try:
+            legacy.LAST_REPLY[sess.username] = text
+        except Exception:
+            pass
+        _arm_post_tts_cooldown(sess)
+        await _send_json(ws, _control_frame(
+            "tts_ended", sentences=1, returning_user=True,
+        ))
+    else:
+        await _send_json(ws, _control_frame(
+            "tts_chunk_skipped", text=text, returning_user=True,
+        ))
+
+    logger.info(
+        "returning_identity_greeting",
+        user=sess.username,
+        session_id=sess.session_id,
+        face_name=name,
+        reason=reason,
+        phase_ms=phase_ms,
+    )
 
 
 async def _emit_onboarding_name_prompt(
@@ -1727,6 +1802,18 @@ async def _emit_agent_turn(ws: WebSocket, sess: _Session,
             if not name:
                 continue
             args = action.get("args") if isinstance(action, dict) else None
+            if name == "set_voice_profile":
+                try:
+                    _persist_voice_profile(
+                        sess,
+                        (args or {}).get("profile") if isinstance(args, dict) else "",
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "voice_profile_set_error",
+                        user=sess.username, error=repr(exc),
+                    )
+                continue
             await _send_json(ws, _action_frame(name, args or {}))
 
     # Arm the post-TTS cooldown right before signalling tts_ended. Frames
@@ -2312,6 +2399,14 @@ async def _handle_wake_event(ws: WebSocket, sess: _Session,
                 "tts_ended", sentences=1,
             ))
             outcome = "greeted_returning"
+            _IDENTIFIED_USERS[sess.session_id] = {
+                "name": display_name,
+                "recognized": True,
+                "face_visible": bool(face_id),
+                "ts": time.time(),
+                "greeted": True,
+                "prompted": False,
+            }
         else:
             # New user (or unrecognised face). Per the brief, defer the
             # greeting to the Phase 8 onboarding flow — just signal that
@@ -2682,7 +2777,9 @@ async def _ingest_control(ws: WebSocket, sess: _Session,
         greeted = bool(prev_identity.get("greeted", False))
         if recognized and face_name:
             prompted = False
-            greeted = False
+        should_greet_returning = bool(
+            recognized and face_name and not greeted
+        )
         # Store on session — tolerated even though _Session uses __slots__
         # because we go through a module-level dict (same trick the
         # mic_trace counters use).
@@ -2709,6 +2806,14 @@ async def _ingest_control(ws: WebSocket, sess: _Session,
             recognized=recognized,
             face_visible=face_visible,
         )
+        if should_greet_returning:
+            _IDENTIFIED_USERS[sess.session_id]["greeted"] = True
+            await _emit_returning_identity_greeting(
+                ws,
+                sess,
+                face_name,
+                reason=str(data.get("source") or "recognized_face"),
+            )
         if face_visible and not recognized and not face_name and not prompted:
             _IDENTIFIED_USERS[sess.session_id]["prompted"] = True
             _IDENTIFIED_USERS[sess.session_id]["greeted"] = True

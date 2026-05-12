@@ -110,6 +110,10 @@ QUEUE_MAXSIZE = 200
 FRAGMENT_MS = 250
 FRAGMENT_DIR = "/home/nao/recordings/_stream"
 FRAGMENT_CHANNELS_MASK = (0, 0, 1, 0)   # front mic mono
+FRAGMENT_HEADER_WAIT_S = 1.20
+FRAGMENT_STALL_RESTART_S = 2.0
+FRAGMENT_ZERO_PCM_RESTART_S = 6.0
+FRAGMENT_ZERO_PCM_LOG_S = 1.0
 
 # ALAudioDevice channel index constants (Aldebaran docs).
 AL_CHANNEL_ALL = 0
@@ -560,6 +564,102 @@ class NaoAudioStreamer(ALModule):
         self._fragment_thread.daemon = True
         self._fragment_thread.start()
 
+    def _parse_stream_wav_header(self, path):
+        """Return WAV stream metadata once the recorder header is usable."""
+        try:
+            with open(path, "rb") as fh:
+                hdr = fh.read(512)
+        except Exception as exc:
+            return None, "read_failed:{0}".format(exc)
+
+        if len(hdr) < 44:
+            return None, "too_small:{0}".format(len(hdr))
+        if hdr[:4] != b"RIFF" or hdr[8:12] != b"WAVE":
+            return None, "bad_magic"
+
+        try:
+            import struct as _struct
+            pos = 12
+            nchan = None
+            width = None
+            data_offset = None
+            while pos + 8 <= len(hdr):
+                chunk_id = hdr[pos:pos + 4]
+                chunk_size = _struct.unpack("<I", hdr[pos + 4:pos + 8])[0]
+                body = pos + 8
+
+                if chunk_id == b"fmt ":
+                    if body + 16 > len(hdr):
+                        return None, "fmt_incomplete"
+                    fmt = _struct.unpack("<HHIIHH", hdr[body:body + 16])
+                    nchan = int(fmt[1])
+                    bits_per_sample = int(fmt[5])
+                    width = max(1, bits_per_sample // 8)
+                elif chunk_id == b"data":
+                    data_offset = body
+                    break
+
+                pos = body + chunk_size + (chunk_size & 1)
+        except Exception as exc:
+            return None, "parse_failed:{0}".format(exc)
+
+        if nchan is None:
+            return None, "missing_fmt"
+        if data_offset is None:
+            return None, "missing_data"
+        if width != SAMPLE_WIDTH:
+            return None, "bad_sample_width:{0}".format(width)
+        return {
+            "nchan": nchan,
+            "width": width,
+            "header_size": data_offset,
+        }, None
+
+    def _wait_for_stream_wav_header(self, path, timeout_s=FRAGMENT_HEADER_WAIT_S):
+        """Wait briefly for ALAudioRecorder to finish writing a valid header."""
+        deadline = time.time() + timeout_s
+        last_error = None
+        while (time.time() < deadline and
+               not self._fragment_stop.is_set()):
+            parsed, last_error = self._parse_stream_wav_header(path)
+            if parsed is not None:
+                return parsed, None
+            time.sleep(0.05)
+        return None, last_error or "timeout"
+
+    def _restart_fragment_recording(self, path, reason):
+        """Stop/start the continuous recorder and return fresh WAV metadata."""
+        print("[audio_module] restarting recorder reason={0}".format(reason))
+        sys.stderr.flush()
+        try:
+            self._recorder.stopMicrophonesRecording()
+        except Exception as exc:
+            print("[audio_module] stopMicrophonesRecording on restart: {0}".format(exc))
+            sys.stderr.flush()
+        try:
+            if os.path.exists(path):
+                os.unlink(path)
+        except Exception:
+            pass
+        self._tail = b""
+        try:
+            self._recorder.startMicrophonesRecording(
+                path, "wav", SAMPLE_RATE_HZ, FRAGMENT_CHANNELS_MASK,
+            )
+            print("[audio_module] recorder restarted reason={0}".format(reason))
+            sys.stderr.flush()
+        except Exception as exc:
+            print("[audio_module] startMicrophonesRecording on restart: {0}".format(exc))
+            sys.stderr.flush()
+            return None
+
+        parsed, err = self._wait_for_stream_wav_header(path)
+        if parsed is None:
+            print("[audio_module] recorder restart produced invalid WAV header reason={0} err={1}".format(
+                reason, err))
+            sys.stderr.flush()
+        return parsed
+
     def _stop_fragment_recorder(self):
         self._fragment_stop.set()
         try:
@@ -610,26 +710,33 @@ class NaoAudioStreamer(ALModule):
             return
 
         # Wait for ALAudioRecorder to spin up + write the WAV header.
-        time.sleep(0.30)
+        header, header_err = self._wait_for_stream_wav_header(big_path)
+        if header is None:
+            print("[audio_module] invalid WAV header after start err={0}".format(
+                header_err))
+            sys.stderr.flush()
+            header = self._restart_fragment_recording(big_path, "bad_header_initial")
+            if header is None:
+                return
 
         # Read the WAV header once so we know nchan / width before tailing.
-        nchan = 1
-        width = 2
-        header_size = 44  # standard PCM WAV header
-        try:
-            with open(big_path, "rb") as fh:
-                hdr = fh.read(64)
-            # Parse 'fmt ' chunk: nchan at offset 22, sample width (bytes/sample) at 32
-            if len(hdr) >= 36 and hdr[:4] == b"RIFF" and hdr[8:12] == b"WAVE":
-                import struct as _struct
-                nchan = _struct.unpack("<H", hdr[22:24])[0]
-                bits_per_sample = _struct.unpack("<H", hdr[34:36])[0]
-                width = max(1, bits_per_sample // 8)
-                print("[audio_module] WAV header: nchan={0} width={1}".format(nchan, width))
-                sys.stderr.flush()
-        except Exception as exc:
-            print("[audio_module] WAV header parse failed: {0}".format(exc))
-            sys.stderr.flush()
+        nchan = header["nchan"]
+        width = header["width"]
+        header_size = header["header_size"]
+        print("[audio_module] WAV header: nchan={0} width={1} data_offset={2}".format(
+            nchan, width, header_size))
+        sys.stderr.flush()
+
+        # start() flips _streaming immediately after spawning this worker.
+        # If the recorder writes its header very quickly, avoid exiting the
+        # loop before that flag is visible.
+        stream_wait_deadline = time.time() + 2.0
+        while (not self._streaming and
+               not self._fragment_stop.is_set() and
+               time.time() < stream_wait_deadline):
+            time.sleep(0.01)
+        if not self._streaming:
+            return
 
         sample_stride = nchan * width
         front_idx = AL_CHANNEL_FRONT - 1  # 0-based
@@ -640,10 +747,11 @@ class NaoAudioStreamer(ALModule):
         first_pcm_logged = False
         last_size_check = time.time()
         stall_started_at = None  # wall-clock when stall first detected
+        zero_pcm_started_at = None
+        zero_pcm_last_log = 0.0
         # Tighter than 5s so a user speaking through a stall only loses
         # ~2s of audio instead of ~5s. Real ALAudioRecorder wedges
         # always last more than 2s, so false-positive restarts are rare.
-        STALL_RESTART_S = 2.0    # restart recorder if stalled this long
         while not self._fragment_stop.is_set() and self._streaming:
             if self._gate_closed:
                 time.sleep(0.05)
@@ -669,32 +777,21 @@ class NaoAudioStreamer(ALModule):
                 # the recorder and restart it. Real-world cause is the
                 # firmware's ALAudioRecorder getting wedged after long
                 # uptime; the only reliable cure is a stop/start cycle.
-                if now - stall_started_at >= STALL_RESTART_S:
-                    print("[audio_module] mic stalled too long — restarting recorder")
-                    sys.stderr.flush()
-                    try:
-                        self._recorder.stopMicrophonesRecording()
-                    except Exception as _exc:
-                        print("[audio_module] stopMicrophonesRecording on stall: {0}".format(_exc))
-                    try:
-                        if os.path.exists(big_path):
-                            os.unlink(big_path)
-                    except Exception:
-                        pass
-                    try:
-                        self._recorder.startMicrophonesRecording(
-                            big_path, "wav", SAMPLE_RATE_HZ, FRAGMENT_CHANNELS_MASK,
-                        )
-                        print("[audio_module] recorder restarted after stall")
-                        sys.stderr.flush()
-                    except Exception as _exc:
-                        print("[audio_module] startMicrophonesRecording on stall: {0}".format(_exc))
-                    # Give the recorder a moment to write the header, then
-                    # reset the read offset so we start tailing the fresh
-                    # file from the top (past the new 44-byte header).
-                    time.sleep(0.30)
+                if now - stall_started_at >= FRAGMENT_STALL_RESTART_S:
+                    header = self._restart_fragment_recording(big_path, "stalled")
+                    if header is None:
+                        return
+                    nchan = header["nchan"]
+                    width = header["width"]
+                    header_size = header["header_size"]
+                    sample_stride = nchan * width
+                    front_idx = AL_CHANNEL_FRONT - 1
+                    if front_idx >= nchan:
+                        front_idx = 0
                     last_offset = header_size
                     stall_started_at = None
+                    zero_pcm_started_at = None
+                    first_pcm_logged = False
                     last_size_check = time.time()
                     continue
                 time.sleep(0.02)
@@ -728,6 +825,34 @@ class NaoAudioStreamer(ALModule):
                 pcm = bytes(buf)
 
             if pcm:
+                now = time.time()
+                if pcm == (b"\x00" * len(pcm)):
+                    if zero_pcm_started_at is None:
+                        zero_pcm_started_at = now
+                    if now - zero_pcm_last_log >= FRAGMENT_ZERO_PCM_LOG_S:
+                        zero_pcm_last_log = now
+                        print("[audio_module] exact-zero PCM captured bytes={0} silent_s={1:.1f}".format(
+                            len(pcm), now - zero_pcm_started_at))
+                        sys.stderr.flush()
+                    if now - zero_pcm_started_at >= FRAGMENT_ZERO_PCM_RESTART_S:
+                        header = self._restart_fragment_recording(big_path, "exact_zero_pcm")
+                        if header is None:
+                            return
+                        nchan = header["nchan"]
+                        width = header["width"]
+                        header_size = header["header_size"]
+                        sample_stride = nchan * width
+                        front_idx = AL_CHANNEL_FRONT - 1
+                        if front_idx >= nchan:
+                            front_idx = 0
+                        last_offset = header_size
+                        stall_started_at = None
+                        zero_pcm_started_at = None
+                        first_pcm_logged = False
+                        last_size_check = time.time()
+                        continue
+                else:
+                    zero_pcm_started_at = None
                 if not first_pcm_logged:
                     print("[audio_module] FIRST PCM captured: {0} bytes (file size={1})".format(
                         len(pcm), cur_size))

@@ -35,6 +35,14 @@ _EMBODIED_TRIGGERS: tuple[str, ...] = (
     "eyes white", "eyes purple", "led",
     # animation library
     "play animation", "do an animation", "animate",
+    "elephant", "gorilla", "gorrila", "monkey", "dragon", "dinosaur",
+    "lion", "tiger", "bear", "bird", "eagle", "chicken", "penguin",
+    "duck", "rabbit", "cat", "dog", "horse", "snake", "spider",
+    "shark", "frog", "animal",
+    "kung fu", "kung-fu", "air guitar", "headbang", "head bang",
+    "bandmaster", "conductor", "helicopter", "knight", "monster",
+    "magic", "wizard", "spaceship", "space shuttle", "rocket",
+    "zombie", "waddle", "claw", "wings",
 )
 
 

@@ -22,7 +22,7 @@ _SOFT_TRIGGERS = (
 )
 
 HOTLINE_REPLY = (
-    "I hear you. What you're carrying sounds really heavy, and you don't have to "
+    "What you're carrying sounds really heavy, and you don't have to "
     "hold it alone. Please reach out to someone who can stay with you right now — "
     "you can call or text 988 in the US for the Suicide and Crisis Lifeline, any "
     "time, day or night. Is there someone nearby you can be with too?"

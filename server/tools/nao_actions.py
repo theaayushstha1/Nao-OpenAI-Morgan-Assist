@@ -115,7 +115,9 @@ def spin(ctx: RunContextWrapper, degrees: float = 360.0) -> str:
 @function_tool
 def dance(ctx: RunContextWrapper, style: str = "robot") -> str:
     """Run a dance. `style` options: 'robot' (default funny dance),
-    'taichi' (full Tai Chi routine, ~30s), 'slide' (a smooth slide).
+    'taichi' (full Tai Chi routine), 'slide', 'kungfu', 'headbang',
+    'air guitar', 'bandmaster', 'fitness', 'monster', 'magic', 'knight',
+    'zombie', 'helicopter', 'spaceship', 'birthday', 'waddle', and 'flex'.
     Aliases like 'hiphop'/'salsa'/'funny' map to the default funny dance."""
     return _enqueue(ctx, "dance", {"style": style})
 
@@ -130,6 +132,67 @@ def change_eye_color(ctx: RunContextWrapper, color: str = "white") -> str:
 def set_led_color(ctx: RunContextWrapper, color: str = "white") -> str:
     """Alias for change_eye_color used by the therapist agent for mood cues."""
     return _enqueue(ctx, "change_eye_color", {"color": color})
+
+
+def _normalize_voice_profile(profile: str) -> str:
+    """Map natural voice labels to the persisted ElevenLabs profile keys."""
+    p = (profile or "").strip().lower()
+    aliases = {
+        "girl": "girl",
+        "female": "girl",
+        "woman": "girl",
+        "women": "girl",
+        "feminine": "girl",
+        "higher": "girl",
+        "lighter": "girl",
+        "1": "girl",
+        "voice one": "girl",
+        "man": "man",
+        "male": "man",
+        "guy": "man",
+        "masculine": "man",
+        "deeper": "man",
+        "lower": "man",
+        "2": "man",
+        "voice two": "man",
+        "neutral": "neutral",
+        "default": "neutral",
+        "normal": "neutral",
+        "natural": "neutral",
+        "robot": "neutral",
+        "bureau": "neutral",
+        "3": "neutral",
+        "voice three": "neutral",
+        "my": "my",
+        "mine": "my",
+        "aayush": "my",
+        "ayush": "my",
+        "operator": "my",
+        "4": "my",
+        "voice four": "my",
+    }
+    return aliases.get(p, p)
+
+
+@function_tool
+def set_voice_profile(ctx: RunContextWrapper, profile: str) -> str:
+    """Switch NAO's ElevenLabs voice profile for this user.
+
+    Use this when the user asks to change NAO's voice. Valid normalized
+    profiles are:
+      girl    -- female / woman / higher voice
+      man     -- male / deeper voice
+      neutral -- neutral / default / normal voice
+      my      -- operator/Aayush cloned voice
+
+    If speech-to-text hears "bureau voice", treat it as neutral voice.
+    """
+    clean = _normalize_voice_profile(profile)
+    if clean not in {"girl", "man", "neutral", "my"}:
+        return (
+            "unknown voice profile; use girl, man, neutral, or my"
+        )
+    return _enqueue(ctx, "set_voice_profile", {"profile": clean})
 
 
 @function_tool
@@ -178,15 +241,21 @@ def play_animation(ctx: RunContextWrapper, animation: str) -> str:
     the name to an installed behavior and falls back gracefully if missing.
 
     Common values the LLM should pick from based on user phrasing:
-      Animals/dances: elephant, monkey, dragon, kungfu, taichi, slide, robot
+      Animals/dances: elephant, gorilla, gorrila, monkey, dragon, dinosaur,
+                      lion, tiger, bear, bird, chicken, penguin, duck,
+                      rabbit, cat, dog, horse, snake, spider, shark, frog,
+                      kungfu, taichi, slide, robot, headbang, air_guitar
       Emotions:       happy, sad, angry, surprised, proud, shy, winner,
                       laugh, bored, anxious, disappointed, embarrassed,
                       hurt, frustrated, mocker
       Body talk:      explain, show_sky, show_floor, look_around, stretch,
                       rest, drink, yawn, sneeze, hungry
-      Strength:       show_muscle, bow
+      Set pieces:     air_juggle, bandmaster, binoculars, drive_car,
+                      helicopter, knight, monster, magic, spaceship,
+                      take_picture, taxi, vacuum, waddle, zombie, wings
+      Strength:       show_muscle, muscles, flex, bow, claw
 
-    If the user says 'do an elephant' you'd call this with animation='elephant'.
+    If the user says 'do a gorilla' you'd call this with animation='gorilla'.
     Pass the literal noun the user used; the robot does fuzzy mapping.
     """
     return _enqueue(ctx, "play_animation", {"animation": (animation or "").strip().lower()})
@@ -247,7 +316,7 @@ CHAT_ACTIONS = [
     stand_up, sit_down, kneel,
     wave_hand, wave_both_hands, nod_head, shake_head, clap_hands,
     move_forward, move_backward, turn_left, turn_right, spin,
-    dance, change_eye_color, follow_movement, stop_follow,
+    dance, change_eye_color, set_voice_profile, follow_movement, stop_follow,
     play_animation, learn_face,
     gesture,
 ]
@@ -259,10 +328,10 @@ CHAT_ACTIONS = [
 THERAPIST_ACTIONS = [
     set_led_color, nod_head, shake_head,
     wave_hand, wave_both_hands, clap_hands,
-    dance, follow_movement, stop_follow,
+    dance, set_voice_profile, follow_movement, stop_follow,
     stand_up, sit_down,
     play_animation, learn_face,
     gesture,
 ]
 
-ALL_TOOL_NAMES = {t.name for t in CHAT_ACTIONS} | {"set_led_color"}
+ALL_TOOL_NAMES = {t.name for t in CHAT_ACTIONS} | {t.name for t in THERAPIST_ACTIONS} | {"set_led_color"}
