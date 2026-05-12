@@ -52,7 +52,14 @@ def pick_initial_agent(username: str, hint: str | None,
 
     Phase 11.11: hint='chat' splits into pure_chat (default, no tools)
     vs chat_embodied (when the transcript triggers an embodiment keyword).
-    Other hints unchanged.
+
+    Default (no hint) routes to the **therapist**, since this is a
+    therapy research robot. Saying a mode word ("morgan assist",
+    "let's chat", "mini nao") still routes to that specialist as
+    before. The router agent is still available as an explicit fallback
+    via `hint='router'`, but we no longer drop to it on bare wake — the
+    router's prompt opens with "at Morgan State University" which made
+    the LLM bias every ambiguous turn toward the chatbot/Morgan lane.
     """
     if hint == "chat":
         if _wants_embodied(transcript):
@@ -64,4 +71,7 @@ def pick_initial_agent(username: str, hint: str | None,
         return build_therapist_agent(username)
     if hint == "skills":
         return skills_agent
-    return build_router(username)
+    if hint == "router":
+        return build_router(username)
+    # Default: therapy. Bare "nao" wake → therapist.
+    return build_therapist_agent(username)
