@@ -23,7 +23,7 @@ def test_all_expected_tools_exported():
         "wave_hand", "wave_both_hands", "nod_head", "shake_head", "clap_hands",
         "move_forward", "move_backward", "turn_left", "turn_right", "spin",
         "dance", "change_eye_color", "follow_movement",
-        "set_led_color",
+        "set_led_color", "set_voice_profile",
     }
     assert expected.issubset(set(nao_actions.ALL_TOOL_NAMES))
 
@@ -38,3 +38,18 @@ def test_therapist_actions_bundle_populated():
 
 def test_therapist_can_learn_face():
     assert nao_actions.learn_face in nao_actions.THERAPIST_ACTIONS
+
+
+def test_therapist_can_set_voice_profile():
+    assert nao_actions.set_voice_profile in nao_actions.THERAPIST_ACTIONS
+
+
+def test_chat_can_set_voice_profile():
+    assert nao_actions.set_voice_profile in nao_actions.CHAT_ACTIONS
+
+
+def test_voice_profile_alias_normalization():
+    assert nao_actions._normalize_voice_profile("female") == "girl"
+    assert nao_actions._normalize_voice_profile("deeper") == "man"
+    assert nao_actions._normalize_voice_profile("bureau") == "neutral"
+    assert nao_actions._normalize_voice_profile("Ayush") == "my"

@@ -274,6 +274,26 @@ def test_eyes_negative_color_word_alone() -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 5b. Voice profile picker
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("transcript, profile", [
+    ("Switch to a female voice", "girl"),
+    ("use a male voice", "man"),
+    ("switch to the neutral voice", "neutral"),
+    ("can you switch to the bureau voice", "neutral"),
+    ("switch to my voice", "my"),
+])
+def test_voice_profile_positive(transcript: str, profile: str) -> None:
+    _assert_match(
+        transcript,
+        "set_voice_profile",
+        args={"profile": profile},
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 6. Camera consent (Phase 6) — disable_camera / enable_camera
 # ─────────────────────────────────────────────────────────────────────────────
 

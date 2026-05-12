@@ -1307,6 +1307,8 @@ async def _emit_returning_identity_greeting(
     name = (display_name or "").strip()
     if not name:
         return
+    # Returning identity wins over any pending unknown-face onboarding.
+    sess.asking_name = False
 
     recap_line = await asyncio.to_thread(_last_recap_line, sess.username)
     text = _build_returning_greeting(name, recap_line)
@@ -1364,6 +1366,16 @@ async def _emit_onboarding_name_prompt(
     reason: str,
 ) -> None:
     """Ask an unknown visible face for their name via the ElevenLabs path."""
+    identity = _IDENTIFIED_USERS.get(sess.session_id) or {}
+    if identity.get("recognized") and identity.get("name"):
+        sess.asking_name = False
+        logger.info(
+            "onboarding_name_prompt_skipped",
+            user=sess.username,
+            session_id=sess.session_id,
+            reason="recognized_identity_present",
+        )
+        return
     if sess.asking_name:
         return
     sess.asking_name = True
@@ -2349,6 +2361,12 @@ async def _handle_wake_event(ws: WebSocket, sess: _Session,
                 _lookup_returning_user, face_id,
             )
             sess.face_id = face_id
+            if is_returning and display_name:
+                try:
+                    sess.username = str(display_name).strip().lower()
+                    sess.asking_name = False
+                except Exception:
+                    pass
 
         # 5. Bind / resume the SQLiteSession. `ensure_active_session` is
         #    idempotent — it'll reuse an existing active session id for
@@ -2773,10 +2791,29 @@ async def _ingest_control(ws: WebSocket, sess: _Session,
             recognized = False
         face_visible = bool(data.get("face_visible"))
         prev_identity = _IDENTIFIED_USERS.get(sess.session_id) or {}
+        prev_recognized = bool(
+            prev_identity.get("recognized") and prev_identity.get("name")
+        )
         prompted = bool(prev_identity.get("prompted"))
         greeted = bool(prev_identity.get("greeted", False))
+        if prev_recognized and not (recognized and face_name):
+            # Robot-side face recognition can emit a late unknown scan
+            # after an earlier confident match. Do not let that overwrite
+            # identity or re-open onboarding in the same session.
+            sess.asking_name = False
+            logger.info(
+                "user_identified_ignored",
+                session_id=sess.session_id,
+                user=sess.username,
+                prior_name=prev_identity.get("name"),
+                incoming_name=face_name,
+                incoming_recognized=recognized,
+                reason="recognized_identity_sticky",
+            )
+            return True
         if recognized and face_name:
             prompted = False
+            sess.asking_name = False
         should_greet_returning = bool(
             recognized and face_name and not greeted
         )
