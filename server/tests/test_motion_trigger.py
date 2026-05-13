@@ -137,8 +137,14 @@ def test_shake_negative_milkshake() -> None:
     _assert_no_match("I want a milkshake")
 
 
-def test_clap_positive() -> None:
-    _assert_match("give me a clap please", "clap_hands", args={"times": 3})
+@pytest.mark.parametrize("transcript", [
+    "give me a clap please",
+    "Clap.",
+    "Can you clap for yourself?",
+    "please clap now",
+])
+def test_clap_positive(transcript: str) -> None:
+    _assert_match(transcript, "clap_hands", args={"times": 3})
 
 
 def test_clap_negative_thunderclap() -> None:

@@ -45,9 +45,11 @@ _TRIGGERS: list[tuple[str, dict, str, list[str]]] = [
     ("shake_head", {"times": 2}, "*shakes head*", [
         "shake your head", "shake head", "say no with your head",
     ]),
-    ("clap_hands", {"times": 3}, "*claps*", [
-        "clap your hands", "clap for me", "give me a clap", "applaud",
-        "round of applause",
+    ("clap_hands", {"times": 3}, "Clapping.", [
+        "clap", "clap now", "can you clap", "could you clap",
+        "please clap", "clap your hands", "clap for me",
+        "clap for yourself", "clap for your self", "clap for ur self",
+        "give me a clap", "applaud", "round of applause",
     ]),
 
     # ── Locomotion ──────────────────────────────────────────
