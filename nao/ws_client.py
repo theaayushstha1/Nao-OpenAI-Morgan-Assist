@@ -1754,6 +1754,7 @@ class NaoWsClient(object):
         except Exception as exc:
             self.log.warn("ws_connect_failed",
                           url=self.server_url, error=str(exc))
+            self._reset_local_activity_after_disconnect("ws_connect_failed")
             return False
 
         # The 10 s above is the *connect* timeout. After handshake we need
@@ -1857,7 +1858,36 @@ class NaoWsClient(object):
         self._rear_touch_thread = None
         self._action_worker_thread = None
 
+    def _reset_local_activity_after_disconnect(self, reason):
+        """Stop local speech/motion state when the WS transport drops.
+
+        A dropped socket means we may never receive the matching tts_ended
+        or barge control frame. Without this cleanup, the robot can keep
+        running the automatic speaking-gesture loop after the server is gone.
+        """
+        try:
+            self._tts_active.clear()
+        except Exception:
+            pass
+        try:
+            self._stop_speaking_gestures()
+        except Exception:
+            pass
+        try:
+            if self.tts_player is not None:
+                self.tts_player.stop()
+        except Exception as exc:
+            self.log.debug("disconnect_tts_stop_failed",
+                           reason=reason, error=str(exc))
+        try:
+            self._cancel_actions(reason=reason)
+        except Exception as exc:
+            self.log.debug("disconnect_action_cancel_failed",
+                           reason=reason, error=str(exc))
+        self.log.info("local_activity_reset", reason=reason)
+
     def _teardown_ws(self):
+        self._reset_local_activity_after_disconnect("ws_teardown")
         with self._ws_lock:
             ws = self._ws
             self._ws = None
