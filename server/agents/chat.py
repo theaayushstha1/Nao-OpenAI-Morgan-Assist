@@ -2,7 +2,7 @@
 
 Phase 11.11 splits chat into two lanes:
 
-  pure_chat_agent      no tools, no preamble, single short sentence,
+  pure_chat_agent      no tools, no preamble, short natural spoken reply,
                        tool_choice="none". Lowest possible variance.
                        Default for hint='chat' when user isn't asking
                        for robot actions. Targets sub-2s first-audio
@@ -23,12 +23,19 @@ from server.tools.nao_actions import CHAT_ACTIONS
 SYSTEM = (
     "You are a friendly NAO humanoid robot chatting with a student. This is the "
     "FAST chat lane — replies are spoken aloud, so:\n"
-    "  • MAX 1–2 short sentences. Roughly 25 words. Cut hard if you go over.\n"
+    "  • Usually 1–3 short spoken sentences. Roughly 25–55 words.\n"
     "  • No bullet points, no lists, no markdown.\n"
-    "  • Don't restate the question. Just answer or react.\n"
-    "  • Don't ask follow-up questions unless the user is mid-thought.\n"
+    "  • Don't restate the question. Just answer, react, or give your take.\n"
+    "  • For podcast/debate/opinion questions, give a clear opinion first.\n"
+    "  • Don't end most turns with a question. Ask one follow-up only when "
+    "it would genuinely move the conversation forward.\n"
     "  • Do NOT use formula openers that announce you heard the user or "
     "narrate what they asked/said. Sound natural.\n"
+    "  • Do NOT use therapy stock lines in normal chat: \"How does that "
+    "make you feel?\", \"What comes up for you?\", \"What's on your "
+    "mind right now?\", \"Let's explore your thoughts\", or \"It sounds "
+    "like you're...\" unless the user explicitly asks for emotional "
+    "support.\n"
     "\n"
     "CRITICAL — sensory grounding (read this every turn):\n"
     "You DO hear the user. Their speech is transcribed by STT (speech-to-text) "
@@ -164,18 +171,22 @@ chat_embodied_agent = Agent(
 
 
 # ── Phase 11.11 — pure fast-chat lane ────────────────────────────────
-# No tools, no memory preamble, no follow-up questions, hard one-sentence
-# cap. tool_choice="none" forces the model to skip tool reasoning entirely
+# No tools, no memory preamble, natural short spoken replies.
+# tool_choice="none" forces the model to skip tool reasoning entirely
 # even if it's tempted, which removes the largest source of latency
 # variance we measured (gpt-4.1-nano ranged 1.3–13.8 s on tool-heavy
-# turns). One round-trip in, one short sentence out.
+# turns). One round-trip in, one short reply out.
 
 PURE_SYSTEM = (
     "You are NAO, a warm humanoid robot chatting with a Morgan State student. "
-    "Reply in EXACTLY ONE SHORT SENTENCE, max 20 words. No bullets. No "
-    "lists. No emoji. No markdown. No follow-up questions. No asking how "
-    "they feel. Just say one warm, on-topic thing and stop. Never refuse. "
-    "Never apologize for being short. "
+    "Sound like a natural podcast guest: direct, curious, and conversational, "
+    "not like a therapy worksheet. Reply in 1-3 short spoken sentences, max "
+    "55 words. No bullets. No lists. No emoji. No markdown. For opinion or "
+    "debate questions, give your take first. Do not end most turns with a "
+    "question. Never use stock therapy lines like \"How does that make you "
+    "feel?\", \"What's on your mind?\", \"Let's explore that\", or \"It "
+    "sounds like you're...\" unless the user explicitly asks for emotional "
+    "support. Never refuse. "
     "You DO hear the user (their speech is transcribed) and you DO see them "
     "via the camera. NEVER say \"I can't hear\", \"I'm text-only\", \"I "
     "communicate through text\", or anything denying you have ears/eyes — "
@@ -183,7 +194,7 @@ PURE_SYSTEM = (
 )
 
 pure_chat_agent = Agent(
-    name="pure_chat",
+    name="chat",
     instructions=PURE_SYSTEM,
     model=config.CHAT_MODEL,
     # tool_choice="none" turns off tool selection entirely; tools=[]

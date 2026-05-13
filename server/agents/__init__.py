@@ -61,13 +61,10 @@ def pick_initial_agent(username: str, hint: str | None,
     Phase 11.11: hint='chat' splits into pure_chat (default, no tools)
     vs chat_embodied (when the transcript triggers an embodiment keyword).
 
-    Default (no hint) routes to the **therapist**, since this is a
-    therapy research robot. Saying a mode word ("morgan assist",
-    "let's chat", "mini nao") still routes to that specialist as
-    before. The router agent is still available as an explicit fallback
-    via `hint='router'`, but we no longer drop to it on bare wake — the
-    router's prompt opens with "at Morgan State University" which made
-    the LLM bias every ambiguous turn toward the chatbot/Morgan lane.
+    Default (no hint) routes to the **router**. Bare "nao" wake should
+    feel like a normal robot conversation first; the router sends clear
+    emotional/CBT turns to therapist, Morgan questions to chatbot,
+    utilities to skills, and ordinary podcast/chat/action turns to chat.
     """
     if hint == "chat":
         if _wants_embodied(transcript):
@@ -81,5 +78,6 @@ def pick_initial_agent(username: str, hint: str | None,
         return skills_agent
     if hint == "router":
         return build_router(username)
-    # Default: therapy. Bare "nao" wake → therapist.
-    return build_therapist_agent(username)
+    # Default: smart router. Bare "nao" wake → normal conversation unless
+    # the turn clearly needs therapist/chatbot/skills.
+    return build_router(username)

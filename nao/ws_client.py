@@ -860,8 +860,8 @@ class NaoWsClient(object):
         # Best-effort, non-blocking — fire-and-forget on a daemon thread
         # so we don't delay TTS playback by the ~3 s standUp animation.
         self._kick_stand_up()
-        # Speaking-gesture loop: pick a random body-language intent every
-        # 2.5 s while TTS is playing. Stops on tts_ended or barge.
+        # Speaking-gesture loop: pick short body-language beats while TTS
+        # is audibly playing. Stops after local playback drains or barge.
         self._start_speaking_gestures()
         self.log.info("tts_started", text_preview=str(data.get("text") or "")[:80])
 
@@ -873,12 +873,11 @@ class NaoWsClient(object):
         # open the mic here on a fixed timer — the speaker would still be
         # broadcasting NAO's voice and the mic would record it.
         #
-        # New behavior: clear the server-intent flag, stop gestures,
-        # snap an image (cheap), and then SPAWN a waiter thread that
+        # New behavior: clear the server-intent flag, snap an image
+        # (cheap), and then SPAWN a waiter thread that
         # polls tts_player.is_playing() until the queue is fully drained.
         # Only then arm the grace timer and reopen the mic.
         self._tts_active.clear()
-        self._stop_speaking_gestures()
         try:
             self._snap_and_push_image(reason="post_tts")
         except Exception:
@@ -945,6 +944,10 @@ class NaoWsClient(object):
                 return
 
             self.log.info("playback_all_done")
+            try:
+                self._stop_speaking_gestures()
+            except Exception:
+                pass
 
             # 2. Post-playback grace — lets reverb / speaker cone tail
             #    decay so the mic doesn't catch the last echo.
@@ -1140,22 +1143,22 @@ class NaoWsClient(object):
     # Embodiment: stand-up posture + subtle gestures during TTS playback
     # ------------------------------------------------------------------
     # Weighted pool for automatic body language while ElevenLabs speaks.
-    # These are all inline micro-gestures: small amplitude, self-restoring,
-    # and safe to fire often. Full Choregraphe behaviors are intentionally
-    # not used here; they are expressive but too theatrical as background
-    # body language.
+    # These are inline, self-restoring presenter gestures: visible enough
+    # to read on camera, but still short enough not to fight explicit
+    # Choregraphe actions.
     _SPEAKING_GESTURE_POOL = (
-        "micro_nod", "micro_nod", "micro_nod", "micro_nod",
-        "micro_double_nod", "micro_double_nod",
+        "micro_nod", "micro_nod", "micro_double_nod",
         "micro_head_right", "micro_head_left",
-        "micro_head_dip", "micro_head_dip",
-        "micro_glance_up",
+        "micro_head_dip",
         "micro_hand_beat_right", "micro_hand_beat_right",
         "micro_hand_beat_left", "micro_hand_beat_left",
         "micro_two_hand_beat", "micro_two_hand_beat",
-        "micro_palm_open_right", "micro_palm_open_left",
+        "micro_two_hand_beat",
+        "micro_palm_open_right", "micro_palm_open_right",
+        "micro_palm_open_left", "micro_palm_open_left",
         "micro_palms_low", "micro_palms_low",
-        "micro_explain_right", "micro_explain_left",
+        "micro_explain_right", "micro_explain_right",
+        "micro_explain_left", "micro_explain_left",
         "micro_self_reference",
         "micro_soft_shrug",
         "micro_breath",
@@ -1237,123 +1240,123 @@ class NaoWsClient(object):
         # a hard full-body reset after each beat.
         "micro_nod": (
             ["HeadPitch"],
-            [[0.07, 0.0]],
-            [[0.28, 0.56]],
+            [[0.11, 0.0]],
+            [[0.24, 0.50]],
         ),
         "micro_double_nod": (
             ["HeadPitch"],
-            [[0.06, 0.0, 0.05, 0.0]],
-            [[0.22, 0.42, 0.62, 0.86]],
+            [[0.09, 0.0, 0.08, 0.0]],
+            [[0.20, 0.38, 0.58, 0.80]],
         ),
         "micro_head_right": (
             ["HeadYaw"],
-            [[-0.14, 0.0]],
-            [[0.45, 0.90]],
+            [[-0.22, 0.0]],
+            [[0.38, 0.78]],
         ),
         "micro_head_left": (
             ["HeadYaw"],
-            [[0.14, 0.0]],
-            [[0.45, 0.90]],
+            [[0.22, 0.0]],
+            [[0.38, 0.78]],
         ),
         "micro_head_dip": (
             ["HeadPitch"],
-            [[0.10, 0.03, 0.0]],
-            [[0.35, 0.75, 1.05]],
+            [[0.14, 0.04, 0.0]],
+            [[0.30, 0.62, 0.90]],
         ),
         "micro_glance_up": (
             ["HeadPitch"],
-            [[-0.07, 0.0]],
-            [[0.35, 0.75]],
+            [[-0.10, 0.0]],
+            [[0.32, 0.70]],
         ),
         "micro_hand_beat_right": (
             ["RShoulderPitch", "RShoulderRoll", "RElbowYaw", "RElbowRoll", "RWristYaw"],
-            [[1.18, 1.48],
-             [-0.22, -0.15],
-             [1.12, 1.20],
-             [0.72, 0.50],
-             [0.16, 0.0]],
-            [[0.34, 0.78]] * 5,
+            [[1.02, 1.48],
+             [-0.30, -0.15],
+             [1.02, 1.20],
+             [0.90, 0.50],
+             [0.28, 0.0]],
+            [[0.30, 0.72]] * 5,
         ),
         "micro_hand_beat_left": (
             ["LShoulderPitch", "LShoulderRoll", "LElbowYaw", "LElbowRoll", "LWristYaw"],
-            [[1.18, 1.48],
-             [0.22, 0.15],
-             [-1.12, -1.20],
-             [-0.72, -0.50],
-             [-0.16, 0.0]],
-            [[0.34, 0.78]] * 5,
+            [[1.02, 1.48],
+             [0.30, 0.15],
+             [-1.02, -1.20],
+             [-0.90, -0.50],
+             [-0.28, 0.0]],
+            [[0.30, 0.72]] * 5,
         ),
         "micro_two_hand_beat": (
             ["LShoulderPitch", "RShoulderPitch",
              "LElbowRoll", "RElbowRoll"],
-            [[1.22, 1.48], [1.22, 1.48],
-             [-0.72, -0.50], [0.72, 0.50]],
-            [[0.42, 0.92]] * 4,
+            [[1.08, 1.48], [1.08, 1.48],
+             [-0.88, -0.50], [0.88, 0.50]],
+            [[0.36, 0.82]] * 4,
         ),
         "micro_palm_open_right": (
             ["RShoulderPitch", "RShoulderRoll", "RElbowRoll", "RWristYaw"],
-            [[1.24, 1.48],
-             [-0.28, -0.15],
-             [0.72, 0.50],
-             [0.42, 0.0]],
-            [[0.45, 0.95]] * 4,
+            [[1.02, 1.48],
+             [-0.34, -0.15],
+             [0.92, 0.50],
+             [0.55, 0.0]],
+            [[0.40, 0.90]] * 4,
         ),
         "micro_palm_open_left": (
             ["LShoulderPitch", "LShoulderRoll", "LElbowRoll", "LWristYaw"],
-            [[1.24, 1.48],
-             [0.28, 0.15],
-             [-0.72, -0.50],
-             [-0.42, 0.0]],
-            [[0.45, 0.95]] * 4,
+            [[1.02, 1.48],
+             [0.34, 0.15],
+             [-0.92, -0.50],
+             [-0.55, 0.0]],
+            [[0.40, 0.90]] * 4,
         ),
         "micro_palms_low": (
             ["LShoulderPitch", "RShoulderPitch",
              "LElbowRoll", "RElbowRoll",
              "LWristYaw", "RWristYaw"],
-            [[1.30, 1.50], [1.30, 1.50],
-             [-0.78, -0.50], [0.78, 0.50],
-             [-0.35, 0.0], [0.35, 0.0]],
-            [[0.55, 1.10]] * 6,
+            [[1.10, 1.50], [1.10, 1.50],
+             [-0.95, -0.50], [0.95, 0.50],
+             [-0.55, 0.0], [0.55, 0.0]],
+            [[0.50, 1.02]] * 6,
         ),
         "micro_explain_right": (
             ["RShoulderPitch", "RShoulderRoll", "RElbowYaw", "RElbowRoll"],
-            [[1.22, 1.05, 1.48],
-             [-0.20, -0.28, -0.15],
-             [1.05, 1.18, 1.20],
-             [0.68, 0.62, 0.50]],
-            [[0.32, 0.64, 1.02]] * 4,
+            [[1.10, 0.82, 1.48],
+             [-0.24, -0.38, -0.15],
+             [1.00, 1.16, 1.20],
+             [0.88, 0.70, 0.50]],
+            [[0.28, 0.62, 1.04]] * 4,
         ),
         "micro_explain_left": (
             ["LShoulderPitch", "LShoulderRoll", "LElbowYaw", "LElbowRoll"],
-            [[1.22, 1.05, 1.48],
-             [0.20, 0.28, 0.15],
-             [-1.05, -1.18, -1.20],
-             [-0.68, -0.62, -0.50]],
-            [[0.32, 0.64, 1.02]] * 4,
+            [[1.10, 0.82, 1.48],
+             [0.24, 0.38, 0.15],
+             [-1.00, -1.16, -1.20],
+             [-0.88, -0.70, -0.50]],
+            [[0.28, 0.62, 1.04]] * 4,
         ),
         "micro_self_reference": (
             ["RShoulderPitch", "RShoulderRoll", "RElbowYaw", "RElbowRoll"],
-            [[1.14, 1.48],
-             [-0.10, -0.15],
-             [0.72, 1.20],
-             [1.02, 0.50]],
-            [[0.48, 1.05]] * 4,
+            [[0.96, 1.48],
+             [-0.12, -0.15],
+             [0.62, 1.20],
+             [1.16, 0.50]],
+            [[0.42, 0.98]] * 4,
         ),
         "micro_soft_shrug": (
             ["LShoulderPitch", "RShoulderPitch",
              "LShoulderRoll", "RShoulderRoll",
              "HeadPitch"],
-            [[1.18, 1.50], [1.18, 1.50],
-             [0.22, 0.15], [-0.22, -0.15],
-             [-0.04, 0.0]],
-            [[0.40, 0.88]] * 5,
+            [[1.04, 1.50], [1.04, 1.50],
+             [0.32, 0.15], [-0.32, -0.15],
+             [-0.08, 0.0]],
+            [[0.34, 0.82]] * 5,
         ),
         "micro_breath": (
             ["LShoulderPitch", "RShoulderPitch", "HeadPitch"],
-            [[1.34, 1.52, 1.48],
-             [1.34, 1.52, 1.48],
-             [0.04, -0.02, 0.0]],
-            [[0.75, 1.55, 2.10]] * 3,
+            [[1.18, 1.52, 1.48],
+             [1.18, 1.52, 1.48],
+             [0.07, -0.03, 0.0]],
+            [[0.65, 1.42, 1.95]] * 3,
         ),
         "custom_head_tilt_right": (
             ["HeadYaw"],
@@ -1495,6 +1498,21 @@ class NaoWsClient(object):
         # hip joints, so they stay at whatever stand-init set them to.
     }
 
+    def _speaking_gestures_should_run(self):
+        """True while the user should visibly see speaking body language.
+
+        Server tts_ended only means no more chunks will arrive; local NAOqi
+        playback can still be draining the queued MP3/WAV files. Keep the
+        gestures alive until the local player is also empty.
+        """
+        if self._tts_active.is_set():
+            return True
+        try:
+            return bool(self.tts_player is not None and
+                        self.tts_player.is_playing())
+        except Exception:
+            return False
+
     def _speaking_gesture_loop(self):
         """Loop: pick a random micro-gesture, play it, pause, repeat.
 
@@ -1530,16 +1548,17 @@ class NaoWsClient(object):
             self.log.debug("speak_gesture_no_motion_proxy")
             return
         import sys as _sys
-        # Initial delay so a very short reply is not over-gestured.
-        initial_delay = _random.uniform(0.35, 0.75)
+        # Start quickly enough to be visible on camera, but not exactly
+        # on the first phoneme.
+        initial_delay = _random.uniform(0.10, 0.25)
         if self._speaking_gesture_stop.wait(timeout=initial_delay):
             return
         print("[speaking_gesture] loop active (motion=%s)" % (motion is not None,))
         _sys.stderr.flush()
 
         # Wake actuators + keep moderate stiffness on the upper body. Full
-        # stiffness makes small conversational gestures look snappy and
-        # mechanical; 0.85 still moves reliably but looks softer.
+        # stiffness makes conversational gestures look snappy and
+        # mechanical; 0.88 still moves reliably but looks softer.
         try:
             motion.wakeUp()
         except Exception:
@@ -1550,7 +1569,7 @@ class NaoWsClient(object):
             # calls rather than batching Head/LArm/RArm.
             for _chain in ("Head", "LArm", "RArm"):
                 try:
-                    motion.setStiffnesses(_chain, 0.85)
+                    motion.setStiffnesses(_chain, 0.88)
                 except Exception as exc:
                     self.log.debug("speak_gesture_stiffness_failed",
                                    chain=_chain, error=str(exc))
@@ -1560,7 +1579,7 @@ class NaoWsClient(object):
         _sys.stderr.flush()
 
         while not self._speaking_gesture_stop.is_set() and \
-                self._tts_active.is_set():
+                self._speaking_gestures_should_run():
             _pin_stiffness()
 
             # Avoid back-to-back identical picks. With a small humanoid,
@@ -1591,7 +1610,7 @@ class NaoWsClient(object):
             # Randomized cadence keeps it alive without looking like a
             # metronome. The gesture itself already blocked for its own
             # duration, so this is just the gap before the next beat.
-            pause_s = _random.uniform(0.35, 0.95)
+            pause_s = _random.uniform(0.18, 0.52)
             if self._speaking_gesture_stop.wait(timeout=pause_s):
                 return
 
