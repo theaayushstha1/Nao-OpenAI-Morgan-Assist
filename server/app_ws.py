@@ -1300,6 +1300,88 @@ async def _emit_motion(ws: WebSocket, sess: _Session, transcript: str,
 
 
 _ONBOARDING_NAME_PROMPT = "Hi, I'm NAO. What should I call you?"
+_ONBOARDING_NAME_RETRY = "Sorry, what name should I call you?"
+
+
+def _is_onboarding_prompt_echo(transcript: str) -> bool:
+    """True when STT heard NAO's own onboarding/camera prompt.
+
+    During onboarding we intentionally ask for short name answers, so the
+    generic echo guard used for normal turns is bypassed. That made a bad
+    failure possible: the robot hears "Hi, I'm NAO. What should I call you?"
+    from its own speaker, the LLM treats it as user input, then replies as
+    if the user introduced themselves as the assistant. Keep this guard
+    deterministic and narrow so real names still pass.
+    """
+    t = re.sub(r"\s+", " ", transcript or "").strip().lower()
+    if not t:
+        return False
+    markers = (
+        "what should i call you",
+        "hi i'm nao",
+        "hi i am nao",
+        "i'm nao",
+        "i am nao",
+        "my camera is on for this conversation",
+        "say stop watching me",
+        "heads up",
+    )
+    return any(marker in t for marker in markers)
+
+
+async def _emit_onboarding_name_retry(
+    ws: WebSocket,
+    sess: _Session,
+    *,
+    reason: str,
+) -> None:
+    """Retry the name prompt without handing the turn to the LLM."""
+    text = _ONBOARDING_NAME_RETRY
+    phase_ms: dict[str, float] = {}
+    with _phase("onboarding_name_retry_synth", phase_ms):
+        try:
+            mp3 = await asyncio.to_thread(_synth_for, sess.username, text)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "onboarding_name_retry_tts_failed",
+                user=sess.username,
+                session_id=sess.session_id,
+                error=repr(exc),
+            )
+            mp3 = b""
+
+    try:
+        _reset_reply_chunks(sess.username, text)
+    except Exception:
+        pass
+
+    if mp3:
+        await _send_json(
+            ws,
+            _audio_chunk_frame(sess.next_seq(), text, mp3),
+        )
+        try:
+            legacy.LAST_REPLY[sess.username] = text
+        except Exception:
+            pass
+        _arm_post_tts_cooldown(sess)
+        await _send_json(
+            ws,
+            _control_frame("tts_ended", sentences=1, asking_name=True),
+        )
+    else:
+        await _send_json(
+            ws,
+            _control_frame("tts_chunk_skipped", text=text, asking_name=True),
+        )
+
+    logger.info(
+        "onboarding_name_retry",
+        user=sess.username,
+        session_id=sess.session_id,
+        reason=reason,
+        phase_ms=phase_ms,
+    )
 
 
 async def _emit_returning_identity_greeting(
@@ -2070,6 +2152,21 @@ async def _process_turn(ws: WebSocket, sess: _Session) -> None:
         ))
         return
 
+    if sess.asking_name and _is_onboarding_prompt_echo(transcript):
+        logger.info(
+            "turn_rejected",
+            user=sess.username, session_id=sess.session_id,
+            turn_idx=sess.turn_idx + 1, phase_ms=phase_ms,
+            transcript=(transcript or "")[:200],
+            reason="onboarding_prompt_echo",
+        )
+        await _send_json(ws, _control_frame(
+            "echo_reject",
+            transcript=transcript,
+            reason="onboarding_prompt_echo",
+        ))
+        return
+
     # Phase 2 echo guard — substring containment + per-sentence token
     # overlap. Layered ABOVE the legacy bigram-overlap check so we don't
     # touch `_legacy_helpers.py`. Runs before crisis/agent dispatch.
@@ -2105,6 +2202,18 @@ async def _process_turn(ws: WebSocket, sess: _Session) -> None:
             sess.asking_name = False
             await _emit_motion(ws, sess, transcript, name_motion, phase_ms)
             return
+        _cancel_pending_vision(sess)
+        logger.info(
+            "turn_complete",
+            user=sess.username, session_id=sess.session_id,
+            turn_idx=sess.turn_idx + 1, phase_ms=phase_ms,
+            transcript=(transcript or "")[:200],
+            outcome="rejected", reject_reason="asking_name_not_name",
+        )
+        await _emit_onboarding_name_retry(
+            ws, sess, reason="asking_name_not_name",
+        )
+        return
 
     # Semantic endpointing — wait for more audio if the user trailed off.
     from server import semantic_endpoint

@@ -90,6 +90,19 @@ async def test_onboarding_prompt_skips_when_identity_already_recognized():
     assert sess.asking_name is False
 
 
+def test_onboarding_prompt_echo_is_detected():
+    transcript = (
+        "Heads up. My camera is on for this conversation. "
+        "Hi, I'm NAO. What should I call you?"
+    )
+
+    assert app_ws._is_onboarding_prompt_echo(transcript) is True
+
+
+def test_onboarding_prompt_echo_does_not_match_real_name():
+    assert app_ws._is_onboarding_prompt_echo("you can call me Aayush") is False
+
+
 @pytest.mark.asyncio
 async def test_wake_event_binds_returning_username_before_session_resume(monkeypatch):
     app_ws._IDENTIFIED_USERS.clear()

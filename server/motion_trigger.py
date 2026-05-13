@@ -289,6 +289,7 @@ _NON_NAMES_FAST = frozenset({
     "hello", "hey", "thanks", "thank", "nao", "use", "using", "switch",
     "voice", "terminal", "obsidian", "money", "update", "process",
     "medicine", "camera", "therapy", "therapist",
+    "assistant",
 })
 
 _SUSPICIOUS_BARE_NAME_ANSWERS = frozenset({
@@ -362,7 +363,8 @@ def detect_name_answer(transcript: str) -> MotionMatch | None:
         return None
 
     m = re.match(
-        r"^(?:it(?:'| i)?s|i am|i'm|my name is|call me)\s+(.+)$",
+        r"^(?:it(?:'| i)?s|i am|i'm|my name is|call me|"
+        r"you can call me)\s+(.+)$",
         text,
         re.IGNORECASE,
     )
