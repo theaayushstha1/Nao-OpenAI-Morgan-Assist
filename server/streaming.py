@@ -24,8 +24,8 @@ Two layers of public API live here:
    Tunables (read at import time, env-driven so deployment can adjust without
    a code change):
 
-       TTS_CHUNK_MIN_CHARS     default  30  — don't emit below this
-       TTS_CHUNK_TIMEOUT_MS    default 400  — flush partial chunk on stall
+       TTS_CHUNK_MIN_CHARS     default  24  — don't emit below this
+       TTS_CHUNK_TIMEOUT_MS    default 250  — flush partial chunk on stall
 
 The chunker is deliberately conservative about *where* it splits:
 
@@ -130,8 +130,8 @@ def iter_sentences(chunks: Iterable[str]) -> Iterator[str]:
 
 # Env-tunable defaults. Read at import time; the documented call-site default
 # is the same number, so a downstream caller passing its own value still wins.
-_DEFAULT_MIN_CHARS = int(os.environ.get("TTS_CHUNK_MIN_CHARS", "30"))
-_DEFAULT_TIMEOUT_MS = int(os.environ.get("TTS_CHUNK_TIMEOUT_MS", "400"))
+_DEFAULT_MIN_CHARS = int(os.environ.get("TTS_CHUNK_MIN_CHARS", "24"))
+_DEFAULT_TIMEOUT_MS = int(os.environ.get("TTS_CHUNK_TIMEOUT_MS", "250"))
 
 # Buffer length above which a soft break (`,` / `;`) is allowed.
 _SOFT_BREAK_AFTER = 120

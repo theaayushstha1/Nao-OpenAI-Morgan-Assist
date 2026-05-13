@@ -45,6 +45,22 @@ _EMBODIED_TRIGGERS: tuple[str, ...] = (
     "zombie", "waddle", "claw", "wings",
 )
 
+_SPECIALIST_TRIGGERS: tuple[str, ...] = (
+    # Morgan / CS advising.
+    "morgan", "course", "class", "faculty", "professor", "advising",
+    "advisor", "prerequisite", "degree requirement", "major requirement",
+    "computer science department", "cs department", "schedule",
+    # Utility lane.
+    "what time", "today's date", "what date", "weather", "timer",
+    "remind me", "reminder", "todo", "to-do",
+    # Emotional / support lane. Keep this conservative so normal podcast
+    # debate does not get therapy phrasing.
+    "anxious", "anxiety", "panic", "depressed", "depression", "sad",
+    "lonely", "overwhelmed", "stressed", "stress", "worried", "worry",
+    "grief", "hopeless", "suicidal", "kill myself", "self harm",
+    "therapy", "therapist", "cbt", "grounding exercise", "breathing exercise",
+)
+
 
 def _wants_embodied(transcript: str | None) -> bool:
     """True if the transcript suggests the user wants a robot action."""
@@ -54,6 +70,19 @@ def _wants_embodied(transcript: str | None) -> bool:
     return any(kw in t for kw in _EMBODIED_TRIGGERS)
 
 
+def _needs_specialist_router(transcript: str | None) -> bool:
+    """True when a default turn should pay the router hop.
+
+    Most podcast/small-talk/opinion turns should go straight to the fast chat
+    lane. We keep the router for clear Morgan, utility, or emotional-support
+    turns where a specialist handoff is useful.
+    """
+    t = (transcript or "").lower()
+    if not t:
+        return True
+    return any(kw in t for kw in _SPECIALIST_TRIGGERS)
+
+
 def pick_initial_agent(username: str, hint: str | None,
                         transcript: str | None = None):
     """Return the agent to start a turn with, based on hint + transcript.
@@ -61,10 +90,10 @@ def pick_initial_agent(username: str, hint: str | None,
     Phase 11.11: hint='chat' splits into pure_chat (default, no tools)
     vs chat_embodied (when the transcript triggers an embodiment keyword).
 
-    Default (no hint) routes to the **router**. Bare "nao" wake should
-    feel like a normal robot conversation first; the router sends clear
-    emotional/CBT turns to therapist, Morgan questions to chatbot,
-    utilities to skills, and ordinary podcast/chat/action turns to chat.
+    Default (no hint) uses a fast local pre-router. Bare "nao" wake should
+    feel like a normal robot conversation first; obvious podcast/chat/action
+    turns go straight to chat, while clear emotional/CBT, Morgan, and utility
+    turns still pay the router hop for specialist selection.
     """
     if hint == "chat":
         if _wants_embodied(transcript):
@@ -78,6 +107,9 @@ def pick_initial_agent(username: str, hint: str | None,
         return skills_agent
     if hint == "router":
         return build_router(username)
-    # Default: smart router. Bare "nao" wake → normal conversation unless
-    # the turn clearly needs therapist/chatbot/skills.
-    return build_router(username)
+    # Default: fast chat unless the text clearly needs a specialist.
+    if _wants_embodied(transcript):
+        return chat_embodied_agent
+    if _needs_specialist_router(transcript):
+        return build_router(username)
+    return pure_chat_agent

@@ -150,8 +150,8 @@ METRICS_ENABLED = os.environ.get("METRICS_ENABLED", "1") == "1"
 # chunk once we've buffered at least TTS_CHUNK_MIN_CHARS, or after the model
 # has paused for TTS_CHUNK_TIMEOUT_MS without a sentence boundary so we don't
 # wait forever on a slow tail.
-TTS_CHUNK_MIN_CHARS = int(os.environ.get("TTS_CHUNK_MIN_CHARS", "30"))
-TTS_CHUNK_TIMEOUT_MS = int(os.environ.get("TTS_CHUNK_TIMEOUT_MS", "400"))
+TTS_CHUNK_MIN_CHARS = int(os.environ.get("TTS_CHUNK_MIN_CHARS", "24"))
+TTS_CHUNK_TIMEOUT_MS = int(os.environ.get("TTS_CHUNK_TIMEOUT_MS", "250"))
 
 # Robot mic gate timing. After the last TTS audio chunk completes, wait this
 # long before resubscribing the mic — catches in-flight buffers + reverb.

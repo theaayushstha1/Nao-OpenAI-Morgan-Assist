@@ -321,16 +321,16 @@ TTS_CHUNK_TIMEOUT_MS = int(os.environ.get("TTS_CHUNK_TIMEOUT_MS", "400"))
 # Phase 2 — EoU arbiter knobs (per docs/PHASE_2_TASK_MAP.md).
 #
 # `MIN_SILENCE_MS` is the silero-driven silence threshold that finalizes a
-# turn outright. The robot-hint-driven branch uses a tighter `200 ms` window
+# turn outright. The robot-hint-driven branch uses a tighter `150 ms` window
 # (since the robot has already declared the user done — we just want silero
-# confirmation). The semantic-early branch fires on `250 ms` of silence with
+# confirmation). The semantic-early branch fires on `200 ms` of silence with
 # a complete-thought signal.
 #
 # The 60 s ceiling matches the PRD ("Allow up to 60 s of legitimate
 # continuous speech").
-EOU_MIN_SILENCE_MS = int(os.environ.get("EOU_MIN_SILENCE_MS", "600"))
-EOU_HINT_CONFIRM_MS = int(os.environ.get("EOU_HINT_CONFIRM_MS", "200"))
-EOU_SEMANTIC_SILENCE_MS = int(os.environ.get("EOU_SEMANTIC_SILENCE_MS", "250"))
+EOU_MIN_SILENCE_MS = int(os.environ.get("EOU_MIN_SILENCE_MS", "500"))
+EOU_HINT_CONFIRM_MS = int(os.environ.get("EOU_HINT_CONFIRM_MS", "150"))
+EOU_SEMANTIC_SILENCE_MS = int(os.environ.get("EOU_SEMANTIC_SILENCE_MS", "200"))
 EOU_HARD_CEILING_MS = int(os.environ.get("EOU_HARD_CEILING_MS", "60_000"))
 
 # Phase 2 — Post-TTS cooldown knob. Bytes received within
@@ -1182,6 +1182,11 @@ def _arm_post_tts_cooldown(sess: _Session) -> None:
     sess.tts_active_until_ms = (time.time() * 1000.0
                                 + grace_ms
                                 + TTS_COOLDOWN_PADDING_MS)
+
+
+def _agent_turn_running(sess: _Session) -> bool:
+    task = getattr(sess, "active_turn_task", None)
+    return task is not None and not task.done()
 
 
 async def _emit_crisis(ws: WebSocket, sess: _Session, transcript: str,
@@ -2256,11 +2261,35 @@ async def _process_turn(ws: WebSocket, sess: _Session) -> None:
     # sits in the WS queue until the entire reply finishes — defeating
     # the whole point of barge-in. The task is owned by the session;
     # awaited at session_close (or cancelled if the WS drops).
-    sess.active_turn_task = asyncio.create_task(
+    task = asyncio.create_task(
         _emit_agent_turn(
             ws, sess, transcript, image_b64, phase_ms, t_user_done,
         )
     )
+    sess.active_turn_task = task
+
+    def _clear_active_turn(done_task: asyncio.Task) -> None:
+        if sess.active_turn_task is done_task:
+            sess.active_turn_task = None
+        try:
+            exc = done_task.exception()
+        except asyncio.CancelledError:
+            return
+        except Exception as err:  # noqa: BLE001
+            logger.warning(
+                "agent_turn_task_exception_check_failed",
+                user=sess.username, session_id=sess.session_id,
+                error=repr(err),
+            )
+            return
+        if exc is not None:
+            logger.warning(
+                "agent_turn_task_failed",
+                user=sess.username, session_id=sess.session_id,
+                error=repr(exc),
+            )
+
+    task.add_done_callback(_clear_active_turn)
 
 
 # ───────── frame ingest ─────────
@@ -2324,6 +2353,13 @@ async def _ingest_frame(ws: WebSocket, sess: _Session,
                     counter.inc()
                 except Exception:
                     pass
+            return True
+
+        # While the previous turn is still generating/speaking, do not build
+        # a second utterance from room noise or the user's next words. The
+        # robot sends explicit barge_in control frames for interruption; raw
+        # mic frames during this window were creating duplicate no_voice turns.
+        if _agent_turn_running(sess):
             return True
 
         b64 = frame.get("data") or ""

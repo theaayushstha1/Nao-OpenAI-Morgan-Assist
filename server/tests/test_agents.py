@@ -21,6 +21,30 @@ def test_no_hint_returns_router():
     assert pick_initial_agent("alice", None).name == "router"
 
 
+def test_no_hint_general_chat_uses_fast_chat():
+    agent = pick_initial_agent(
+        "alice", None,
+        "What do you think about parallel universes?",
+    )
+    assert agent.name == "chat"
+
+
+def test_no_hint_emotional_turn_still_uses_router():
+    agent = pick_initial_agent(
+        "alice", None,
+        "I'm anxious and overwhelmed about my exam tomorrow.",
+    )
+    assert agent.name == "router"
+
+
+def test_no_hint_morgan_turn_still_uses_router():
+    agent = pick_initial_agent(
+        "alice", None,
+        "What classes does Morgan offer for computer science?",
+    )
+    assert agent.name == "router"
+
+
 def test_therapist_injects_recaps(monkeypatch):
     from server.agents import therapist as t
     monkeypatch.setattr(t.session, "load_recent_recaps", lambda u, n=3: ["past talk"])
