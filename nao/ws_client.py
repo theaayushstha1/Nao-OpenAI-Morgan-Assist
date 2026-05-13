@@ -292,6 +292,8 @@ class NaoWsClient(object):
         # requests ("do kung fu", "act like an elephant", etc).
         self._speaking_gesture_thread = None
         self._speaking_gesture_stop = threading.Event()
+        self._speaking_gesture_suppress_until = 0.0
+        self._speaking_gesture_suppress_lock = threading.Lock()
         self._stood_up_once = False
 
     # ------------------------------------------------------------------
@@ -461,6 +463,10 @@ class NaoWsClient(object):
         b64 = frame.get("data") or ""
         text = frame.get("text") or ""
         try:
+            pause_after_ms = int(frame.get("pause_after_ms") or 0)
+        except Exception:
+            pause_after_ms = 0
+        try:
             mp3_bytes = base64.b64decode(b64) if b64 else b""
         except Exception as exc:
             self.log.warn("audio_chunk_b64_decode_failed", error=str(exc))
@@ -505,7 +511,8 @@ class NaoWsClient(object):
         except Exception:
             pass
         try:
-            self.tts_player.enqueue(text, mp3_bytes)
+            self.tts_player.enqueue(text, mp3_bytes,
+                                    pause_after_ms=pause_after_ms)
         except Exception as exc:
             print("[tts_trace] tts_player.enqueue raised: {0}: {1}".format(
                 type(exc).__name__, exc))
@@ -529,6 +536,8 @@ class NaoWsClient(object):
         name = frame.get("name")
         args = frame.get("args") or {}
         try:
+            self._suppress_speaking_gestures_for_action(name,
+                                                        phase="enqueue")
             self._action_queue.put_nowait((name, args))
             self.log.info("action_enqueued", name=name)
         except Exception as exc:
@@ -547,6 +556,11 @@ class NaoWsClient(object):
         ``stopAllBehaviors`` is idempotent and safe to call when nothing
         is running.
         """
+        try:
+            self._stop_speaking_gestures()
+        except Exception:
+            pass
+
         # 1. Drop queued actions so the worker doesn't start another
         #    behavior right after we stop the current one.
         dropped = 0
@@ -622,6 +636,8 @@ class NaoWsClient(object):
                 return
             name, args = item
             try:
+                self._suppress_speaking_gestures_for_action(name,
+                                                            phase="dispatch")
                 self.log.info("action_dispatch_start", name=name)
                 self.action_dispatcher(name, args)
                 self.log.info("action_dispatch_done", name=name)
@@ -675,6 +691,10 @@ class NaoWsClient(object):
 
             if touched and not prev:
                 self.log.info("rear_head_touch_stop")
+                try:
+                    self._stop_speaking_gestures()
+                except Exception:
+                    pass
                 self._cancel_actions(reason="rear_head_touch_ws")
                 try:
                     if self.tts_player is not None:
@@ -1207,6 +1227,8 @@ class NaoWsClient(object):
         TTS is active. Idempotent — restarting before stop is a
         no-op (so back-to-back tts_started frames don't spawn N threads).
         """
+        if self._speaking_gestures_suppressed():
+            return
         if self._speaking_gesture_thread is not None and \
                 self._speaking_gesture_thread.is_alive():
             return
@@ -1225,6 +1247,62 @@ class NaoWsClient(object):
         we don't block here so tts_ended stays snappy.
         """
         self._speaking_gesture_stop.set()
+
+    def _speaking_gestures_suppressed(self):
+        try:
+            with self._speaking_gesture_suppress_lock:
+                return time.time() < self._speaking_gesture_suppress_until
+        except Exception:
+            return False
+
+    def _suppress_speaking_gestures(self, seconds, reason="action"):
+        """Pause automatic speech body-language while explicit actions run.
+
+        Explicit motions like dance/gorilla/kung-fu use the same head and
+        arm joints as the automatic micro-gesture loop. If both run at once,
+        NAOqi accepts the action frame but the visible motion is either
+        canceled or overwritten by the next angleInterpolation beat. This
+        only stops the auto gestures; ElevenLabs playback continues.
+        """
+        try:
+            seconds = max(0.0, float(seconds))
+        except Exception:
+            seconds = 0.0
+        try:
+            until = time.time() + seconds
+            with self._speaking_gesture_suppress_lock:
+                if until > self._speaking_gesture_suppress_until:
+                    self._speaking_gesture_suppress_until = until
+        except Exception:
+            pass
+        try:
+            self._stop_speaking_gestures()
+        except Exception:
+            pass
+        try:
+            self.log.info("speaking_gestures_suppressed",
+                          reason=reason, seconds=seconds)
+        except Exception:
+            pass
+
+    def _suppress_speaking_gestures_for_action(self, name, phase="action"):
+        if not name:
+            return
+        big_actions = set([
+            "dance", "play_animation", "follow_movement", "stop_follow",
+            "stand_up", "sit_down", "kneel", "move_forward",
+            "move_backward", "turn_left", "turn_right", "spin",
+        ])
+        medium_actions = set([
+            "gesture", "wave_hand", "wave_both_hands", "clap_hands",
+            "nod_head", "shake_head",
+        ])
+        if name in big_actions:
+            self._suppress_speaking_gestures(
+                14.0, reason="action:{0}:{1}".format(phase, name))
+        elif name in medium_actions:
+            self._suppress_speaking_gestures(
+                4.0, reason="action:{0}:{1}".format(phase, name))
 
     # Inline mini-gesture table. Each entry is a tuple:
     #   (joint_names, angle_lists, time_lists)
@@ -1505,6 +1583,8 @@ class NaoWsClient(object):
         playback can still be draining the queued MP3/WAV files. Keep the
         gestures alive until the local player is also empty.
         """
+        if self._speaking_gestures_suppressed():
+            return False
         if self._tts_active.is_set():
             return True
         try:

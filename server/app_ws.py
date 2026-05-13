@@ -44,7 +44,7 @@ from fastapi import (
     status,
 )
 
-from server import config, motion_trigger, openai_tts, safety
+from server import breathing_pacing, config, motion_trigger, openai_tts, safety
 from server import _legacy_helpers as legacy
 from server.tools import emotion as _emotion_module
 
@@ -887,12 +887,18 @@ async def _send_json(ws: WebSocket, payload: dict[str, Any]) -> None:
         logging.getLogger("sage.app_ws").warning("send_json failed: %s", e)
 
 
-def _audio_chunk_frame(seq: int, text: str, mp3_bytes: bytes) -> dict[str, Any]:
+def _audio_chunk_frame(
+    seq: int,
+    text: str,
+    mp3_bytes: bytes,
+    pause_after_ms: int = 0,
+) -> dict[str, Any]:
     return {
         "type": "audio_chunk",
         "seq": seq,
         "format": "mp3",
         "text": text,
+        "pause_after_ms": max(0, int(pause_after_ms or 0)),
         "data": base64.b64encode(mp3_bytes).decode("ascii"),
     }
 
@@ -1718,59 +1724,75 @@ async def _emit_agent_turn(ws: WebSocket, sess: _Session,
                 continue
             if _dedup_key:
                 _sentences_seen_this_turn.add(_dedup_key)
-            # Barge guard between chunks.
-            if sess.barge_event.is_set():
-                barged = True
+            paced_chunks = breathing_pacing.expand_tts_pacing(sentence)
+            if len(paced_chunks) > 1 or (
+                paced_chunks and paced_chunks[0][1] > 0
+            ):
                 logger.info(
-                    "tts_barged", user=sess.username,
-                    session_id=sess.session_id, sent_chunks=sent_count,
+                    "tts_breath_pacing_expanded",
+                    user=sess.username, session_id=sess.session_id,
+                    chunks=len(paced_chunks),
+                    sentence_preview=sentence[:100],
                 )
+            for tts_text, pause_after_ms in paced_chunks:
+                # Barge guard between chunks.
+                if sess.barge_event.is_set():
+                    barged = True
+                    logger.info(
+                        "tts_barged", user=sess.username,
+                        session_id=sess.session_id, sent_chunks=sent_count,
+                    )
+                    break
+                # If a handoff happened mid-stream, surface it once before
+                # the first audio chunk of the new agent.
+                if handoff_sent_for != final_reply["active_agent"]:
+                    await _send_json(ws, _control_frame(
+                        "agent_handoff",
+                        active_agent=final_reply["active_agent"],
+                        suppress_image=bool(final_reply["suppress_image"]),
+                    ))
+                    handoff_sent_for = final_reply["active_agent"]
+                t_synth = time.perf_counter()
+                mp3 = await asyncio.to_thread(_synth_for, sess.username, tts_text)
+                # Re-check after synth — barge_in can arrive during the
+                # synthesize call (which can take hundreds of ms). Dropping
+                # the freshly-synthesized chunk here keeps us within the
+                # tight 600 ms barge budget the robot demands.
+                if sess.barge_event.is_set():
+                    barged = True
+                    logger.info(
+                        "tts_barged_post_synth", user=sess.username,
+                        session_id=sess.session_id, sent_chunks=sent_count,
+                    )
+                    break
+                # Phase 2: record EVERY synthesized chunk into the per-user
+                # echo-guard window. The buffer is capped at _REPLY_CHUNKS_MAX
+                # so long replies don't grow unbounded.
+                _record_reply_chunk(sess.username, tts_text)
+                elapsed = (time.perf_counter() - t_synth) * 1000.0
+                if not first_chunk_emitted:
+                    phase_ms["tts_synth_first_chunk"] = round(elapsed, 2)
+                    phase_ms["e2e_user_to_first_audio"] = round(
+                        (time.perf_counter() - t_user_done) * 1000.0, 2,
+                    )
+                    first_chunk_emitted = True
+                if not mp3:
+                    # TTS failed — emit a sentence-only control so the client can
+                    # at least log it; skip the audio chunk.
+                    await _send_json(ws, _control_frame(
+                        "tts_chunk_skipped", text=tts_text,
+                    ))
+                    continue
+                await _send_json(
+                    ws,
+                    _audio_chunk_frame(
+                        sess.next_seq(), tts_text, mp3,
+                        pause_after_ms=pause_after_ms,
+                    ),
+                )
+                sent_count += 1
+            if barged:
                 break
-            # If a handoff happened mid-stream, surface it once before
-            # the first audio chunk of the new agent.
-            if handoff_sent_for != final_reply["active_agent"]:
-                await _send_json(ws, _control_frame(
-                    "agent_handoff",
-                    active_agent=final_reply["active_agent"],
-                    suppress_image=bool(final_reply["suppress_image"]),
-                ))
-                handoff_sent_for = final_reply["active_agent"]
-            t_synth = time.perf_counter()
-            mp3 = await asyncio.to_thread(_synth_for, sess.username, sentence)
-            # Re-check after synth — barge_in can arrive during the
-            # synthesize call (which can take hundreds of ms). Dropping
-            # the freshly-synthesized chunk here keeps us within the
-            # tight 600 ms barge budget the robot demands.
-            if sess.barge_event.is_set():
-                barged = True
-                logger.info(
-                    "tts_barged_post_synth", user=sess.username,
-                    session_id=sess.session_id, sent_chunks=sent_count,
-                )
-                break
-            # Phase 2: record EVERY synthesized sentence into the per-user
-            # echo-guard window. The buffer is capped at _REPLY_CHUNKS_MAX
-            # so long replies don't grow unbounded.
-            _record_reply_chunk(sess.username, sentence)
-            elapsed = (time.perf_counter() - t_synth) * 1000.0
-            if not first_chunk_emitted:
-                phase_ms["tts_synth_first_chunk"] = round(elapsed, 2)
-                phase_ms["e2e_user_to_first_audio"] = round(
-                    (time.perf_counter() - t_user_done) * 1000.0, 2,
-                )
-                first_chunk_emitted = True
-            if not mp3:
-                # TTS failed — emit a sentence-only control so the client can
-                # at least log it; skip the audio chunk.
-                await _send_json(ws, _control_frame(
-                    "tts_chunk_skipped", text=sentence,
-                ))
-                continue
-            await _send_json(
-                ws,
-                _audio_chunk_frame(sess.next_seq(), sentence, mp3),
-            )
-            sent_count += 1
     finally:
         phase_ms["tts_synth_total"] = round(
             (time.perf_counter() - tts_total_t0) * 1000.0, 2,
@@ -2605,7 +2627,13 @@ async def _maybe_announce_camera_consent(ws: WebSocket, sess: _Session) -> None:
     except Exception:  # noqa: BLE001 — should never happen in practice
         return
 
-    if not _session.is_first_turn(sess.session_id, sess.username):
+    try:
+        first_turn = _session.is_first_turn(sess.session_id, sess.username)
+    except TypeError:
+        # Back-compat for tests/older deployments that still expose the
+        # original one-argument helper.
+        first_turn = _session.is_first_turn(sess.session_id)
+    if not first_turn:
         return
 
     # Read consent off-loop so a slow SQLite call doesn't stall the

@@ -269,7 +269,8 @@ class StreamTtsPlayer(object):
         self._state_lock = threading.Lock()
         self._playing = False
 
-        # Queue of (path, text) jobs the worker thread consumes. Unbounded
+        # Queue of (path, text, pause_after_ms) jobs the worker consumes.
+        # Unbounded
         # because TTS chunks arrive faster than playback when the network
         # spurts; the queue absorbs the spike. shutdown()/stop() drain it.
         self._queue = _queue.Queue()
@@ -324,7 +325,7 @@ class StreamTtsPlayer(object):
 
     # ---- public API -----------------------------------------------------
 
-    def enqueue(self, text, mp3_bytes):
+    def enqueue(self, text, mp3_bytes, pause_after_ms=0):
         """Accept one TTS chunk; non-blocking; queues for playback.
 
         Pins the volume BEFORE the worker dequeues, not just inside the
@@ -359,6 +360,10 @@ class StreamTtsPlayer(object):
         with self._tmp_paths_lock:
             self._tmp_paths.add(path)
         try:
+            pause_after_ms = max(0, int(pause_after_ms or 0))
+        except Exception:
+            pause_after_ms = 0
+        try:
             on_disk_size = os.path.getsize(path)
         except Exception:
             on_disk_size = -1
@@ -377,7 +382,7 @@ class StreamTtsPlayer(object):
             preview = ""
         print("[stream_tts] enqueue:", preview,
               "(", len(mp3_bytes), "bytes ->", path, ")")
-        self._queue.put((path, text))
+        self._queue.put((path, text, pause_after_ms))
 
     def is_playing(self):
         """Return True while a chunk is being played OR jobs are queued."""
@@ -411,9 +416,13 @@ class StreamTtsPlayer(object):
         drained = 0
         while True:
             try:
-                path, _text = self._queue.get_nowait()
+                job = self._queue.get_nowait()
             except _queue.Empty:
                 break
+            try:
+                path = job[0]
+            except Exception:
+                continue
             drained += 1
             self._safe_remove(path)
         if drained:
@@ -472,7 +481,14 @@ class StreamTtsPlayer(object):
             if job is None:
                 # Shutdown sentinel.
                 break
-            path, _text = job
+            try:
+                if len(job) >= 3:
+                    path, _text, pause_after_ms = job[:3]
+                else:
+                    path, _text = job
+                    pause_after_ms = 0
+            except Exception:
+                continue
 
             # If stop() landed between enqueue and dequeue, skip.
             if self._shutdown_event.is_set():
@@ -488,7 +504,7 @@ class StreamTtsPlayer(object):
             with self._state_lock:
                 self._playing = True
             self._play_abort_event.clear()
-            self._play_one(path)
+            self._play_one(path, pause_after_ms=pause_after_ms)
 
     def _play_file_with_timeout(self, path, label):
         """Play through NAOqi post.playFile and wait with a hard timeout.
@@ -585,7 +601,7 @@ class StreamTtsPlayer(object):
         except Exception:
             pass
 
-    def _play_one(self, path):
+    def _play_one(self, path, pause_after_ms=0):
         """Play a single MP3 file, blocking until the player drains it.
 
         Sets `_playing=True` immediately so `is_playing()` reflects reality
@@ -678,6 +694,21 @@ class StreamTtsPlayer(object):
             sys.stderr.flush()
             print("[stream_tts] _play_one error:", e)
         finally:
+            try:
+                pause_s = max(0.0, float(pause_after_ms or 0) / 1000.0)
+            except Exception:
+                pause_s = 0.0
+            if pause_s > 0 and not self._shutdown_event.is_set() \
+                    and not self._play_abort_event.is_set():
+                print("[tts_trace] pause_after_chunk ms={0}".format(
+                    int(pause_s * 1000)))
+                sys.stderr.flush()
+                end_t = time.time() + pause_s
+                while time.time() < end_t:
+                    if self._shutdown_event.is_set() or \
+                            self._play_abort_event.is_set():
+                        break
+                    time.sleep(min(0.05, max(0.0, end_t - time.time())))
             with self._state_lock:
                 self._playing = False
             self._safe_remove(path)

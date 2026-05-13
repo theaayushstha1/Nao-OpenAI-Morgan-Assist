@@ -72,7 +72,10 @@ _TRIGGERS: list[tuple[str, dict, str, list[str]]] = [
     ("dance", {"style": "robot"}, "Let's dance!", [
         "do a dance", "show me a dance", "dance for me", "dance please",
         "give me a dance", "can you dance", "could you dance", "let's dance",
-        "do a robot dance", "do the robot",
+        "do a robot dance", "do the robot", "dance now", "you dance now",
+        "start dancing", "show your dance", "show us your dance",
+        "let me see you dance", "i want to see you dance",
+        "i would love to see you dance",
     ]),
     ("follow_movement", {}, "Following you now.", [
         # Canonical short form — fires the Choregraphe `follow-me` pack.

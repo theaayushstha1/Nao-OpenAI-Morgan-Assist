@@ -204,6 +204,8 @@ def test_spin_negative_metaphor() -> None:
     "dance for me",
     "can you dance",
     "let's dance together",
+    "NAO you dance now?",
+    "I would love to see you dance.",
 ])
 def test_dance_positive_phrasings(transcript: str) -> None:
     _assert_match(transcript, "dance", args={"style": "robot"})

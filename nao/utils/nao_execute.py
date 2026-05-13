@@ -450,6 +450,7 @@ def _run_first_available(behav_mgr, candidates, blocking=False):
         if cand in installed:
             try:
                 behav_mgr.startBehavior(cand)
+                print("[nao_execute] startBehavior {0!r}".format(cand))
                 return cand
             except Exception as e:
                 print("[nao_execute] startBehavior {0!r} failed: {1}".format(cand, e))
@@ -477,6 +478,45 @@ def _call_post_or_direct(proxy, method_name, *args):
     except Exception as e:
         print("[nao_execute] post.{0} failed: {1}".format(method_name, e))
     return getattr(proxy, method_name)(*args)
+
+
+def _ensure_stand_for_behavior(posture, motion=None, reason="behavior"):
+    """Put NAO in StandInit before launching Stand/* behaviors.
+
+    Most of the rich motion packs we map to user requests live under
+    ``animations/Stand/...``. If the action frame arrives before the first
+    TTS chunk, the normal speech-side auto-stand has not fired yet; starting
+    a Stand behavior while NAO is seated often returns without a visible
+    motion. This helper blocks in the action worker only, leaving the WS
+    receiver hot.
+    """
+    try:
+        if motion is not None:
+            motion.wakeUp()
+    except Exception:
+        pass
+    if posture is None:
+        print("[nao_execute] stand_check skipped ({0}): posture missing".format(reason))
+        return False
+    try:
+        family = posture.getPostureFamily()
+    except Exception:
+        family = None
+    try:
+        if family and str(family).lower().startswith("stand"):
+            return True
+    except Exception:
+        pass
+    try:
+        print("[nao_execute] goToPosture StandInit before {0} (family={1!r})".format(
+            reason, family))
+        ok = posture.goToPosture("StandInit", 0.65)
+        print("[nao_execute] goToPosture StandInit result={0!r}".format(ok))
+        return bool(ok)
+    except Exception as e:
+        print("[nao_execute] goToPosture StandInit failed before {0}: {1}".format(
+            reason, e))
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -864,9 +904,11 @@ def run(action, session, motion, posture, leds, behav_mgr, tts,
         elif name == "wave_hand":
             hand = args.get("hand", "right")
             # Non-blocking; gestures should run parallel to TTS.
+            _ensure_stand_for_behavior(posture, motion, reason=name)
             behav_mgr.startBehavior("animations/Stand/Gestures/Hey_{0}".format(
                 "1" if hand == "right" else "3"))
         elif name == "wave_both_hands":
+            _ensure_stand_for_behavior(posture, motion, reason=name)
             behav_mgr.startBehavior("animations/Stand/Gestures/Hey_1")
             # Slight stagger so both arms don't stomp each other if naoqi
             # serializes; cheap sleep in caller's worker thread.
@@ -884,29 +926,36 @@ def run(action, session, motion, posture, leds, behav_mgr, tts,
             # repeating clap; the previous loop on top of it produced
             # nothing useful and just stalled the caller for ~6 s per
             # iteration. One startBehavior is enough.
+            _ensure_stand_for_behavior(posture, motion, reason=name)
             behav_mgr.startBehavior("animations/Stand/Gestures/Applause_1")
         elif name == "move_forward":
+            _ensure_stand_for_behavior(posture, motion, reason=name)
             _call_post_or_direct(
                 motion, "moveTo", float(args.get("meters", 0.3)), 0.0, 0.0)
         elif name == "move_backward":
+            _ensure_stand_for_behavior(posture, motion, reason=name)
             _call_post_or_direct(
                 motion, "moveTo", -float(args.get("meters", 0.3)), 0.0, 0.0)
         elif name == "turn_left":
+            _ensure_stand_for_behavior(posture, motion, reason=name)
             import math
             _call_post_or_direct(
                 motion, "moveTo", 0.0, 0.0,
                 math.radians(float(args.get("degrees", 45.0))))
         elif name == "turn_right":
+            _ensure_stand_for_behavior(posture, motion, reason=name)
             import math
             _call_post_or_direct(
                 motion, "moveTo", 0.0, 0.0,
                 -math.radians(float(args.get("degrees", 45.0))))
         elif name == "spin":
+            _ensure_stand_for_behavior(posture, motion, reason=name)
             import math
             _call_post_or_direct(
                 motion, "moveTo", 0.0, 0.0,
                 math.radians(float(args.get("degrees", 360.0))))
         elif name == "dance":
+            _ensure_stand_for_behavior(posture, motion, reason=name)
             style = (args.get("style") or "robot").strip().lower()
             primary = _DANCE_BEHAVIORS.get(style)
             candidates = []
@@ -922,6 +971,7 @@ def run(action, session, motion, posture, leds, behav_mgr, tts,
             # Non-blocking — follow-me runs until stopped so the user can keep
             # talking while NAO mirrors them. Stop with the stop_follow action
             # or by saying a phrase that maps to it.
+            _ensure_stand_for_behavior(posture, motion, reason=name)
             _run_first_available(
                 behav_mgr,
                 list(_FOLLOW_BEHAVIOR_CANDIDATES) +
@@ -949,6 +999,7 @@ def run(action, session, motion, posture, leds, behav_mgr, tts,
             except Exception:
                 pass
         elif name == "play_animation":
+            _ensure_stand_for_behavior(posture, motion, reason=name)
             anim = (args.get("animation") or "").strip().lower()
             # Normalize a few common variants the user might say.
             anim = anim.replace(" ", "_").replace("-", "_")
@@ -961,6 +1012,7 @@ def run(action, session, motion, posture, leds, behav_mgr, tts,
             if ran is None:
                 print("[nao_execute] no animation available for {0!r}".format(anim))
         elif name == "gesture":
+            _ensure_stand_for_behavior(posture, motion, reason=name)
             _run_gesture(args, motion, posture, leds, sound_localize=sound_localize)
         elif name == "learn_face":
             # Teach NAOqi's persistent face DB to recognize the user.
