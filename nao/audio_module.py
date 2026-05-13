@@ -58,6 +58,7 @@ broker once and threads it in.
 from __future__ import print_function
 
 import base64
+import audioop
 import logging
 import os
 import sys
@@ -114,6 +115,11 @@ FRAGMENT_HEADER_WAIT_S = 1.20
 FRAGMENT_STALL_RESTART_S = 2.0
 FRAGMENT_ZERO_PCM_RESTART_S = 6.0
 FRAGMENT_ZERO_PCM_LOG_S = 1.0
+FRAGMENT_LOW_PCM_RESTART_S = 8.0
+FRAGMENT_LOW_PCM_LOG_S = 2.0
+FRAGMENT_LOW_PCM_RESTART_COOLDOWN_S = 20.0
+FRAGMENT_LOW_PCM_MAX = 64
+FRAGMENT_LOW_PCM_RMS = 4
 
 # ALAudioDevice channel index constants (Aldebaran docs).
 AL_CHANNEL_ALL = 0
@@ -749,6 +755,9 @@ class NaoAudioStreamer(ALModule):
         stall_started_at = None  # wall-clock when stall first detected
         zero_pcm_started_at = None
         zero_pcm_last_log = 0.0
+        low_pcm_started_at = None
+        low_pcm_last_log = 0.0
+        low_pcm_last_restart_at = 0.0
         # Tighter than 5s so a user speaking through a stall only loses
         # ~2s of audio instead of ~5s. Real ALAudioRecorder wedges
         # always last more than 2s, so false-positive restarts are rare.
@@ -791,6 +800,7 @@ class NaoAudioStreamer(ALModule):
                     last_offset = header_size
                     stall_started_at = None
                     zero_pcm_started_at = None
+                    low_pcm_started_at = None
                     first_pcm_logged = False
                     last_size_check = time.time()
                     continue
@@ -848,11 +858,56 @@ class NaoAudioStreamer(ALModule):
                         last_offset = header_size
                         stall_started_at = None
                         zero_pcm_started_at = None
+                        low_pcm_started_at = None
+                        low_pcm_last_restart_at = time.time()
                         first_pcm_logged = False
                         last_size_check = time.time()
                         continue
                 else:
                     zero_pcm_started_at = None
+                    try:
+                        pcm_max = audioop.max(pcm, width)
+                        pcm_rms = audioop.rms(pcm, width)
+                    except Exception:
+                        pcm_max = FRAGMENT_LOW_PCM_MAX + 1
+                        pcm_rms = FRAGMENT_LOW_PCM_RMS + 1
+                    if (pcm_max <= FRAGMENT_LOW_PCM_MAX and
+                            pcm_rms <= FRAGMENT_LOW_PCM_RMS):
+                        if low_pcm_started_at is None:
+                            low_pcm_started_at = now
+                        if now - low_pcm_last_log >= FRAGMENT_LOW_PCM_LOG_S:
+                            low_pcm_last_log = now
+                            print("[audio_module] near-zero PCM captured bytes={0} silent_s={1:.1f} max={2} rms={3}".format(
+                                len(pcm), now - low_pcm_started_at,
+                                pcm_max, pcm_rms))
+                            sys.stderr.flush()
+                        can_restart = (
+                            now - low_pcm_last_restart_at >=
+                            FRAGMENT_LOW_PCM_RESTART_COOLDOWN_S)
+                        if (can_restart and
+                                now - low_pcm_started_at >=
+                                FRAGMENT_LOW_PCM_RESTART_S):
+                            header = self._restart_fragment_recording(
+                                big_path, "near_zero_pcm")
+                            if header is None:
+                                return
+                            nchan = header["nchan"]
+                            width = header["width"]
+                            header_size = header["header_size"]
+                            sample_stride = nchan * width
+                            front_idx = AL_CHANNEL_FRONT - 1
+                            if front_idx >= nchan:
+                                front_idx = 0
+                            last_offset = header_size
+                            stall_started_at = None
+                            zero_pcm_started_at = None
+                            low_pcm_started_at = None
+                            low_pcm_last_restart_at = time.time()
+                            first_pcm_logged = False
+                            last_size_check = time.time()
+                            continue
+                    else:
+                        low_pcm_started_at = None
                 if not first_pcm_logged:
                     print("[audio_module] FIRST PCM captured: {0} bytes (file size={1})".format(
                         len(pcm), cur_size))
