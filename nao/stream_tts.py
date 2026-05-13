@@ -268,6 +268,7 @@ class StreamTtsPlayer(object):
         # count drop back to zero (or stop() forces it false).
         self._state_lock = threading.Lock()
         self._playing = False
+        self._pending_jobs = 0
 
         # Queue of (path, text, pause_after_ms) jobs the worker consumes.
         # Unbounded
@@ -325,6 +326,15 @@ class StreamTtsPlayer(object):
 
     # ---- public API -----------------------------------------------------
 
+    def _inc_pending_job(self):
+        with self._state_lock:
+            self._pending_jobs += 1
+
+    def _dec_pending_job(self):
+        with self._state_lock:
+            if self._pending_jobs > 0:
+                self._pending_jobs -= 1
+
     def enqueue(self, text, mp3_bytes, pause_after_ms=0):
         """Accept one TTS chunk; non-blocking; queues for playback.
 
@@ -347,6 +357,12 @@ class StreamTtsPlayer(object):
                   "dropping".format(len(mp3_bytes)))
             return
 
+        # Count this chunk as active before any slow disk/probe work. The
+        # server can send tts_ended immediately after the last audio_chunk;
+        # the mic-resume waiter must see "pending playback" even if the
+        # worker has not yet received the queued file.
+        self._inc_pending_job()
+
         # Pin volumes UP FRONT — before the worker thread sees the job. If
         # the job is ahead of others in the queue this still happens before
         # playback starts. Idempotent and cheap.
@@ -356,6 +372,7 @@ class StreamTtsPlayer(object):
         if path is None:
             print("[tts_trace] mp3_written FAILED (spool returned None)")
             sys.stderr.flush()
+            self._dec_pending_job()
             return
         with self._tmp_paths_lock:
             self._tmp_paths.add(path)
@@ -380,15 +397,16 @@ class StreamTtsPlayer(object):
             preview = preview[:60]
         except Exception:
             preview = ""
+        self._queue.put((path, text, pause_after_ms))
         print("[stream_tts] enqueue:", preview,
               "(", len(mp3_bytes), "bytes ->", path, ")")
-        self._queue.put((path, text, pause_after_ms))
 
     def is_playing(self):
         """Return True while a chunk is being played OR jobs are queued."""
         with self._state_lock:
             playing = self._playing
-        if playing:
+            pending_jobs = self._pending_jobs
+        if playing or pending_jobs > 0:
             return True
         # Pending jobs also count as "still playing" from the caller's
         # perspective — barge-in / state machines want to know whether the
@@ -411,6 +429,7 @@ class StreamTtsPlayer(object):
         """
         with self._state_lock:
             self._playing = False
+            self._pending_jobs = 0
         self._play_abort_event.set()
 
         drained = 0
@@ -488,11 +507,13 @@ class StreamTtsPlayer(object):
                     path, _text = job
                     pause_after_ms = 0
             except Exception:
+                self._dec_pending_job()
                 continue
 
             # If stop() landed between enqueue and dequeue, skip.
             if self._shutdown_event.is_set():
                 self._safe_remove(path)
+                self._dec_pending_job()
                 continue
 
             # Mark playback active before handing the job to _play_one.
@@ -504,7 +525,10 @@ class StreamTtsPlayer(object):
             with self._state_lock:
                 self._playing = True
             self._play_abort_event.clear()
-            self._play_one(path, pause_after_ms=pause_after_ms)
+            try:
+                self._play_one(path, pause_after_ms=pause_after_ms)
+            finally:
+                self._dec_pending_job()
 
     def _play_file_with_timeout(self, path, label):
         """Play through NAOqi post.playFile and wait with a hard timeout.

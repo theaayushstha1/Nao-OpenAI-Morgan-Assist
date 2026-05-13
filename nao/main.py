@@ -1025,6 +1025,17 @@ def main():
                     except Exception as exc:
                         log.debug("stand_on_head_touch_failed",
                                   error=str(exc))
+                if touch_key == "MiddleTactilTouched":
+                    try:
+                        cli = session._client if session is not None else None
+                        reset = getattr(cli, "force_listen_reset", None)
+                        if callable(reset):
+                            reset(reason="middle_head_touch",
+                                  touch_key=touch_key)
+                            return
+                    except Exception as exc:
+                        log.debug("middle_touch_listen_reset_failed",
+                                  error=str(exc))
                 try:
                     if tts is not None:
                         tts.stop()

@@ -136,7 +136,13 @@ def _parse_backoff(spec):
 
 
 _DEFAULT_BACKOFF_MS = "300,600,1200,2400"
-_DEFAULT_GRACE_MS = "200"
+_DEFAULT_GRACE_MS = "800"
+_RECORDER_RESTART_REJECTS = (
+    "no_voice",
+    "silero_no_speech",
+    "invalid_audio",
+    "hallucination_or_noise",
+)
 
 
 def _grace_seconds():
@@ -284,6 +290,8 @@ class NaoWsClient(object):
         # filler kicks in 1.5 s later, and by then the real reply is
         # already mid-play). Reset when the next transcript arrives.
         self._reply_audio_arrived = False
+        self._empty_transcript_count = 0
+        self._empty_transcript_first_at = 0.0
 
         # Speaking-gesture loop state. While TTS is active, a daemon
         # thread adds low-amplitude body language: head beats, small
@@ -728,9 +736,12 @@ class NaoWsClient(object):
             # Transcript is for client-side logging only. Phase 1 keeps the
             # robot dumb about transcript content; future phases (3, 8) can
             # consume this for LED/UI cues.
+            reject_reason = (data.get("reject_reason") or "").strip()
+            tx = (data.get("transcript") or "").strip()
             self.log.info("transcript",
                           transcript=data.get("transcript", ""),
-                          stt_ms=data.get("stt_ms"))
+                          stt_ms=data.get("stt_ms"),
+                          reject_reason=reject_reason)
             # Legacy self-echo path: the server's `_legacy_helpers`
             # bigram check sends a `transcript` control with
             # reject_reason=self_echo (the newer Phase-2 substring
@@ -738,10 +749,10 @@ class NaoWsClient(object):
             # separately). Either way we need a recorder restart so
             # the tail of NAO's own voice doesn't keep getting
             # re-uploaded.
-            reject_reason = (data.get("reject_reason") or "").strip()
             if reject_reason == "self_echo":
                 self._on_echo_reject(data)
                 return
+            self._track_transcript_health(tx, reject_reason)
             # Fire the processing announcer: server has the user's words
             # and is now generating + synthesizing TTS. We bridge that gap
             # with short filler ("Hmm.", "One sec.") so the user doesn't
@@ -749,7 +760,6 @@ class NaoWsClient(object):
             # audio_chunk arrives in _handle_audio_chunk.
             # New turn — reset the "audio arrived" guard.
             self._reply_audio_arrived = False
-            tx = (data.get("transcript") or "").strip()
             if tx and self._announcer is not None:
                 try:
                     self._announcer.start()
@@ -1044,6 +1054,143 @@ class NaoWsClient(object):
             self.push_control("mic_resumed", {"grace_ms": 0})
         except Exception as exc:
             self.log.error("echo_reject_gate_open_failed", error=str(exc))
+
+    def _track_transcript_health(self, transcript, reject_reason):
+        """Restart the recorder after repeated empty/no-voice server turns.
+
+        ALAudioRecorder can keep producing a growing WAV that the server
+        rejects as silence/no-voice. The file-growth watchdog does not catch
+        that case, so use the server's reject feedback as a second safety net.
+        """
+        if transcript and reject_reason not in _RECORDER_RESTART_REJECTS:
+            self._empty_transcript_count = 0
+            self._empty_transcript_first_at = 0.0
+            return
+
+        if (not transcript) or reject_reason in _RECORDER_RESTART_REJECTS:
+            now = time.time()
+            if now - self._empty_transcript_first_at > 25.0:
+                self._empty_transcript_first_at = now
+                self._empty_transcript_count = 0
+            self._empty_transcript_count += 1
+            self.log.warn("empty_transcript_reject",
+                          reject_reason=reject_reason,
+                          count=self._empty_transcript_count)
+            if self._empty_transcript_count >= 3:
+                self._empty_transcript_count = 0
+                self._empty_transcript_first_at = 0.0
+                self._restart_recorder_after_empty_transcripts(reject_reason)
+
+    def _restart_recorder_after_empty_transcripts(self, reject_reason):
+        if self.audio_streamer is None:
+            return
+        try:
+            if self._tts_active.is_set():
+                return
+            if self.tts_player is not None and self.tts_player.is_playing():
+                return
+        except Exception:
+            pass
+
+        self.log.warn("recorder_restart_after_empty_transcripts",
+                      reject_reason=reject_reason)
+        self._cancel_pending_mic_open()
+        try:
+            self._mic_resume_waiter_stop.set()
+        except Exception:
+            pass
+
+        try:
+            self.audio_streamer.gate(True)
+        except Exception as exc:
+            self.log.error("empty_transcript_gate_close_failed",
+                           error=str(exc))
+            return
+
+        time.sleep(0.25)
+
+        try:
+            self.audio_streamer.gate(False)
+            self.push_control("mic_resumed", {"grace_ms": 0})
+        except Exception as exc:
+            self.log.error("empty_transcript_gate_open_failed",
+                           error=str(exc))
+
+    def force_listen_reset(self, reason="manual_listen_reset",
+                           touch_key=None):
+        """Manual recovery path: stop local output and reopen a fresh mic.
+
+        Middle head touch uses this when a session is alive but the robot is
+        no longer usefully listening. It is intentionally stronger than a
+        normal barge-in: it clears queued speech, cancels queued motions,
+        restarts the fragment recorder, then tells the server the mic is
+        ready again.
+        """
+        self.log.warn("force_listen_reset_requested",
+                      reason=reason, touch_key=touch_key)
+        self._empty_transcript_count = 0
+        self._empty_transcript_first_at = 0.0
+        self._reply_audio_arrived = False
+        self._tts_active.clear()
+
+        self._cancel_pending_mic_open()
+        try:
+            self._mic_resume_waiter_stop.set()
+        except Exception:
+            pass
+
+        try:
+            self._stop_speaking_gestures()
+        except Exception:
+            pass
+        try:
+            self._cancel_actions(reason=reason)
+        except Exception as exc:
+            self.log.debug("listen_reset_cancel_actions_failed",
+                           error=str(exc))
+        try:
+            if self.tts_player is not None:
+                self.tts_player.stop()
+        except Exception as exc:
+            self.log.debug("listen_reset_tts_stop_failed", error=str(exc))
+        try:
+            self._announcer_stop_all()
+        except Exception:
+            pass
+
+        try:
+            self.push_control("barge_in", {
+                "source": reason,
+                "touch_key": touch_key,
+            })
+        except Exception:
+            pass
+
+        if self.audio_streamer is not None:
+            try:
+                self.audio_streamer.gate(True)
+            except Exception as exc:
+                self.log.error("listen_reset_gate_close_failed",
+                               error=str(exc))
+                return
+            time.sleep(0.25)
+            try:
+                self.audio_streamer.gate(False)
+            except Exception as exc:
+                self.log.error("listen_reset_gate_open_failed",
+                               error=str(exc))
+                return
+
+        try:
+            self.push_control("mic_resumed", {
+                "grace_ms": 0,
+                "source": reason,
+                "touch_key": touch_key,
+            })
+        except Exception:
+            pass
+        self.log.info("force_listen_reset_done",
+                      reason=reason, touch_key=touch_key)
 
     def _on_crisis_lock(self, data):
         """Server flagged a crisis. End the local turn immediately.
