@@ -489,6 +489,8 @@ class _SessionController(object):
                     self._log.warn("wake_event_refresh_failed", error=str(exc))
                 self._push_early_identity(
                     returning_user_hint, face_id, gate, confidence)
+                if gate == "touch":
+                    self.kick_stand_up(reason="touch_refresh")
                 return
 
             # 1. Start mic subscription (deferred from boot until wake).
@@ -569,6 +571,7 @@ class _SessionController(object):
                 distance_m=float(distance_m or 0.0),
                 returning_user_hint=returning_user_hint,
             )
+            self.kick_stand_up(reason="engage_{0}".format(gate or "unknown"))
 
             # 5b. Start lifelike head behavior:
             #   • SoundLocalizer auto-tracks who just spoke (turns head
@@ -639,6 +642,52 @@ class _SessionController(object):
                            name=name, face_visible=face_visible)
         except Exception as exc:
             self._log.debug("user_identified_early_failed", error=str(exc))
+
+    def kick_stand_up(self, reason="engage"):
+        """Stand NAO up without blocking wake/touch handling.
+
+        The WS client also stands NAO on first TTS, but touch wake should
+        visibly bring the robot up immediately, even before a reply starts.
+        """
+        def _do_stand():
+            if not _HAS_NAOQI or ALProxy is None:
+                return
+            try:
+                posture = ALProxy("ALRobotPosture",
+                                  config.NAO_IP, config.NAO_PORT)
+                family = None
+                try:
+                    family = posture.getPostureFamily()
+                except Exception:
+                    family = None
+                try:
+                    if family and str(family).lower().startswith("stand"):
+                        self._log.debug("engage_stand_skipped",
+                                        reason=reason,
+                                        posture_family=family)
+                        return
+                except Exception:
+                    pass
+                try:
+                    ALProxy("ALMotion",
+                            config.NAO_IP, config.NAO_PORT).wakeUp()
+                except Exception:
+                    pass
+                self._log.info("engage_stand_start", reason=reason,
+                               posture_family=family)
+                ok = posture.goToPosture("Stand", 0.7)
+                self._log.info("engage_stand_done", reason=reason, ok=ok)
+            except Exception as exc:
+                self._log.warn("engage_stand_failed", reason=reason,
+                               error=str(exc))
+
+        try:
+            t = threading.Thread(target=_do_stand, name="nao-engage-stand")
+            t.daemon = True
+            t.start()
+        except Exception as exc:
+            self._log.debug("engage_stand_thread_failed", reason=reason,
+                            error=str(exc))
 
     def _spawn_face_recognition(self):
         """Run a quick (~3 s) face-recognition scan on a daemon thread.
@@ -970,6 +1019,12 @@ def main():
                 if touch_key == "RearTactilTouched":
                     _stop_motion_behaviors_safe(
                         log, reason="rear_head_touch_wake_state")
+                else:
+                    try:
+                        session.kick_stand_up(reason="head_touch_barge")
+                    except Exception as exc:
+                        log.debug("stand_on_head_touch_failed",
+                                  error=str(exc))
                 try:
                     if tts is not None:
                         tts.stop()
